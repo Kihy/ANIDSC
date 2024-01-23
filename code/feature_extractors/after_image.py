@@ -269,6 +269,8 @@ class IncStatDB:
 
         #update 1d after covariance
         stats1d=self.update_get_stats_1D(ID1, t, v)
+        
+        # the destination receives negative value
         self.update_get_stats_1D(ID2, t, -v)
         
         #check for pre-exiting link
