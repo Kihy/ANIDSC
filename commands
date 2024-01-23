@@ -1,0 +1,1 @@
+docker run --gpus all -it --rm -v "D:\ANIDSC":/workspace/ANIDSC -v "D:\datasets":/workspace/datasets kihy/deepo-nids bash
