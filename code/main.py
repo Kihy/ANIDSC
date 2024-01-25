@@ -1,7 +1,46 @@
 from feature_extractors.after_image import AfterImage
+from datasets.custom_dataset import *
+from torch.utils.data import DataLoader 
+from models.sklearn_models import *
+from models.trainer import *
+from metrics.od_metrics import *
+from adversarial_attacks.liuer_mihou import LiuerMihouAttack
 
-pcap_file="../../datasets/uq/benign/pcap/Lenovo_Bulb_1.pcap"
+# feature extraction pipeline
+# pcap_files=["../../datasets/uq/malicious/Lenovo_Bulb_1/pcap/Lenovo_Bulb_1_ACK_Flooding.pcap"]
+# fe=AfterImage()
 
-fe=AfterImage()
+# pcap_files>>fe
 
-pcap_file>>fe
+# save scaler as sklearn model
+files={"benign": "Lenovo_Bulb_1",
+       "malicious":["Lenovo_Bulb_1_Port_Scanning",
+                    "Lenovo_Bulb_1_Service_Detection",
+                    ]}
+
+# model=SklearnOutlierDetector("MinMaxScaler","sklearn.preprocessing")
+# trainer=OutlierDetectionTrainer(files=files, batch_size=None,
+#                                 steps=["train","save"]
+#                                 )
+# {"model":model}>>trainer
+
+
+
+
+# # training NIDS pipeline
+# scaler=load_sklearn_model("Lenovo_Bulb_1","MinMaxScaler") 
+# model=SklearnOutlierDetector("LocalOutlierFactor", "sklearn.neighbors", model_params={"novelty":True}, preprocessors=[scaler.transform])
+
+# trainer=OutlierDetectionPipeline(metrics=[special_f1,plot_scores],
+#                                 batch_size=None)
+
+# {"files":files, "model":model}>>trainer
+
+model=load_sklearn_model("Lenovo_Bulb_1","LocalOutlierFactor")
+
+mal_pcap="../../datasets/uq/malicious/Lenovo_Bulb_1/pcap/Lenovo_Bulb_1_ACK_Flooding.pcap"
+with open("../../datasets/uq/benign/netstat/Lenovo_Bulb_1.pkl", "rb") as pf:
+       nstat=pickle.load(pf)
+fe=AfterImage(nstat=nstat)
+adversarial_attack=LiuerMihouAttack(fe=fe, model=model)
+mal_pcap>>adversarial_attack

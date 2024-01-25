@@ -7,48 +7,80 @@ from scapy.layers.inet import *
 from .base import *
 from pathlib import Path
 import pickle
+import json
+from utils import *
 
 class AfterImage(BaseTrafficFeatureExtractor):
-    def __init__(self, limit=1e6, decay_factors=[5,3,1,.1,.01], nstat=None, log_file=None):
+    def __init__(self, limit=1e6, decay_factors=[5,3,1,.1,.01], nstat=None, log_file=None, **kwargs):
         self.limit = limit
-        self.curPacketIndx = 0
         self.decay_factors=decay_factors
+        self.reset_nstat=True
+        self.log_file=log_file
         if nstat is not None:
             self.nstat=nstat
-            if log_file:
-                self.nstat.set_netstat_log_path(log_file)
-        else:
-            self.nstat = NetStat(decay_factors= decay_factors, limit = self.limit, log_path=log_file)
-
-    def setup_input_stream(self, path):
+            self.reset_nstat=False
+        self.prev_pkt_time=None
+        
+    def setup(self, path):
         self.path = path
         self.basename=Path(path).stem
-        return PcapReader(self.path)
-    
-    def finish(self):
-        netstat_path=Path(self.path).parents[1]/"netstat"/(self.basename+".pkl")
-        netstat_path.parent.mkdir(parents=True, exist_ok=True)
-        with open(netstat_path, "wb") as pf:
-            pickle.dump(self.nstat, pf)
-        
-    def setup_output_file(self):       
+        self.curPacketIndx = 0
+        if self.reset_nstat:
+            self.nstat = NetStat(decay_factors= self.decay_factors, limit = self.limit, log_path=self.log_file)
+
+        self.packets=PcapReader(self.path)
+
         feature_file=Path(self.path).parents[1]/"features"/(self.basename+".csv")
         feature_file.parent.mkdir(parents=True, exist_ok=True)
         meta_file=Path(self.path).parents[1]/"meta"/(self.basename+".csv")
         meta_file.parent.mkdir(parents=True, exist_ok=True)
-        print(f"feature: {feature_file} \n meta: {meta_file}")
-        
-        return open(feature_file, "w"), open(meta_file, "w")
 
+        self.feature_file=open(feature_file, "w")
+        self.meta_file=open(meta_file, "w")
+
+    def peek(self, traffic_vectors):
+        first_record=traffic_vectors[0]
+        fake_db=self.nstat.get_records(*first_record)
+        vectors=[]
+        for tv in traffic_vectors:
+            vectors.append(self.nstat.update_get_stats(*tv, fake_db))
+        return vectors
+        
+        
+    def teardown(self, num_rows):
+        #save netstat information
+        netstat_path=Path(self.path).parents[1]/"netstat"/(self.basename+".pkl")
+        netstat_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(netstat_path, "wb") as pf:
+            pickle.dump(self.nstat, pf)
+            
+            
+        self.meta_file.close()
+        self.feature_file.close()
+        
+        #save file information
+        data_info=load_dataset_info()
+        
+        data_info[self.basename]={
+            "pcap_path":self.path,
+            "feature_path":self.feature_file,
+            "meta_path":self.meta_file,
+            "num_rows":num_rows}
+        
+        save_dataset_info(data_info)
+    
     def get_nstat(self):
         return self.nstat #, self.dummy_nstat
 
-    def get_feature(self, packet):
-        packet =packet[0]
+    def update(self, traffic_vector):
+        return self.nstat.update_get_stats(*traffic_vector)
+        
+    def get_traffic_vector(self, packet):
+        packet = packet[0]
 
         # only process IP packets,
         if not (packet.haslayer(IP) or packet.haslayer(IPv6) or packet.haslayer(ARP)):
-            return None, None
+            return None
 
         timestamp = packet.time
         framelen = len(packet)
@@ -97,8 +129,8 @@ class AfterImage(BaseTrafficFeatureExtractor):
                 dstIP = packet.dst  # dst MAC
 
         traffic_vector=[IPtype, srcMAC, dstMAC, srcIP, srcproto, dstIP, dstproto, float(timestamp), int(framelen)]
-        features=self.nstat.update_get_stats(*traffic_vector)
-        return features, traffic_vector
+        
+        return traffic_vector
     
     def get_headers(self):
         
@@ -156,13 +188,19 @@ class IncStat1D:
     def decay(self, t):
         # check for decay
         time_diff=t - self.last_timestamp
-        if time_diff > 0:
+        if time_diff >= 0:
             factor = 2. ** (-self.decay_factors * time_diff)
             self.incremental_statistics *= factor
             
     def is_outdated(self, t):
         time_diff=t - self.last_timestamp
-        factor = 2 ** (-self.decay_factors * time_diff)
+        if time_diff >= 0:
+            factor = 2 ** (-self.decay_factors * time_diff)
+        else:
+            print(t)
+            print(self)
+            print(time_diff)
+        
         if np.all((self.incremental_statistics[0]*factor)<self.weight_thresh):
             return True 
         else:
@@ -208,20 +246,22 @@ class IncStat2D:
     def decay(self, t):
         # check for decay cf3
         time_diff = t - self.last_timestamp
-        if time_diff > 0:
+        if time_diff >= 0:
             factor = 2 ** (-self.decay_factors * time_diff)
             self.sum_of_residual *= factor           
 
     #covariance approximation
     def cov(self):
         weight_sum=self.inc_stats1.weight()+self.inc_stats2.weight()
-        return np.where(weight_sum<self.eps, 0., self.sum_of_residual / weight_sum) 
+        with np.errstate(divide='ignore',invalid='ignore'):
+            return np.where(weight_sum<self.eps, 0., self.sum_of_residual / weight_sum) 
         # return self.sr / self.w3
 
     # Pearson corl. coef
     def pcc(self):
-        ss = self.inc_stats1.std() * self.inc_stats2.std()
-        return np.where(ss<self.eps, 0., self.cov() / ss)
+        with np.errstate(divide='ignore',invalid='ignore'):
+            ss = self.inc_stats1.std() * self.inc_stats2.std()
+            return np.where(ss<self.eps, 0., self.cov() / ss)
             
             
     def all_stats_2D(self):
@@ -249,7 +289,7 @@ class IncStatDB:
     # Registers a new stream. init_time: init lastTimestamp of the incStat
     def update_get_stats_1D(self, ID, t, v):
         # not in our db
-        if ID not in self.stat1d:
+        if ID not in self.stat1d or self.stat1d[ID] is None:
             if self.num_entries + 1 > self.limit:
                 raise LookupError(
                     'Adding Entry:\n' + ID + '\nwould exceed incStat 1D limit of ' + str(
@@ -274,7 +314,7 @@ class IncStatDB:
         self.update_get_stats_1D(ID2, t, -v)
         
         #check for pre-exiting link
-        if frozenset([ID1, ID2]) not in self.stat2d:
+        if frozenset([ID1, ID2]) not in self.stat2d or self.stat2d[frozenset([ID1, ID2])] is None:
             # Link incStats
             inc_cov = IncStat2D(self.stat1d[ID1],self.stat1d[ID2], t)
             self.stat2d[frozenset([ID1, ID2])]=inc_cov
@@ -352,24 +392,26 @@ class NetStat:
         Returns:
             _type_: _description_
         """        
-        dummy_db=IncStatDB(self.lambdas)        
-        dummy_db.stat1d[f"{srcMAC}_{srcIP}"]=copy.deepcopy(self.inc_stat_db.stat1d[f"{srcMAC}_{srcIP}"]) # srcMAC-IP
-        dummy_db.stat1d[f"{srcIP}_{dstIP}"]=copy.deepcopy(self.inc_stat_db.stat1d[f"{srcIP}_{dstIP}"]) #jitter
+        dummy_db=IncStatDB(self.decay_factors)
+        
+        
+        dummy_db.stat1d[f"{srcMAC}_{srcIP}"]=copy.deepcopy(self.inc_stat_db.stat1d.get(f"{srcMAC}_{srcIP}")) # srcMAC-IP
+        dummy_db.stat1d[f"{srcIP}_{dstIP}"]=copy.deepcopy(self.inc_stat_db.stat1d.get(f"{srcIP}_{dstIP}")) #jitter
         
         # channel
-        dummy_db.stat1d[f"{srcIP}"]=copy.deepcopy(self.inc_stat_db.stat1d[f"{srcIP}"])
-        dummy_db.stat1d[f"{dstIP}"]=copy.deepcopy(self.inc_stat_db.stat1d[f"{dstIP}"])
-        dummy_db.stat2d[frozenset([f"{dstIP}",f"{srcIP}"])]=copy.deepcopy(self.inc_stat_db.stat2d[frozenset([f"{dstIP}",f"{srcIP}"])])
+        dummy_db.stat1d[f"{srcIP}"]=copy.deepcopy(self.inc_stat_db.stat1d.get(f"{srcIP}"))
+        dummy_db.stat1d[f"{dstIP}"]=copy.deepcopy(self.inc_stat_db.stat1d.get(f"{dstIP}"))
+        dummy_db.stat2d[frozenset([f"{dstIP}",f"{srcIP}"])]=copy.deepcopy(self.inc_stat_db.stat2d.get(frozenset([f"{dstIP}",f"{srcIP}"])))
         
         #socket
         if srcProtocol=='arp':
-            dummy_db.stat1d[f"{srcMAC}"]=copy.deepcopy(self.inc_stat_db.stat1d[f"{srcMAC}"])
-            dummy_db.stat1d[f"{dstMAC}"]=copy.deepcopy(self.inc_stat_db.stat1d[f"{dstMAC}"])
-            dummy_db.stat2d[frozenset([f"{srcMAC}",f"{dstMAC}"])]=copy.deepcopy(self.inc_stat_db.stat2d[frozenset([f"{dstMAC}",f"{srcMAC}"])])
+            dummy_db.stat1d[f"{srcMAC}"]=copy.deepcopy(self.inc_stat_db.stat1d.get(f"{srcMAC}"))
+            dummy_db.stat1d[f"{dstMAC}"]=copy.deepcopy(self.inc_stat_db.stat1d.get(f"{dstMAC}"))
+            dummy_db.stat2d[frozenset([f"{srcMAC}",f"{dstMAC}"])]=copy.deepcopy(self.inc_stat_db.stat2d.get(frozenset([f"{dstMAC}",f"{srcMAC}"])))
         else:
-            dummy_db.stat1d[f"{srcIP}_{srcProtocol}"]=copy.deepcopy(self.inc_stat_db.stat1d[f"{srcIP}_{srcProtocol}"])
-            dummy_db.stat1d[f"{dstIP}_{dstProtocol}"]=copy.deepcopy(self.inc_stat_db.stat1d[f"{dstIP}_{dstProtocol}"])
-            dummy_db.stat2d[frozenset([f"{srcIP}_{srcProtocol}",f"{dstIP}_{dstProtocol}"])]=copy.deepcopy(self.inc_stat_db.stat2d[frozenset([f"{srcIP}_{srcProtocol}",f"{dstIP}_{dstProtocol}"])])
+            dummy_db.stat1d[f"{srcIP}_{srcProtocol}"]=copy.deepcopy(self.inc_stat_db.stat1d.get(f"{srcIP}_{srcProtocol}"))
+            dummy_db.stat1d[f"{dstIP}_{dstProtocol}"]=copy.deepcopy(self.inc_stat_db.stat1d.get(f"{dstIP}_{dstProtocol}"))
+            dummy_db.stat2d[frozenset([f"{srcIP}_{srcProtocol}",f"{dstIP}_{dstProtocol}"])]=copy.deepcopy(self.inc_stat_db.stat2d.get(frozenset([f"{srcIP}_{srcProtocol}",f"{dstIP}_{dstProtocol}"])))
 
         dummy_db.num_updated=self.inc_stat_db.num_updated
         dummy_db.num_entries=self.inc_stat_db.num_entries
