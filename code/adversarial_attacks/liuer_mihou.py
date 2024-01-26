@@ -14,8 +14,17 @@ from scipy.spatial import cKDTree
 from pathlib import Path
 
 
-
-def plot_contour(pos_history, canvas=None, title="Trajectory", mark=None, designer=None, mesher=None, animator=None, original_time=0, **kwargs):
+def plot_contour(
+    pos_history,
+    canvas=None,
+    title="Trajectory",
+    mark=None,
+    designer=None,
+    mesher=None,
+    animator=None,
+    original_time=0,
+    **kwargs,
+):
     """Draw a 2D contour map for particle trajectories
     Here, the space is represented as a flat plane. The contours indicate the
     elevation with respect to the objective function. This works best with
@@ -52,9 +61,7 @@ def plot_contour(pos_history, canvas=None, title="Trajectory", mark=None, design
     try:
         # If no Designer class supplied, use defaults
         if designer is None:
-            designer = Designer(
-                limits=[(-1, 1), (-1, 1)], label=["x-axis", "y-axis"]
-            )
+            designer = Designer(limits=[(-1, 1), (-1, 1)], label=["x-axis", "y-axis"])
 
         # If no Animator class supplied, use defaults
         if animator is None:
@@ -79,7 +86,11 @@ def plot_contour(pos_history, canvas=None, title="Trajectory", mark=None, design
 
         # Make a contour map if possible
         if mesher is not None:
-            xx, yy, zz, = _mesh(mesher)
+            (
+                xx,
+                yy,
+                zz,
+            ) = _mesh(mesher)
             ax.contour(xx, yy, zz, levels=mesher.levels)
 
         # Mark global best if possible
@@ -92,8 +103,14 @@ def plot_contour(pos_history, canvas=None, title="Trajectory", mark=None, design
         colours = ["#FF1E2E" for i in range(n_particles)]
         colours[-1] = "black"
         # Put scatter skeleton
-        plot = ax.scatter(x=[0 for i in range(n_particles)], y=[
-                          0 for i in range(n_particles)], c=colours, zorder=1, alpha=0.6, **kwargs)
+        plot = ax.scatter(
+            x=[0 for i in range(n_particles)],
+            y=[0 for i in range(n_particles)],
+            c=colours,
+            zorder=1,
+            alpha=0.6,
+            **kwargs,
+        )
         # Do animation
         anim = animation.FuncAnimation(
             fig=fig,
@@ -121,8 +138,14 @@ def _animate(i, data, plot, original_time, ax):
     if i is not 0:
         colours = ["#1EFFEF" for i in range(current_pos.shape[0])]
         colours[-1] = "black"
-        ax.scatter(x=data[i - 1][:, 0], y=data[i - 1]
-                   [:, 1], c=colours, alpha=0.2, zorder=-1, s=5)
+        ax.scatter(
+            x=data[i - 1][:, 0],
+            y=data[i - 1][:, 1],
+            c=colours,
+            alpha=0.2,
+            zorder=-1,
+            s=5,
+        )
 
     ax.set_title("iteration:{}".format(i))
     if np.array(current_pos).shape[1] == 2:
@@ -130,6 +153,7 @@ def _animate(i, data, plot, original_time, ax):
     else:
         plot._offsets3d = current_pos.T
     return (plot,)
+
 
 def boost_factor(i):
     """
@@ -160,10 +184,8 @@ def create_swarm(n_particles, options, bounds):
         swarm instance with position and velocity
     """
 
-    position = generate_position(
-        n_particles, bounds)
-    velocity = generate_velocity(
-        n_particles, bounds)
+    position = generate_position(n_particles, bounds)
+    velocity = generate_velocity(n_particles, bounds)
 
     swarm = Swarm(position, velocity, options=options)
     return swarm
@@ -190,8 +212,7 @@ def generate_velocity(n_particles, bounds):
     factor = 0.2
 
     # set velocity to random value between 0 to factor of range
-    velocity = np.random.uniform(
-        0, factor * range, size=(n_particles, len(lb)))
+    velocity = np.random.uniform(0, factor * range, size=(n_particles, len(lb)))
 
     return velocity
 
@@ -215,12 +236,10 @@ def generate_position(n_particles, bounds):
     # assume discrete dimensions are all after continous ones
     lb, ub = bounds
 
-    positions = np.random.uniform(
-        low=lb, high=ub, size=(n_particles, len(lb))
-    )
+    positions = np.random.uniform(low=lb, high=ub, size=(n_particles, len(lb)))
 
-    # first position indicates no change    
-    positions[0]=lb
+    # first position indicates no change
+    positions[0] = lb
 
     return positions
 
@@ -269,7 +288,8 @@ class Traffic(Topology):
         # mutation
         for i in range(n_particles):
             mutation_candidate = np.random.choice(
-                mutation_candidates[i], 3, replace=False)
+                mutation_candidates[i], 3, replace=False
+            )
             a, b, c = positions[mutation_candidate]
             mutation_factor = 0.8
             mutant = a + mutation_factor * (b - c)
@@ -361,7 +381,11 @@ class Traffic(Topology):
             best_aux = swarm.pbest_aux[min_index]
         else:
             # Just get the previous best_pos and best_cost
-            best_pos, best_cost, best_aux = swarm.best_pos, swarm.best_cost, swarm.best_aux
+            best_pos, best_cost, best_aux = (
+                swarm.best_pos,
+                swarm.best_cost,
+                swarm.best_aux,
+            )
 
         return best_pos, best_cost, best_aux
 
@@ -382,16 +406,10 @@ class Traffic(Topology):
         mask_pos = np.expand_dims(mask_cost, axis=1)
         # Apply masks
         new_pos = np.where(~mask_pos, swarm.position, swarm.trial_pos)
-        new_cost = np.where(
-            ~mask_cost, swarm.current_cost, swarm.trial_cost
-        )
+        new_cost = np.where(~mask_cost, swarm.current_cost, swarm.trial_cost)
 
         # apply aux info
-        new_aux = np.where(
-            ~mask_pos, swarm.current_aux, swarm.trial_aux
-        )
-
-
+        new_aux = np.where(~mask_pos, swarm.current_aux, swarm.trial_aux)
 
         return (new_pos, new_cost, new_aux)
 
@@ -408,18 +426,14 @@ class Traffic(Topology):
         """
         # Create a 1-D and 2-D mask based from comparisons
         mask_cost = swarm.current_cost < swarm.pbest_cost
-        
+
         mask_pos = np.expand_dims(mask_cost, axis=1)
         # Apply masks
         new_pbest_pos = np.where(~mask_pos, swarm.pbest_pos, swarm.position)
-        new_pbest_cost = np.where(
-            ~mask_cost, swarm.pbest_cost, swarm.current_cost
-        )
+        new_pbest_cost = np.where(~mask_cost, swarm.pbest_cost, swarm.current_cost)
 
         # record the iteration with best cost
-        new_pbest_iter = np.where(
-            ~mask_cost, swarm.pbest_iter, iter
-        )
+        new_pbest_iter = np.where(~mask_cost, swarm.pbest_iter, iter)
 
         return new_pbest_pos, new_pbest_cost, new_pbest_iter
 
@@ -429,7 +443,7 @@ class Traffic(Topology):
         clamp=None,
         vh=VelocityHandler(strategy="unmodified"),
         bounds=None,
-        iter=None
+        iter=None,
     ):
         """Compute the velocity matrix
         This method updates the velocity matrix using the best and current
@@ -478,9 +492,7 @@ class Traffic(Topology):
             * (swarm.pbest_pos - swarm.position)
         )
         social = (
-            c2
-            * np.random.uniform(0, 1, swarm_size)
-            * (swarm.best_pos - swarm.position)
+            c2 * np.random.uniform(0, 1, swarm_size) * (swarm.best_pos - swarm.position)
         )
 
         # Compute temp velocity (subject to clamping if possible)
@@ -523,66 +535,83 @@ class Traffic(Topology):
             temp_position = bh(temp_position, bounds)
 
         position = temp_position
-    
+
         return position
 
+
 class LiuerMihouAttack(BaseAdversarialAttack):
-    def __init__(self, max_num_adv=100, bounds={"max_time_delay":0.1, "max_craft_pkt":5, "max_payload_size":1514}, pso={"n_particles":30, "iterations":20, "options":{'c1': 0.7, 'c2': 0.3, 'w': 0.5},
-                                         "p":2, "k":4, "clamp":None}, **kwargs):
-        self.max_num_adv=max_num_adv
-        self.bounds=bounds
-        self.pso=pso 
-        
-        self.allowed= ("fe", "model", "mal_pcap")
+    def __init__(
+        self,
+        max_num_adv=100,
+        bounds={"max_time_delay": 0.1, "max_craft_pkt": 5, "max_payload_size": 1514},
+        pso={
+            "n_particles": 30,
+            "iterations": 20,
+            "options": {"c1": 0.7, "c2": 0.3, "w": 0.5},
+            "p": 2,
+            "k": 4,
+            "clamp": None,
+        },
+        **kwargs,
+    ):
+        self.max_num_adv = max_num_adv
+        self.bounds = bounds
+        self.pso = pso
+
+        self.allowed = ("fe", "model", "mal_pcap")
 
         for k, v in kwargs.items():
-            assert( k in self.allowed )
+            assert k in self.allowed
             setattr(self, k, v)
-        
-    
+
     def __rrshift__(self, other):
         self.start(**other)
-    
+
     def attack_setup(self):
-        self.input_pcap=PcapReader(self.mal_pcap)
-        self.mal_pcap=Path(self.mal_pcap)
-        
-        adv_pcap=self.mal_pcap.parents[1]/"adversarial"/(self.mal_pcap.stem+"_lm.pcap")
+        self.input_pcap = PcapReader(self.mal_pcap)
+        self.mal_pcap = Path(self.mal_pcap)
+
+        adv_pcap = (
+            self.mal_pcap.parents[1] / "adversarial" / (self.mal_pcap.stem + "_lm.pcap")
+        )
         adv_pcap.parent.mkdir(parents=True, exist_ok=True)
-        self.output_pcap=PcapWriter(str(adv_pcap))
+        self.output_pcap = PcapWriter(str(adv_pcap))
         print(f"adverarial pcap at: {adv_pcap}")
-        
-        log_path= self.mal_pcap.parents[1]/"adversarial"/(self.mal_pcap.stem+"_lm_log.txt")
-        self.log_file=open(log_path,"w")
-                
+
+        log_path = (
+            self.mal_pcap.parents[1]
+            / "adversarial"
+            / (self.mal_pcap.stem + "_lm_log.txt")
+        )
+        self.log_file = open(log_path, "w")
+
     def attack_teardown(self):
         self.input_pcap.close()
         self.output_pcap.close()
         self.log_file.close()
-    
+
     def start(self, **kwargs):
         for k, v in kwargs.items():
-            assert(k in self.allowed)
+            assert k in self.allowed
             setattr(self, k, v)
-            
+
         self.craft_adversary()
-    
+
     def craft_adversary(self):
         self.attack_setup()
-        
-        pkt_index = 0
-        offset_time=0
-        num_adv=0
-        
-        pbar=tqdm(total=self.max_num_adv, position=0)
-        for packet in self.input_pcap:
-            
-            if num_adv>self.max_num_adv:
-                break 
-            
-            traffic_vector=self.fe.get_traffic_vector(packet)
 
-            #shift packet time 
+        pkt_index = 0
+        offset_time = 0
+        num_adv = 0
+
+        pbar = tqdm(total=self.max_num_adv, position=0)
+        for packet in self.input_pcap:
+            if num_adv > self.max_num_adv:
+                break
+
+            traffic_vector = self.fe.get_traffic_vector(packet)
+
+            # shift packet time
             traffic_vector[-2] += offset_time
 
             pkt_index += 1
@@ -592,161 +621,189 @@ class LiuerMihouAttack(BaseAdversarialAttack):
                 self.output_pcap.write(packet)
                 prev_pkt_time = packet.time
                 continue
-           
+
             # find original score
-            features=self.fe.peek([traffic_vector])
+            features = self.fe.peek([traffic_vector])
             label = self.model.predict_labels(features)
 
-            if not label: # packet is benign
+            if not label:  # packet is benign
                 packet.time = traffic_vector[-2]
                 self.output_pcap.write(packet)
                 features = self.fe.update(traffic_vector)
 
                 prev_pkt_time = packet.time
                 continue
-            
-            min_time=prev_pkt_time-traffic_vector[-2]
-            min_payload=len(packet)-len(packet.payload)
-            
-            bounds=np.array([[min_time, 0., min_payload],
-                             [self.bounds["max_time_delay"], self.bounds["max_craft_pkt"], self.bounds["max_payload_size"]]])
-            
+
+            min_time = prev_pkt_time - traffic_vector[-2]
+            min_payload = len(packet) - len(packet.payload)
+
+            bounds = np.array(
+                [
+                    [min_time, 0.0, min_payload],
+                    [
+                        self.bounds["max_time_delay"],
+                        self.bounds["max_craft_pkt"],
+                        self.bounds["max_payload_size"],
+                    ],
+                ]
+            )
+
             cost, pos = self.optimize(traffic_vector, bounds)
 
-            delay, n_craft, payload=pos[0], int(pos[1]), int(pos[2])
+            delay, n_craft, payload = pos[0], int(pos[1]), int(pos[2])
 
             # apply fake packets to feature extractor
-            delay_times=np.linspace(0,delay, n_craft+1, endpoint=False)[1:]
+            delay_times = np.linspace(0, delay, n_craft + 1, endpoint=False)[1:]
             for i in range(n_craft):
-                craft_vector=traffic_vector[:-2]+[prev_pkt_time+delay_times[i], payload]
+                craft_vector = traffic_vector[:-2] + [
+                    prev_pkt_time + delay_times[i],
+                    payload,
+                ]
                 self.fe.update(craft_vector)
-                craft_packet = self.packet_gen(packet, craft_vector, modify_payload=True)
+                craft_packet = self.packet_gen(
+                    packet, craft_vector, modify_payload=True
+                )
                 self.output_pcap.write(craft_packet)
-            
+
             traffic_vector[-2] = prev_pkt_time + delay
             self.fe.update(traffic_vector)
-            adversarial_packet = self.packet_gen(packet, traffic_vector, modify_payload=False)
+            adversarial_packet = self.packet_gen(
+                packet, traffic_vector, modify_payload=False
+            )
             self.output_pcap.write(adversarial_packet)
             prev_pkt_time = adversarial_packet.time
-            
-            num_adv+=1
+
+            num_adv += 1
             pbar.update(1)
-            
+
         self.attack_teardown()
-            
+
     def packet_gen(self, packet, traffic_vector, modify_payload=False):
-        
         packet.time = traffic_vector[-2]
-        
+
         if packet.haslayer(IP):
-            packet[IP].src=traffic_vector[3]
-            packet[IP].dst=traffic_vector[5]
-        
+            packet[IP].src = traffic_vector[3]
+            packet[IP].dst = traffic_vector[5]
+
         if packet.haslayer(TCP):
-            packet[TCP].sport=int(traffic_vector[4])
-            packet[TCP].dport=int(traffic_vector[6])
+            packet[TCP].sport = int(traffic_vector[4])
+            packet[TCP].dport = int(traffic_vector[6])
             if modify_payload:
                 packet[TCP].remove_payload()
                 payload_size = int(traffic_vector[-1]) - len(packet)
                 packet[TCP].add_payload(Raw(load="a" * payload_size))
-            
+
             del packet[TCP].chksum
-            
+
         if packet.haslayer(UDP):
-            packet[UDP].sport=int(traffic_vector[4])
-            packet[UDP].dport=int(traffic_vector[6])
+            packet[UDP].sport = int(traffic_vector[4])
+            packet[UDP].dport = int(traffic_vector[6])
             if modify_payload:
                 packet[UDP].remove_payload()
                 payload_size = int(traffic_vector[-1]) - len(packet)
                 packet[UDP].add_payload(Raw(load="a" * payload_size))
-            
+
         if packet.haslayer(ARP):
-            packet[ARP].hwsrc=traffic_vector[1]
-            packet[ARP].hwdst=traffic_vector[2]
-        
+            packet[ARP].hwsrc = traffic_vector[1]
+            packet[ARP].hwdst = traffic_vector[2]
+
         if packet.haslayer(IP):
             del packet[IP].len
             del packet[IP].chksum
             del packet.len
-            
-        return packet
-    
-    def cost_function(self, x, traffic_vector):
-        original_time=traffic_vector[-2]
 
-        split_idx=[0]
-        features=[]
-        counter=0
-        #iterative through each particle
+        return packet
+
+    def cost_function(self, x, traffic_vector):
+        original_time = traffic_vector[-2]
+
+        split_idx = [0]
+        features = []
+        counter = 0
+        # iterative through each particle
         for time_delay, n_craft, packet_size in x:
-            n_craft=int(n_craft)
-            packet_size=int(packet_size)
-            simulated_tv=[]
-            delay_times=np.linspace(0, time_delay, n_craft+1, endpoint=False)[1:]
-            
+            n_craft = int(n_craft)
+            packet_size = int(packet_size)
+            simulated_tv = []
+            delay_times = np.linspace(0, time_delay, n_craft + 1, endpoint=False)[1:]
+
             for t in delay_times:
-                simulated_tv.append(traffic_vector[:-2] + [original_time+t, packet_size]) 
-                
-                
+                simulated_tv.append(
+                    traffic_vector[:-2] + [original_time + t, packet_size]
+                )
+
             traffic_vector[-2] = original_time + time_delay
             simulated_tv.append(traffic_vector)
-            
-            craft_features=self.fe.peek(simulated_tv)
+
+            craft_features = self.fe.peek(simulated_tv)
             features.append(craft_features)
-            counter+=len(craft_features)
+            counter += len(craft_features)
             split_idx.append(counter)
-            
-            
-        anomaly_scores=self.model.predict_scores(np.vstack(features))
-                
-        cost=[]
-        for i,j in zip(split_idx[:-1], split_idx[1:]):
+
+        anomaly_scores = self.model.predict_scores(np.vstack(features))
+
+        cost = []
+        for i, j in zip(split_idx[:-1], split_idx[1:]):
             cost.append(np.max(anomaly_scores[i:j]))
 
         return np.array(cost)
-    
+
     def optimize(self, traffic_vector, bounds):
         topology = Traffic()
 
-        swarm = create_swarm(n_particles=self.pso["n_particles"], options=self.pso["options"], bounds=bounds)
+        swarm = create_swarm(
+            n_particles=self.pso["n_particles"],
+            options=self.pso["options"],
+            bounds=bounds,
+        )
 
-        pbar = tqdm(range(self.pso["iterations"]), position=1,leave=False)
+        pbar = tqdm(range(self.pso["iterations"]), position=1, leave=False)
 
-        
         for i in pbar:
-            
             # Part 1: Update personal best
-            swarm.current_cost = self.cost_function(swarm.position, traffic_vector)  # Compute current cost
+            swarm.current_cost = self.cost_function(
+                swarm.position, traffic_vector
+            )  # Compute current cost
             if i == 0:
                 swarm.pbest_cost = swarm.current_cost
                 swarm.best_cost = swarm.current_cost
                 swarm.best_pos = swarm.position
                 swarm.pbest_iter = np.zeros((self.pso["n_particles"],))
 
-            swarm.pbest_pos, swarm.pbest_cost, swarm.pbest_iter = topology.compute_pbest(swarm, i)  # Update and store
+            (
+                swarm.pbest_pos,
+                swarm.pbest_cost,
+                swarm.pbest_iter,
+            ) = topology.compute_pbest(
+                swarm, i
+            )  # Update and store
 
             # Part 2: Update global best
             # Note that gbest computation is dependent on your topology
             # if np.min(swarm.pbest_cost) < swarm.best_cost:
             # best index is global minimum, others are best in the neighbourhood
-            swarm.best_pos, swarm.best_cost, swarm.best_index = topology.compute_gbest_local(
-                swarm, self.pso["p"], self.pso["k"])
-            
-            
+            (
+                swarm.best_pos,
+                swarm.best_cost,
+                swarm.best_index,
+            ) = topology.compute_gbest_local(swarm, self.pso["p"], self.pso["k"])
+
             # Part 3: Update position and velocity matrices
             # Note that position and velocity updates are dependent on your topology
-        
+
             swarm.velocity = topology.compute_velocity(
-                swarm, bounds=bounds, clamp=self.pso["clamp"], iter=i)
+                swarm, bounds=bounds, clamp=self.pso["clamp"], iter=i
+            )
             if np.random.rand() < 0.5:
                 strat = "random"
             else:
                 strat = "nearest"
-                
+
             swarm.position = topology.compute_position(
-                swarm, bounds=bounds, bh=BoundaryHandler(strategy=strat))
+                swarm, bounds=bounds, bh=BoundaryHandler(strategy=strat)
+            )
 
             post_fix = "c: {:.4f}".format(swarm.best_cost[swarm.best_index])
             pbar.set_postfix_str(post_fix)
-            
+
         return swarm.best_cost[swarm.best_index], swarm.best_pos[swarm.best_index]
