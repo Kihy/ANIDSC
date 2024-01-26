@@ -1,42 +1,10 @@
 import importlib
 import sklearn
 from datasets.custom_dataset import *
-from abc import ABC, abstractmethod
-from pathlib import Path
 import pickle
+from models.base_model import BaseModel
 
-def load_sklearn_model(dataset_id, model_name):
-    with open(f"../trained_models/{dataset_id}/{model_name}.pkl","rb") as f:
-        model=pickle.load(f) 
-    return model
-
-class BaseSklearnModel:
-    """
-    compatible with all sklearn style models
-    for example pyod or deepod
-    """
-    def preprocess(self, X):        
-        if len(self.preprocessors)>0:
-            for p in self.preprocessors:
-                X=p(X)
-        return X
-    
-    @abstractmethod
-    def train(self, X):
-        pass
-    
-    @abstractmethod
-    def predict(self, X):
-        pass
-    
-    def save(self, dataset_id):
-        save_path=Path(f"../trained_models/{dataset_id}/{self.model_name}.pkl")
-        save_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        with open(save_path,"wb") as f:
-            pickle.dump(self, f) 
-
-class SklearnClassifier(BaseSklearnModel):
+class SklearnClassifier(BaseModel):
     def __init__(self, model_name, import_module, preprocessors=[], model_params={},
                  classes=[]):
         model_class = getattr(importlib.import_module(import_module), model_name)
@@ -56,11 +24,15 @@ class SklearnClassifier(BaseSklearnModel):
             self.training_call(features, labels, classes=self.classes)
         
         
-    def predict(self,X):
+    def predict_scores(self,X):
         X=self.preprocess(X)
         self.model.decision_function(X)
         
-class SklearnOutlierDetector(BaseSklearnModel):
+class SklearnOutlierDetector(BaseModel):
+    """
+    compatible with all sklearn style models
+    for example pyod or deepod
+    """
     def __init__(self, model_name, import_module, preprocessors=[], model_params={}):
         model_class = getattr(importlib.import_module(import_module), model_name)
         self.model = model_class(**model_params)  # Instantiates the model

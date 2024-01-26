@@ -43,7 +43,6 @@ class BaseTrafficFeatureExtractor(ABC):
         for packet in tqdm(self.packets):
             meta = self.get_traffic_vector(packet)
             
-            
             if meta is None:
                 skipped+=1
                 continue

@@ -1,14 +1,19 @@
 from models.sklearn_models import *
 from datasets.custom_dataset import * 
 import pickle
+from abc import ABC, abstractmethod
+from tqdm import tqdm 
 
 class BasePipeline(ABC):
 
     def setup_dataset(self):
-        self.dataset_id=self.files["benign"]
-        self.benign_dataset=load_dataset(self.files["benign"], train_val_test=self.train_val_test, batch_size=self.batch_size)        
-        self.malicious_datasets=[load_dataset(path, train_val_test=False,batch_size=self.batch_size) for path in self.files["malicious"]]
-        
+        for key, file_name in self.files.items():
+            if key=="benign":
+                train_val_test=self.train_val_test
+            else:
+                train_val_test=False
+            self.files[key]=[load_dataset(name, train_val_test=train_val_test, batch_size=self.batch_size) for name in file_name]
+                
     def start(self, **kwargs):
         for k, v in kwargs.items():
             assert(k in self.allowed)
@@ -28,28 +33,39 @@ class BasePipeline(ABC):
         self.model.save(self.dataset_id)
 
     def eval(self):
-        scores=[]
-        for feature, label in self.benign_dataset["test"]:
-            scores.append(self.model.predict_scores(feature))
-            
-        model_output={f"{self.dataset_id}_test":np.hstack(scores),
+        model_output={"benign":{},
+                      "malicious":{},
+                      "adversarial":{},
                       "threshold":self.model.threshold}
         
-        for name, dataset in zip(self.files["malicious"], self.malicious_datasets):
+        for dataset in self.files["benign"]:  
             scores=[]
-            for feature, label in dataset:
+            for feature, label in tqdm(dataset["test"],desc=f"evaluating {dataset.name}"):
                 scores.append(self.model.predict_scores(feature))
-            model_output[name]=np.hstack(scores)
+            model_output["benign"][dataset["test"].name]=np.hstack(scores)
+        
+        for dataset in self.files["malicious"]:  
+            scores=[]
+            for feature, label in tqdm(dataset,desc=f"evaluating {dataset.name}"):
+                scores.append(self.model.predict_scores(feature))
+            model_output["malicious"][dataset.name]=np.hstack(scores)
+        
+        for dataset in self.files["adversarial"]:  
+            scores=[]
+            for feature, label in tqdm(dataset,desc=f"evaluating {dataset.name}"):
+                scores.append(self.model.predict_scores(feature))
+            model_output["adversarial"][dataset.name]=np.hstack(scores)
         
         results={}
         for metric in self.metrics:
             results[metric.__name__]=metric(model_output)
-            
         return results
     
     def train(self):
-        for feature, label in self.benign_dataset["train"]:
-            self.model.train(feature)
+        for i in range(self.epochs):
+            for dataset in self.files["benign"]:
+                for feature, label in tqdm(dataset["train"],desc=f"training {dataset.name}"):
+                    self.model.train(feature)
 
 
 class OutlierDetectionPipeline(BasePipeline):
@@ -69,7 +85,7 @@ class OutlierDetectionPipeline(BasePipeline):
         
     def calc_threshold(self, func=lambda x: np.percentile(x, 99.9)):
         scores=[]
-        for feature, label in self.benign_dataset["val"]:
+        for feature, label in tqdm(self.benign_dataset["val"]):
             scores.append(self.model.predict_scores(feature))
         threshold=func(np.hstack(scores))
         self.model.threshold=threshold

@@ -37,6 +37,8 @@ class AfterImage(BaseTrafficFeatureExtractor):
 
         self.feature_file=open(feature_file, "w")
         self.meta_file=open(meta_file, "w")
+        
+        
 
     def peek(self, traffic_vectors):
         first_record=traffic_vectors[0]

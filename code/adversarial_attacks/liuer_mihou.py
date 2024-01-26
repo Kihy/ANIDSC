@@ -221,8 +221,6 @@ def generate_position(n_particles, bounds):
 
     # first position indicates no change    
     positions[0]=lb
-    
-    positions=np.rint(positions[1:])
 
     return positions
 
@@ -410,6 +408,7 @@ class Traffic(Topology):
         """
         # Create a 1-D and 2-D mask based from comparisons
         mask_cost = swarm.current_cost < swarm.pbest_cost
+        
         mask_pos = np.expand_dims(mask_cost, axis=1)
         # Apply masks
         new_pbest_pos = np.where(~mask_pos, swarm.pbest_pos, swarm.position)
@@ -421,7 +420,6 @@ class Traffic(Topology):
         new_pbest_iter = np.where(
             ~mask_cost, swarm.pbest_iter, iter
         )
-
 
         return new_pbest_pos, new_pbest_cost, new_pbest_iter
 
@@ -488,7 +486,7 @@ class Traffic(Topology):
         # Compute temp velocity (subject to clamping if possible)
         temp_velocity = (w * swarm.velocity) + cognitive + social
 
-        temp_velocity *= boost_factor(iter - swarm.pbest_iter)
+        # temp_velocity *= boost_factor(iter - swarm.pbest_iter)
 
         updated_velocity = vh(
             temp_velocity, clamp, position=swarm.position, bounds=bounds
@@ -524,27 +522,37 @@ class Traffic(Topology):
         if bounds is not None:
             temp_position = bh(temp_position, bounds)
 
-        position = np.rint(temp_position[1:])
-
+        position = temp_position
+    
         return position
 
 class LiuerMihouAttack(BaseAdversarialAttack):
-    def __init__(self, **kwargs):
+    def __init__(self, max_num_adv=100, bounds={"max_time_delay":0.1, "max_craft_pkt":5, "max_payload_size":1514}, pso={"n_particles":30, "iterations":20, "options":{'c1': 0.7, 'c2': 0.3, 'w': 0.5},
+                                         "p":2, "k":4, "clamp":None}, **kwargs):
+        self.max_num_adv=max_num_adv
+        self.bounds=bounds
+        self.pso=pso 
+        
+        self.allowed= ("fe", "model", "mal_pcap")
+
         for k, v in kwargs.items():
+            assert( k in self.allowed )
             setattr(self, k, v)
+        
     
     def __rrshift__(self, other):
-        self.craft_adversary(other)
+        self.start(**other)
     
-    def attack_setup(self, mal_pcap):
-        self.input_pcap=PcapReader(mal_pcap)
-        mal_pcap=Path(mal_pcap)
+    def attack_setup(self):
+        self.input_pcap=PcapReader(self.mal_pcap)
+        self.mal_pcap=Path(self.mal_pcap)
         
-        adv_pcap=mal_pcap.parents[1]/"adversarial"/(mal_pcap.stem+"_lm.pcap")
+        adv_pcap=self.mal_pcap.parents[1]/"adversarial"/(self.mal_pcap.stem+"_lm.pcap")
         adv_pcap.parent.mkdir(parents=True, exist_ok=True)
         self.output_pcap=PcapWriter(str(adv_pcap))
+        print(f"adverarial pcap at: {adv_pcap}")
         
-        log_path= mal_pcap.parents[1]/"adversarial"/(mal_pcap.stem+"_lm_log.txt")
+        log_path= self.mal_pcap.parents[1]/"adversarial"/(self.mal_pcap.stem+"_lm_log.txt")
         self.log_file=open(log_path,"w")
                 
     def attack_teardown(self):
@@ -552,13 +560,26 @@ class LiuerMihouAttack(BaseAdversarialAttack):
         self.output_pcap.close()
         self.log_file.close()
     
-    def craft_adversary(self, mal_pcap):
-        self.attack_setup(mal_pcap)
+    def start(self, **kwargs):
+        for k, v in kwargs.items():
+            assert(k in self.allowed)
+            setattr(self, k, v)
+            
+        self.craft_adversary()
+    
+    def craft_adversary(self):
+        self.attack_setup()
         
         pkt_index = 0
         offset_time=0
+        num_adv=0
         
-        for packet in tqdm(self.input_pcap):
+        pbar=tqdm(total=self.max_num_adv, position=0)
+        for packet in self.input_pcap:
+            
+            if num_adv>self.max_num_adv:
+                break 
+            
             traffic_vector=self.fe.get_traffic_vector(packet)
 
             #shift packet time 
@@ -587,23 +608,29 @@ class LiuerMihouAttack(BaseAdversarialAttack):
             min_time=prev_pkt_time-traffic_vector[-2]
             min_payload=len(packet)-len(packet.payload)
             
-            bounds=np.array([[min_time, 0., min_payload],[self.max_time_delay, self.max_craft_pkt, self.max_payload_size]])
+            bounds=np.array([[min_time, 0., min_payload],
+                             [self.bounds["max_time_delay"], self.bounds["max_craft_pkt"], self.bounds["max_payload_size"]]])
             
             cost, pos = self.optimize(traffic_vector, bounds)
-    
+
+            delay, n_craft, payload=pos[0], int(pos[1]), int(pos[2])
+
             # apply fake packets to feature extractor
-            delay_times=np.linspace(0,pos[0], pos[1]+1, endpoint=False)[1:]
-            for i in range(pos[1]):
-                craft_vector=traffic_vector[:-2]+[prev_pkt_time+delay_times[i], pos[2]]
+            delay_times=np.linspace(0,delay, n_craft+1, endpoint=False)[1:]
+            for i in range(n_craft):
+                craft_vector=traffic_vector[:-2]+[prev_pkt_time+delay_times[i], payload]
                 self.fe.update(craft_vector)
                 craft_packet = self.packet_gen(packet, craft_vector, modify_payload=True)
                 self.output_pcap.write(craft_packet)
             
-            traffic_vector[-2] = prev_pkt_time + pos[0]
+            traffic_vector[-2] = prev_pkt_time + delay
             self.fe.update(traffic_vector)
-            adversarial_packet = self.packet_gen(packet, features, modify_payload=False)
+            adversarial_packet = self.packet_gen(packet, traffic_vector, modify_payload=False)
             self.output_pcap.write(adversarial_packet)
             prev_pkt_time = adversarial_packet.time
+            
+            num_adv+=1
+            pbar.update(1)
             
         self.attack_teardown()
             
@@ -616,8 +643,8 @@ class LiuerMihouAttack(BaseAdversarialAttack):
             packet[IP].dst=traffic_vector[5]
         
         if packet.haslayer(TCP):
-            packet[TCP].sport=traffic_vector[4]
-            packet[TCP].dport=traffic_vector[6]
+            packet[TCP].sport=int(traffic_vector[4])
+            packet[TCP].dport=int(traffic_vector[6])
             if modify_payload:
                 packet[TCP].remove_payload()
                 payload_size = int(traffic_vector[-1]) - len(packet)
@@ -626,8 +653,8 @@ class LiuerMihouAttack(BaseAdversarialAttack):
             del packet[TCP].chksum
             
         if packet.haslayer(UDP):
-            packet[UDP].sport=traffic_vector[4]
-            packet[UDP].dport=traffic_vector[6]
+            packet[UDP].sport=int(traffic_vector[4])
+            packet[UDP].dport=int(traffic_vector[6])
             if modify_payload:
                 packet[UDP].remove_payload()
                 payload_size = int(traffic_vector[-1]) - len(packet)
@@ -646,48 +673,55 @@ class LiuerMihouAttack(BaseAdversarialAttack):
     
     def cost_function(self, x, traffic_vector):
         original_time=traffic_vector[-2]
-        
-        simulated_tv=[]
+
         split_idx=[0]
-        
+        features=[]
+        counter=0
         #iterative through each particle
-        for i, (time_delay, n_craft, packet_size) in enumerate(x):
-            delay_times=np.linspace(0,time_delay, n_craft+1, endpoint=False)[1:]
+        for time_delay, n_craft, packet_size in x:
+            n_craft=int(n_craft)
+            packet_size=int(packet_size)
+            simulated_tv=[]
+            delay_times=np.linspace(0, time_delay, n_craft+1, endpoint=False)[1:]
             
-            for i in n_craft:
-                simulated_tv.append(traffic_vector[:-2] + [original_time+delay_times[i], packet_size]) 
-            
+            for t in delay_times:
+                simulated_tv.append(traffic_vector[:-2] + [original_time+t, packet_size]) 
+                
+                
             traffic_vector[-2] = original_time + time_delay
             simulated_tv.append(traffic_vector)
-            split_idx.append(i)
             
-        craft_features=self.fe.peek(simulated_tv)
-        anomaly_scores=self.model.predict_scores(craft_features)
-        
+            craft_features=self.fe.peek(simulated_tv)
+            features.append(craft_features)
+            counter+=len(craft_features)
+            split_idx.append(counter)
+            
+            
+        anomaly_scores=self.model.predict_scores(np.vstack(features))
+                
         cost=[]
         for i,j in zip(split_idx[:-1], split_idx[1:]):
             cost.append(np.max(anomaly_scores[i:j]))
-            
-        return cost
+
+        return np.array(cost)
     
     def optimize(self, traffic_vector, bounds):
         topology = Traffic()
 
-        swarm = create_swarm(n_particles=self.n_particles, options=self.options, bounds=bounds)
+        swarm = create_swarm(n_particles=self.pso["n_particles"], options=self.pso["options"], bounds=bounds)
 
-        pbar = tqdm(range(self.iterations), position=1)
+        pbar = tqdm(range(self.pso["iterations"]), position=1,leave=False)
 
         
         for i in pbar:
             
             # Part 1: Update personal best
             swarm.current_cost = self.cost_function(swarm.position, traffic_vector)  # Compute current cost
-
             if i == 0:
                 swarm.pbest_cost = swarm.current_cost
                 swarm.best_cost = swarm.current_cost
                 swarm.best_pos = swarm.position
-                swarm.pbest_iter = np.zeros((self.n_particles,))
+                swarm.pbest_iter = np.zeros((self.pso["n_particles"],))
 
             swarm.pbest_pos, swarm.pbest_cost, swarm.pbest_iter = topology.compute_pbest(swarm, i)  # Update and store
 
@@ -696,22 +730,21 @@ class LiuerMihouAttack(BaseAdversarialAttack):
             # if np.min(swarm.pbest_cost) < swarm.best_cost:
             # best index is global minimum, others are best in the neighbourhood
             swarm.best_pos, swarm.best_cost, swarm.best_index = topology.compute_gbest_local(
-                swarm, self.pso_p, self.pso_k)
+                swarm, self.pso["p"], self.pso["k"])
             
             
             # Part 3: Update position and velocity matrices
             # Note that position and velocity updates are dependent on your topology
-            # if mutate prob is 1 then it is pure de
         
             swarm.velocity = topology.compute_velocity(
-                swarm, bounds=self.bounds, clamp=self.clamp, iter=i)
+                swarm, bounds=bounds, clamp=self.pso["clamp"], iter=i)
             if np.random.rand() < 0.5:
                 strat = "random"
             else:
                 strat = "nearest"
                 
             swarm.position = topology.compute_position(
-                swarm, bounds=self.bounds, bh=BoundaryHandler(strategy=strat))
+                swarm, bounds=bounds, bh=BoundaryHandler(strategy=strat))
 
             post_fix = "c: {:.4f}".format(swarm.best_cost[swarm.best_index])
             pbar.set_postfix_str(post_fix)

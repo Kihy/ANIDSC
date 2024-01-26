@@ -5,17 +5,24 @@ from models.sklearn_models import *
 from models.trainer import *
 from metrics.od_metrics import *
 from adversarial_attacks.liuer_mihou import LiuerMihouAttack
+from models.kitsune import KitNET
+from models.base_model import *
 
 # feature extraction pipeline
-# pcap_files=["../../datasets/uq/malicious/Lenovo_Bulb_1/pcap/Lenovo_Bulb_1_ACK_Flooding.pcap"]
-# fe=AfterImage()
+# with open("../../datasets/uq/benign/netstat/Lenovo_Bulb_1.pkl", "rb") as pf:
+#        nstat=pickle.load(pf)
+# fe=AfterImage(nstat=nstat)
+
+# pcap_files=["../../datasets/uq/malicious/Lenovo_Bulb_1/adversarial/Lenovo_Bulb_1_ACK_Flooding_lm.pcap"]
 
 # pcap_files>>fe
 
 # save scaler as sklearn model
-files={"benign": "Lenovo_Bulb_1",
+files={"benign": ["Lenovo_Bulb_1"],
        "malicious":["Lenovo_Bulb_1_Port_Scanning",
                     "Lenovo_Bulb_1_Service_Detection",
+                    ],
+       "adversarial":["Lenovo_Bulb_1_ACK_Flooding_lm",
                     ]}
 
 # model=SklearnOutlierDetector("MinMaxScaler","sklearn.preprocessing")
@@ -25,22 +32,29 @@ files={"benign": "Lenovo_Bulb_1",
 # {"model":model}>>trainer
 
 
-
-
 # # training NIDS pipeline
 # scaler=load_sklearn_model("Lenovo_Bulb_1","MinMaxScaler") 
 # model=SklearnOutlierDetector("LocalOutlierFactor", "sklearn.neighbors", model_params={"novelty":True}, preprocessors=[scaler.transform])
 
+# model=KitNET(FM_grace_period=2200)
+
 # trainer=OutlierDetectionPipeline(metrics=[special_f1,plot_scores],
-#                                 batch_size=None)
+#                                 batch_size=1024)
 
 # {"files":files, "model":model}>>trainer
 
-model=load_sklearn_model("Lenovo_Bulb_1","LocalOutlierFactor")
+model=load_pkl_model("Lenovo_Bulb_1","Kitsune")
+trainer=OutlierDetectionPipeline(metrics=[mean_dr, plot_scores],steps=["eval"],
+                                batch_size=1024)
+{"files":files, "model":model}>>trainer
 
-mal_pcap="../../datasets/uq/malicious/Lenovo_Bulb_1/pcap/Lenovo_Bulb_1_ACK_Flooding.pcap"
-with open("../../datasets/uq/benign/netstat/Lenovo_Bulb_1.pkl", "rb") as pf:
-       nstat=pickle.load(pf)
-fe=AfterImage(nstat=nstat)
-adversarial_attack=LiuerMihouAttack(fe=fe, model=model)
-mal_pcap>>adversarial_attack
+# mal_pcap="../../datasets/uq/malicious/Lenovo_Bulb_1/pcap/Lenovo_Bulb_1_ACK_Flooding.pcap"
+# with open("../../datasets/uq/benign/netstat/Lenovo_Bulb_1.pkl", "rb") as pf:
+#        nstat=pickle.load(pf)
+# fe=AfterImage(nstat=nstat)
+# adversarial_attack=LiuerMihouAttack(fe=fe, model=model,
+#                                     max_num_adv=100,
+#                                     bounds={"max_time_delay":0.1, "max_craft_pkt":5, "max_payload_size":1514},
+#                                     pso={"n_particles":30, "iterations":20, "options":{'c1': 0.7, 'c2': 0.3, 'w': 0.5},
+#                                          "p":2, "k":4, "clamp":None})
+# mal_pcap>>adversarial_attack
