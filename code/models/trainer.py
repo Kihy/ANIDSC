@@ -42,7 +42,7 @@ class BasePipeline(ABC):
         for dataset in self.files["benign"]:
             scores = []
             for feature, label in tqdm(
-                dataset["test"], desc=f"evaluating {dataset.name}"
+                dataset["test"], desc=f"evaluating {dataset['test'].name}"
             ):
                 scores.append(self.model.predict_scores(feature))
             model_output["benign"][dataset["test"].name] = np.hstack(scores)

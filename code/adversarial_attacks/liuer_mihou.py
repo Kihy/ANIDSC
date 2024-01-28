@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 from scipy.spatial import cKDTree
 from pathlib import Path
-
+from utils import *
 
 def plot_contour(
     pos_history,
@@ -558,7 +558,7 @@ class LiuerMihouAttack(BaseAdversarialAttack, LazyInitializationMixin):
         self.bounds = bounds
         self.pso = pso
 
-        self.allowed = ("metrics", "model", "files")
+        self.allowed = ("fe", "model", "mal_pcap")
         self.lazy_init(**kwargs)
         self.entry=self.craft_adversary
 
