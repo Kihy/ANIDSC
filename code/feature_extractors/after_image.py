@@ -9,8 +9,9 @@ from pathlib import Path
 import pickle
 import json
 from utils import *
+from tqdm import tqdm
 
-class AfterImage(BaseTrafficFeatureExtractor):
+class AfterImage(BaseTrafficFeatureExtractor, LazyInitializationMixin):
     def __init__(self, limit=1e6, decay_factors=[5,3,1,.1,.01], nstat=None, log_file=None, **kwargs):
         self.limit = limit
         self.decay_factors=decay_factors
@@ -21,9 +22,12 @@ class AfterImage(BaseTrafficFeatureExtractor):
             self.reset_nstat=False
         self.prev_pkt_time=None
         
-    def setup(self, path):
-        self.path = path
-        self.basename=Path(path).stem
+        self.allowed=("path")
+        self.lazy_init(**kwargs)
+        self.entry=self.extract_features
+        
+    def setup(self):
+        self.basename=Path(self.path).stem
         self.curPacketIndx = 0
         if self.reset_nstat:
             self.nstat = NetStat(decay_factors= self.decay_factors, limit = self.limit, log_path=self.log_file)
@@ -38,6 +42,9 @@ class AfterImage(BaseTrafficFeatureExtractor):
         self.feature_file=open(feature_file, "w")
         self.meta_file=open(meta_file, "w")
         
+        self.count = 0
+        self.skipped = 0
+                
         
 
     def peek(self, traffic_vectors):
@@ -49,7 +56,7 @@ class AfterImage(BaseTrafficFeatureExtractor):
         return vectors
         
         
-    def teardown(self, num_rows):
+    def teardown(self):
         #save netstat information
         netstat_path=Path(self.path).parents[1]/"netstat"/(self.basename+".pkl")
         netstat_path.parent.mkdir(parents=True, exist_ok=True)
@@ -67,9 +74,55 @@ class AfterImage(BaseTrafficFeatureExtractor):
             "pcap_path":self.path,
             "feature_path":self.feature_file,
             "meta_path":self.meta_file,
-            "num_rows":num_rows}
+            "num_rows":self.count}
         
         save_dataset_info(data_info)
+        print(f"skipped: {self.skipped} written: {self.count}")
+
+
+
+    def extract_features(self):
+        self.setup()
+
+        self.feature_file.write(",".join(self.get_headers()) + "\n")
+        self.meta_file.write(",".join(self.get_meta_headers()) + "\n")
+
+        features_list=[]
+        meta_list=[]
+        for packet in tqdm(self.packets):
+            meta = self.get_traffic_vector(packet)
+
+            if meta is None:
+                self.skipped += 1
+                continue
+
+            feature = self.update(meta)
+            features_list.append(feature)
+            meta_list.append(meta)
+            self.count += 1
+
+            if self.count % 1e4 == 0:
+                np.savetxt(
+                    self.feature_file,
+                    np.vstack(features_list),
+                    delimiter=",",
+                    fmt="%.7f",
+                )
+                np.savetxt(
+                    self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s"
+                )
+                features_list = []
+                meta_list = []
+
+        # save remaining
+        np.savetxt(
+            self.feature_file, np.vstack(features_list), delimiter=",", fmt="%.7f"
+        )
+        np.savetxt(self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s")
+
+        self.teardown()
+
+        
     
     def get_nstat(self):
         return self.nstat #, self.dummy_nstat

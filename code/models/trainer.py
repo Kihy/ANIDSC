@@ -3,9 +3,18 @@ from datasets.custom_dataset import *
 import pickle
 from abc import ABC, abstractmethod
 from tqdm import tqdm
-
+from utils import LazyInitializationMixin
 
 class BasePipeline(ABC):
+    
+    def run_pipeline(self):
+        self.setup_dataset()
+        results = {}
+        for step in self.steps:
+            func = getattr(self, step)
+            results[step] = func()
+        return results
+    
     def setup_dataset(self):
         for key, file_name in self.files.items():
             if key == "benign":
@@ -18,22 +27,7 @@ class BasePipeline(ABC):
                 )
                 for name in file_name
             ]
-
-    def start(self, **kwargs):
-        for k, v in kwargs.items():
-            assert k in self.allowed
-            setattr(self, k, v)
-
-        self.setup_dataset()
-        results = {}
-        for step in self.steps:
-            func = getattr(self, step)
-            results[step] = func()
-        return results
-
-    def __rrshift__(self, other):
-        return self.start(**other)
-
+            
     def save(self):
         self.model.save(self.dataset_id)
 
@@ -79,7 +73,7 @@ class BasePipeline(ABC):
                     self.model.train(feature)
 
 
-class OutlierDetectionPipeline(BasePipeline):
+class OutlierDetectionPipeline(BasePipeline, LazyInitializationMixin):
     def __init__(
         self,
         batch_size=1024,
@@ -87,14 +81,15 @@ class OutlierDetectionPipeline(BasePipeline):
         steps=["train", "calc_threshold", "eval", "save"],
         **kwargs,
     ):
-        self.allowed = ("metrics", "model", "files")
+        
 
-        for k, v in kwargs.items():
-            assert k in self.allowed
-            setattr(self, k, v)
         self.steps = steps
         self.batch_size = batch_size
         self.train_val_test = train_val_test
+        
+        self.allowed = ("metrics", "model", "files")
+        self.lazy_init(**kwargs)
+        self.entry=self.run_pipeline
 
     def calc_threshold(self, func=lambda x: np.percentile(x, 99.9)):
         scores = []

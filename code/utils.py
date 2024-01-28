@@ -2,6 +2,22 @@ import json
 from pathlib import Path
 from io import TextIOWrapper
 
+class LazyInitializationMixin:
+    def lazy_init(self, **kwargs):
+        for k, v in kwargs.items():
+            assert k in self.allowed
+            setattr(self, k, v)
+            
+    def start(self, **kwargs):
+        
+        for k, v in kwargs.items():
+            assert k in self.allowed
+            setattr(self, k, v)
+
+        return self.entry()
+
+    def __rrshift__(self, other):
+        return self.start(**other)
 
 class JSONEncoder(json.JSONEncoder):
     def default(self, obj):

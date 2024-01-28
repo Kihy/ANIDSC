@@ -539,7 +539,7 @@ class Traffic(Topology):
         return position
 
 
-class LiuerMihouAttack(BaseAdversarialAttack):
+class LiuerMihouAttack(BaseAdversarialAttack, LazyInitializationMixin):
     def __init__(
         self,
         max_num_adv=100,
@@ -558,14 +558,9 @@ class LiuerMihouAttack(BaseAdversarialAttack):
         self.bounds = bounds
         self.pso = pso
 
-        self.allowed = ("fe", "model", "mal_pcap")
-
-        for k, v in kwargs.items():
-            assert k in self.allowed
-            setattr(self, k, v)
-
-    def __rrshift__(self, other):
-        self.start(**other)
+        self.allowed = ("metrics", "model", "files")
+        self.lazy_init(**kwargs)
+        self.entry=self.craft_adversary
 
     def attack_setup(self):
         self.input_pcap = PcapReader(self.mal_pcap)
@@ -590,12 +585,6 @@ class LiuerMihouAttack(BaseAdversarialAttack):
         self.output_pcap.close()
         self.log_file.close()
 
-    def start(self, **kwargs):
-        for k, v in kwargs.items():
-            assert k in self.allowed
-            setattr(self, k, v)
-
-        self.craft_adversary()
 
     def craft_adversary(self):
         self.attack_setup()
