@@ -585,7 +585,6 @@ class LiuerMihouAttack(BaseAdversarialAttack, LazyInitializationMixin):
         self.output_pcap.close()
         self.log_file.close()
 
-
     def craft_adversary(self):
         self.attack_setup()
 
