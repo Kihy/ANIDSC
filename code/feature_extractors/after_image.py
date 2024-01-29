@@ -22,7 +22,7 @@ class AfterImage(BaseTrafficFeatureExtractor, LazyInitializationMixin):
             self.reset_nstat=False
         self.prev_pkt_time=None
         
-        self.allowed=("path")
+        self.allowed=("path","nstat")
         self.lazy_init(**kwargs)
         self.entry=self.extract_features
         

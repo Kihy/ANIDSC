@@ -15,21 +15,18 @@ class BaseTrafficFeatureExtractor(ABC):
         pass
     
     @abstractmethod
-    def setup(self, path, **kwargs):
+    def setup(self, **kwargs):
         pass
 
-    @abstractmethod
-    def get_meta_headers(self):
-        pass
 
     @abstractmethod
     def get_headers(self):
         pass
 
     @abstractmethod
-    def teardown(self, num_rows):
+    def teardown(self):
         pass
     
     @abstractmethod
-    def extract_features(self, num_rows):
+    def extract_features(self):
         pass

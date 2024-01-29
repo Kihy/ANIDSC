@@ -81,8 +81,6 @@ class OutlierDetectionPipeline(BasePipeline, LazyInitializationMixin):
         steps=["train", "calc_threshold", "eval", "save"],
         **kwargs,
     ):
-        
-
         self.steps = steps
         self.batch_size = batch_size
         self.train_val_test = train_val_test
