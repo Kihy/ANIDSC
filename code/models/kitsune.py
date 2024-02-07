@@ -3,7 +3,7 @@ from scipy.cluster.hierarchy import linkage, fcluster, to_tree
 from scipy.stats import norm
 
 np.seterr(all="ignore")
-from models.base_model import BaseModel
+from models.base_model import BaseODModel
 
 # This class represents a KitNET machine learner.
 # KitNET is a lightweight online anomaly detection algorithm based on an ensemble of autoencoders.
@@ -11,7 +11,7 @@ from models.base_model import BaseModel
 # For licensing information, see the end of this document
 
 
-class KitNET(BaseModel):
+class KitNET(BaseODModel):
     # n: the number of features in your input dataset (i.e., x \in R^n)
     # m: the maximum size of any autoencoder in the ensemble layer
     # AD_grace_period: the number of instances the network will learn from before producing anomaly scores
@@ -33,7 +33,9 @@ class KitNET(BaseModel):
         normalize=True,
         input_precision=None,
         quantize=None,
+        **kwargs
     ):
+        super().__init__(**kwargs)
         # Parameters:
         self.AD_grace_period = AD_grace_period
         if FM_grace_period is None:
@@ -57,7 +59,7 @@ class KitNET(BaseModel):
         self.ensembleLayer = []
         self.outputLayer = None
         self.quantize = quantize
-        self.threshold = None
+        
         if self.v is None:
             pass
             # print("Feature-Mapper: train-mode, Anomaly-Detector: off-mode")
@@ -84,27 +86,25 @@ class KitNET(BaseModel):
             return 0.0
 
     # alias for execute for it is compatible with tf models, processes in batches
-    def predict_scores(self, x):
-        return np.array([self.execute(i) for i in x])
+    def predict_scores(self, X):
+        X=self.preprocess(X)
+        return np.array([self.execute(i) for i in X])
 
-    def predict_labels(self, x):
-        if self.threshold is None:
-            raise ValueError(
-                "predict_labels only works after threshold is calculated. Call calc_threshold() first"
-            )
-        return self.predict_scores(x) > self.threshold
 
-    def train(self, x):
-        for i in x:
-            self.train_single(i)
+    def train_step(self, X):
+        X=self.preprocess(X)
+        return np.array([self.train_single(i) for i in X])
+            
 
     # force train KitNET on x
     # returns the anomaly score of x during training (do not use for alerting)
-    def train_single(self, x):
+    def train_single(self, X):
+        self.n_trained += 1
+
         # If the FM is in train-mode, and the user has not supplied a feature mapping
         if self.n_trained <= self.FM_grace_period and self.v is None:
             # update the incremetnal correlation matrix
-            self.FM.update(x)
+            self.FM.update(X)
             if (
                 self.n_trained == self.FM_grace_period
             ):  # If the feature mapping should be instantiated
@@ -112,20 +112,17 @@ class KitNET(BaseModel):
                 self.__createAD__()
                 # print("The Feature-Mapper found a mapping: "+str(self.n)+" features to "+str(len(self.v))+" autoencoders.")
                 # print("Feature-Mapper: execute-mode, Anomaly-Detector: train-mode")
+            return 0.
         else:  # train
             # Ensemble Layer
             S_l1 = np.zeros(len(self.ensembleLayer))
             for a in range(len(self.ensembleLayer)):
                 # make sub instance for autoencoder 'a'
-                xi = x[self.v[a]]
+                xi = X[self.v[a]]
                 S_l1[a] = self.ensembleLayer[a].train(xi)
             # OutputLayer
-            self.outputLayer.train(S_l1)
-            if self.n_trained == self.AD_grace_period + self.FM_grace_period:
-                pass
-                # print("Feature-Mapper: execute-mode, Anomaly-Detector: execute-mode")
-        self.n_trained += 1
-
+            return self.outputLayer.train(S_l1)
+            
     # force execute KitNET on x
     def execute(self, x):
         if self.v is None:

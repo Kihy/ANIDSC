@@ -558,32 +558,24 @@ class LiuerMihouAttack(BaseAdversarialAttack, LazyInitializationMixin):
         self.bounds = bounds
         self.pso = pso
 
-        self.allowed = ("fe", "model", "mal_pcap")
+        self.allowed = ["fe", "model", "dataset_name","file_name"]
         self.lazy_init(**kwargs)
         self.entry=self.craft_adversary
 
     def attack_setup(self):
-        self.input_pcap = PcapReader(self.mal_pcap)
-        self.mal_pcap = Path(self.mal_pcap)
-
-        adv_pcap = (
-            self.mal_pcap.parents[1] / "adversarial" / (self.mal_pcap.stem + "_lm.pcap")
-        )
+        self.mal_pcap = Path(f"../../datasets/{self.dataset_name}/pcap/{self.file_name}.pcap")
+        self.input_pcap = PcapReader(str(self.mal_pcap))
+        
+        adv_pcap = Path(f"../../datasets/{self.dataset_name}/pcap/adversarial/LM/{self.model.model_name}/{self.file_name}.pcap")
         adv_pcap.parent.mkdir(parents=True, exist_ok=True)
         self.output_pcap = PcapWriter(str(adv_pcap))
         print(f"adverarial pcap at: {adv_pcap}")
 
-        log_path = (
-            self.mal_pcap.parents[1]
-            / "adversarial"
-            / (self.mal_pcap.stem + "_lm_log.txt")
-        )
-        self.log_file = open(log_path, "w")
+        
 
     def attack_teardown(self):
         self.input_pcap.close()
         self.output_pcap.close()
-        self.log_file.close()
 
     def craft_adversary(self):
         self.attack_setup()

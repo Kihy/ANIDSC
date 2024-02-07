@@ -38,6 +38,10 @@ class SklearnOutlierDetector(BaseModel):
 
     def __init__(self, model_name, import_module, preprocessors=[], model_params={}):
         model_class = getattr(importlib.import_module(import_module), model_name)
+        if import_module.startswith("sklearn"):
+            self.adjust=-1
+        else:
+            self.adjust=1
         self.model = model_class(**model_params)  # Instantiates the model
         self.preprocessors = preprocessors
         self.model_name = model_name
@@ -47,13 +51,13 @@ class SklearnOutlierDetector(BaseModel):
         else:
             self.training_call = getattr(self.model, "fit")
 
-    def train(self, X):
+    def train_step(self, X):
         X = self.preprocess(X)
         self.training_call(X)
 
     def predict_scores(self, X):
         X = self.preprocess(X)
-        scores = -self.model.decision_function(X)
+        scores = self.adjust* self.model.decision_function(X)
         return scores
 
     def predict_labels(self, X):

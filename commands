@@ -1,2 +1,2 @@
-docker run --gpus all -it --rm -v "D:\ANIDSC":/workspace/ANIDSC -v "D:\datasets":/workspace/datasets nvcr.io/nvidia/pytorch:23.12-py3
+docker run --gpus all -it --rm -v "D:\ANIDSC":/workspace/ANIDSC -v "D:\datasets":/workspace/datasets -v "D:\models":/workspace/models kihy/nids_framework
 

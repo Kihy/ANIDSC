@@ -5,13 +5,15 @@ import itertools
 import os
 import subprocess
 import sys
+from scapy.all import *
 from collections import OrderedDict
 from itertools import product
-from .base import BaseTrafficFeatureExtractor
+from .base_feature_extractor import BaseTrafficFeatureExtractor
 import pyshark
 from tqdm import tqdm
 from pathlib import Path
 from utils import LazyInitializationMixin
+from collections import defaultdict
 
 
 class IncStats:
@@ -125,38 +127,6 @@ class StreamingInterface(ABC):
         pass
 
 
-class Observer(ABC):
-    """
-    Define an updating interface for objects that should be notified of
-    changes in a subject(streaming interface).
-    """
-
-    @abstractmethod
-    def update(self, packet):
-        pass
-
-    @abstractmethod
-    def close(self):
-        pass
-
-
-def decode_flags(flag):
-    """
-    decodes the flag field into a integer array of flag counts.
-
-    Args:
-        flag (hexadecimal): the flag field in TCP packet.
-
-    Returns:
-        integer array: array of length 8 indicating corresponding flags.
-
-    """
-    if flag == "":
-        flag = "0x00"
-    str_rep = "{:08b}".format(eval(flag))
-    return np.array([i for i in str_rep], dtype="int32")
-
-
 def cartesian_product(*args, seperator="_"):
     """
     creates fieldname as product of args, joined by _.
@@ -175,7 +145,7 @@ def cartesian_product(*args, seperator="_"):
     return return_list
 
 
-class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
+class PyFlowMeter(BaseTrafficFeatureExtractor):
     """
     an offline flow meter which extracts various features from flow. Offline
     because it relies on wireshark's stream index as key.
@@ -201,86 +171,102 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
         timeout=600,
         check_interval=1,
         check_range=100,
-        accepted_protocols=["TCP", "UDP"],
         **kwargs
     ):
+        super().__init__(self,**kwargs)
         self.timeout = timeout
         self.check_interval = check_interval
         self.check_range = check_range
-        self.accepted_protocols = accepted_protocols
-        self.column_format = 'gui.column.format:"No.", "%m","Time", "%t","Source", "%s","Destination", "%d","Length", "%L","Stream_index_tcp", "%Cus:tcp.stream:0:R", "Stream_index_udp", "%Cus:udp.stream:0:R","Protocol", "%Cus:ip.proto:0:R","Flags", "%Cus:tcp.flags:0:R","Src_port_tcp", "%Cus:tcp.srcport:0:R","Dst_port_tcp", "%Cus:tcp.dstport:0:R","Src_port_udp", "%Cus:udp.srcport:0:R","Dst_port_udp", "%Cus:udp.dstport:0:R","Info", "%i"'
-
-        self.allowed = "path"
-        self.lazy_init(**kwargs)
-        self.entry = self.extract_features
-
+        self.name="py_flowmeter"
+        self.flags = ["F", "S", "R", "P", "A", "U", "E", "C"]
+        
     def peek(self, traffic_vectors):
         raise NotImplementedError()
+    
+    def decode_flags(self, flag):
+        pointer1=0
+        pointer2=0
+        flag_array=np.zeros(8, dtype="int32")
+        while pointer2!=len(flag):
+            if flag[pointer2] == self.flags[pointer1]:
+                flag_array[pointer1]=1
+                pointer2+=1
+            pointer1+=1
+        return flag_array
+
 
     def get_headers(self):
         directions = ["fwd", "bwd"]
-        ports = ["src", "dst"]
+        
         type = ["pkt", "byte"]
         dist_features = ["mean", "std", "skewness", "kurtosis", "min", "max"]
-        flags = ["FIN", "SYN", "RST", "PUSH", "ACK", "URG", "CWE", "ECE"]
+        
         # quickly create field names by using cartesian product of strings
         return (
             ["duration", "protocol"]
-            + cartesian_product(ports, ["port"])
             + cartesian_product(directions, ["tot"], type)
             + cartesian_product(directions, ["pkt_size"], dist_features)
             + cartesian_product(directions, ["iat"], dist_features)
-            + cartesian_product(directions, flags, ["cnt"])
+            + cartesian_product(directions, self.flags, ["cnt"])
         )
 
     def setup(self):
-        self.num_pkt = 0
-
-        self.basename = Path(self.path).stem
-        feature_file = (
-            Path(self.path).parents[1] / "features" / (self.basename + ".csv")
-        )
-        feature_file.parent.mkdir(parents=True, exist_ok=True)
-
-        self.feature_file = open(feature_file, "w")
-        self.flows = OrderedDict()
-        self.input_pcap = pyshark.FileCapture(
-            self.path,
-            keep_packets=False,
-            #   only_summaries=True,
-            custom_parameters={"-o": self.column_format},
-        )
-
-        self.feature_file.write(",".join(self.get_headers()) + "\n")
+        super().setup()
+        
+        if self.reset_state:
+            self.state = {}
+            self.state["last_timestamp"]=None
+            self.state["flows"]=OrderedDict()
+        
+        
 
     def get_traffic_vector(self, packet):
-        packet_info = {}
-        merge_fields = ["dst_port", "src_port", "stream_index"]
-        same_fields = ["highest_layer", "flags", "length", "time"]
-
-        for i in same_fields:
-            packet_info[i] = getattr(packet, i)
-        for i in merge_fields:
-            packet_info[i] = getattr(
-                packet, "{}_{}".format(i, packet.highest_layer.lower())
-            )
+        packet_info = defaultdict(lambda :None)
+        
+        packet_info["arrival_time"] = packet.time
+        packet_info["packet_size"] = len(packet)
+        
+        if packet.haslayer(IP):  # IPv4
+            packet_info["src_IP"] = packet[IP].src
+            packet_info["dst_IP"] = packet[IP].dst
+            packet_info["protocol"]=packet[IP].proto   
+        elif packet.haslayer(ARP):  # IPv4
+            packet_info["src_IP"]=packet[ARP].psrc
+            packet_info["dst_IP"]=packet[ARP].pdst
+            packet_info["protocol"]="ARP"    
+        
+        if packet.haslayer(TCP):  # IPv4
+            packet_info["dst_port"]=packet[TCP].dport
+            packet_info["src_port"]=packet[TCP].sport
+            packet_info["protocol"]="TCP"
+            packet_info["flags"]=self.decode_flags(list(packet[TCP].flags))
+        elif packet.haslayer(UDP):  # IPv4
+            packet_info["dst_port"]=packet[UDP].dport
+            packet_info["src_port"]=packet[UDP].sport
+            packet_info["protocol"]="UDP"
+         
         return packet_info
 
+    def get_meta_headers(self):
+        return ["arrival_time","packet_size","src_IP",
+                "dst_IP","dst_port","src_port", "protocol","flags"]    
+
     def update(self, traffic_vector):
-        arrival_time = float(traffic_vector["time"])
-        stream_id = "{}{}".format(
-            traffic_vector["protocol"], traffic_vector["stream_index"]
-        )
+        
+        stream_id = frozenset([traffic_vector["protocol"],traffic_vector["src_IP"],
+                               traffic_vector["dst_IP"],
+                               traffic_vector["src_port"],
+                               traffic_vector["dst_port"]])
 
-        if stream_id not in self.flows.keys():
-            self._init_stream(stream_id, traffic_vector, arrival_time)
-        self._update_stream(stream_id, traffic_vector, arrival_time)
+        if stream_id not in self.state["flows"].keys():
+            self._init_stream(stream_id, traffic_vector)
+        self._update_stream(stream_id, traffic_vector)
 
-        self.num_pkt += 1
+        
         # to speed things up it checks timeout once every certain number of packets.
         # note that self._subject is assigned by streaming interface.
-        if self.num_pkt % self.check_interval == 0:
-            self._check_timeout(arrival_time)
+        if self.count % self.check_interval == 0:
+            self._check_timeout(traffic_vector["arrival_time"])
 
     def extract_features(self):
         """
@@ -294,15 +280,34 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
 
         """
         self.setup()
-
-        for packet in tqdm(self.input_pcap):
-            if packet.highest_layer not in self.accepted_protocols:
+        meta_list=[]
+        
+        for packet in tqdm(self.input_pcap,desc=f"parsing {self.file_name}"):
+            if not (packet.haslayer(IP) or packet.haslayer(IPv6) or packet.haslayer(ARP)):
+                self.skipped+=1
                 continue
+            
+            
             traffic_vector = self.get_traffic_vector(packet)
-
+            
+            if self.offset_time is None and self.offset_timestamp:
+                self.offset_time=traffic_vector["arrival_time"] - self.state["last_timestamp"]
+            else:
+                self.offset_time=0
+            
+            traffic_vector["arrival_time"]-=self.offset_time
+            
+            meta_list.append([str(traffic_vector[i]) for i in self.get_meta_headers()])
+            
+            if self.count % 1e4 == 0:
+                np.savetxt(
+                    self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s"
+                )
+                meta_list = []
+                
             self.update(traffic_vector)
 
-            self.num_pkt += 1
+            self.count += 1
         self.teardown()
 
     def _check_timeout(self, arrival_time):
@@ -317,8 +322,8 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
 
         """
         timed_out_stream = []
-        for stream in itertools.islice(self.flows, self.check_range):
-            if arrival_time - self.flows[stream]["last_time"] > self.timeout:
+        for stream in itertools.islice(self.state["flows"], self.check_range):
+            if arrival_time - self.state["flows"][stream]["last_time"] > self.timeout:
                 timed_out_stream.append(stream)
         if len(timed_out_stream) > 0:
             self._save_batch_flow(timed_out_stream)
@@ -337,24 +342,25 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
 
         """
         feature_names = self.get_headers()
-        for index in sorted(list(stream_ids), key=lambda x: self.flows[x]["init_time"]):
-            stream = self.flows[index]
-            values = [stream[x] for x in feature_names[:8]]
+        for index in sorted(list(stream_ids), key=lambda x: self.state["flows"][x]["init_time"]):
+            stream = self.state["flows"][index]
+            values = [stream[x] for x in feature_names[:6]]
 
             for i in range(4):
                 values += [
-                    x for x in stream[feature_names[8 + i * 6][:-5]].get_statistics()
+                    x for x in stream[feature_names[6 + i * 6][:-5]].get_statistics()
                 ]
 
             values += [x for x in stream["fwd_flags"]]
             values += [x for x in stream["bwd_flags"]]
             self.feature_file.write(",".join(str(x) for x in values))
             self.feature_file.write("\n")
+            self.written+=1
             self.feature_file.flush()
             if delete:
-                del self.flows[index]
+                del self.state["flows"][index]
 
-    def _update_stream(self, stream_id, packet_info, arrival_time):
+    def _update_stream(self, stream_id, packet_info):
         """
         updates the stream/connection/flow with extracted packet_info.
         Once updated the stream_id is moved to the end of self.flows
@@ -362,13 +368,13 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
         Args:
             packet_info (dictionary): information extracted with tcp_extractor(packet).
             stream_id (int): index of stream stored.
-            arrival_time(float): time of arrival.
 
         Returns:
             None: The information is updated directly in stream.
 
         """
-        stream = self.flows[stream_id]
+        self.state["last_timestamp"]=packet_info["arrival_time"]
+        stream = self.state["flows"][stream_id]
 
         # determine direction
         if packet_info["src_port"] == stream["src_port"]:
@@ -377,25 +383,25 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
         else:
             direction = "bwd"
 
-        packet_len = int(packet_info["length"])
-        time_delta = arrival_time - stream["last_time"]
-        stream["last_time"] = arrival_time
-        stream["duration"] = arrival_time - stream["init_time"]
+        packet_len = int(packet_info["packet_size"])
+        time_delta = packet_info["arrival_time"] - stream["last_time"]
+        if time_delta<0:
+            print("Warining negative iat")
+        stream["last_time"] = packet_info["arrival_time"]
+        stream["duration"] += time_delta
         stream[direction + "_tot_pkt"] += 1
         stream[direction + "_tot_byte"] += packet_len
         stream[direction + "_pkt_size"].update(packet_len)
 
         stream[direction + "_iat"].update(time_delta)
 
-        flags = decode_flags(packet_info["flags"])
-        if len(flags > 8):
-            flags = flags[-8:]
-        stream[direction + "_flags"] += flags
+        if packet_info["flags"] is not None:
+            stream[direction + "_flags"] += packet_info["flags"]
 
         # move to end
-        self.flows.move_to_end(stream_id)
+        self.state["flows"].move_to_end(stream_id)
 
-    def _init_stream(self, stream_id, packet_info, arrival_time):
+    def _init_stream(self, stream_id, packet_info):
         """
         initializes the stream with default values
         Args:
@@ -412,8 +418,8 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
         for feature in features:
             init_dict[feature] = packet_info[feature]
         init_dict["duration"] = 0
-        init_dict["last_time"] = arrival_time
-        init_dict["init_time"] = arrival_time
+        init_dict["last_time"] = packet_info["arrival_time"]
+        init_dict["init_time"] = packet_info["arrival_time"]
 
         directions = ["fwd", "bwd"]
         type = ["pkt", "byte"]
@@ -424,7 +430,7 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
         for i in cartesian_product(directions, ["flags"]):
             init_dict[i] = np.zeros(8, dtype="int32")
 
-        self.flows[stream_id] = init_dict
+        self.state["flows"][stream_id] = init_dict
 
     def teardown(self):
         """
@@ -434,7 +440,7 @@ class PyFlowMeter(BaseTrafficFeatureExtractor, LazyInitializationMixin):
             None
 
         """
-        print("saved at", self.feature_file.name)
-        self._save_batch_flow(self.flows.keys())
-        self.feature_file.close()
-        self.input_pcap.close()
+        
+        self._save_batch_flow(self.state["flows"].keys())
+        
+        super().teardown()
