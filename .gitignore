@@ -154,3 +154,5 @@ cython_debug/
 trained_models/*
 code/data_info.json
 runs
+logs
+.vscode
