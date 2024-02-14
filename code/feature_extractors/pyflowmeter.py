@@ -177,7 +177,7 @@ class PyFlowMeter(BaseTrafficFeatureExtractor):
         self.timeout = timeout
         self.check_interval = check_interval
         self.check_range = check_range
-        self.name="py_flowmeter"
+        self.name="PyFlowMeter"
         self.flags = ["F", "S", "R", "P", "A", "U", "E", "C"]
         
     def peek(self, traffic_vectors):

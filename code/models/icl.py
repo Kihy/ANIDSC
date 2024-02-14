@@ -1,12 +1,12 @@
 import torch.nn.functional as F
 import torch
 import numpy as np
-from .base_model import BaseDeepODModel
+from .base_model import *
 from deepod.core.networks.base_networks import MLPnet
 from pathlib import Path
 
 
-class ICL(BaseDeepODModel,torch.nn.Module):
+class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     """
     Anomaly Detection for Tabular Data with Internal Contrastive Learning
      (ICLR'22)
@@ -15,11 +15,11 @@ class ICL(BaseDeepODModel,torch.nn.Module):
     def __init__(self, epochs=100, batch_size=64, lr=1e-3, n_ensemble='auto',
                  rep_dim=128, hidden_dims='100,50', act='LeakyReLU', bias=False,
                  kernel_size='auto', temperature=0.01, max_negatives=1000,
-                 epoch_steps=-1, prt_steps=10, device='cuda',n_features=100,
+                 epoch_steps=-1, prt_steps=10, device='cuda',n_features=100, preprocessors=[],
                  verbose=2, random_state=42, **kwargs):
-        BaseDeepODModel.__init__(self,
+        BaseOnlineODModel.__init__(self,
             model_name='ICL', epochs=epochs, batch_size=batch_size,
-            lr=lr, n_ensemble=n_ensemble,
+            lr=lr, n_ensemble=n_ensemble,preprocessors=preprocessors,
             epoch_steps=epoch_steps, prt_steps=prt_steps, device=device,
             verbose=verbose, random_state=random_state, **kwargs
         )
@@ -34,7 +34,7 @@ class ICL(BaseDeepODModel,torch.nn.Module):
         self.tau = temperature
         self.max_negatives = max_negatives
         self.n_features=n_features
-
+        
 
         if self.kernel_size == 'auto':
             if self.n_features <= 40:
@@ -67,9 +67,6 @@ class ICL(BaseDeepODModel,torch.nn.Module):
                                             lr=self.lr,
                                             weight_decay=1e-5)
         
-
-    
-        
     def forward(self, X):
         X = self.preprocess(X)
         X = X.float().to(self.device)
@@ -89,6 +86,20 @@ class ICL(BaseDeepODModel,torch.nn.Module):
         loss.backward()
         self.optimizer.step()
         return loss.item()
+
+    def process(self,X):
+        threshold=self.get_threshold()
+        
+        predict_y, batch_y=self.forward(X)
+        loss = self.criterion(predict_y, batch_y)
+        scores = loss.clone().mean(dim=1).detach().cpu().numpy()
+        loss=torch.mean(loss)
+        self.net.zero_grad()
+        loss.backward()
+        self.optimizer.step()    
+        
+        self.score_hist.extend(scores)
+        return scores, threshold
 
     def predict_scores(self, X):
         logit, correct_class=self.forward(X)

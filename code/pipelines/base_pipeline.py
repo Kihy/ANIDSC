@@ -10,9 +10,11 @@ import torch
 from torch.utils.tensorboard import SummaryWriter
 
 class BasePipeline(ABC, LazyInitializationMixin):
-    def __init__(self, **kwargs):
-
-        self.allowed = ["model", "dataset_name", "files"]
+    def __init__(self, 
+                 allowed=["model", "dataset_name", "files"],
+                 **kwargs):
+        
+        self.allowed = allowed
         self.lazy_init(**kwargs)
         self.entry = self.run_pipeline
     

@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 
 class AfterImage(BaseTrafficFeatureExtractor):
-    def __init__(self, limit=1e6, decay_factors=[5, 3, 1, 0.1, 0.01], **kwargs):
+    def __init__(self, limit=float("inf"), decay_factors=[5, 3, 1, 0.1, 0.01], max_pkt=float("inf"), **kwargs):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
         Args:
@@ -23,7 +23,8 @@ class AfterImage(BaseTrafficFeatureExtractor):
         super().__init__(**kwargs)
         self.limit = limit
         self.decay_factors = decay_factors
-        self.name = "after_image"
+        self.name = "AfterImage"
+        self.max_pkt =max_pkt
 
     def setup(self):
         """sets up after image"""
@@ -63,7 +64,14 @@ class AfterImage(BaseTrafficFeatureExtractor):
         features_list = []
         meta_list = []
         for packet in tqdm(self.input_pcap, desc=f"parsing {self.file_name}"):
+            if self.count>self.max_pkt:
+                break
+            
             traffic_vector = self.get_traffic_vector(packet)
+            
+            if traffic_vector is None:
+                self.skipped += 1
+                continue
 
             if self.offset_time is None and self.offset_timestamp:
                 self.offset_time = traffic_vector[-2] - self.state.last_timestamp
@@ -71,15 +79,13 @@ class AfterImage(BaseTrafficFeatureExtractor):
                 self.offset_time = 0
             traffic_vector[-2] -= self.offset_time
 
-            if traffic_vector is None:
-                self.skipped += 1
-                continue
+
 
             feature = self.update(traffic_vector)
             features_list.append(feature)
             meta_list.append(traffic_vector)
             self.count += 1
-            self.written += 1
+            
 
             if self.count % 1e4 == 0:
                 np.savetxt(

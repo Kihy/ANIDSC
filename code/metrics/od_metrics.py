@@ -3,7 +3,10 @@ from scipy import stats
 
 
 def detection_rate(scores, threshold):
-    return np.mean(scores>threshold)
+    return np.mean(scores> threshold)
 
-def count(scores, threshold):
-    return scores.shape[0]
+def average_score(scores, threshold):
+    return np.mean(scores)
+
+def average_threshold(scores, threshold):
+    return np.mean(threshold)

@@ -72,7 +72,7 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializationMixin):
 
         self.count = 0
         self.skipped = 0
-        self.written = 0
+
 
         self.input_pcap = PcapReader(str(self.path))
 
@@ -116,12 +116,12 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializationMixin):
             "pcap_path": self.path,
             "feature_path": self.feature_file,
             "meta_path": self.meta_file,
-            "num_rows": self.written,
+            "num_rows": self.count,
         }
 
         save_dataset_info(data_info)
         print(
-            f"skipped: {self.skipped} processed: {self.count} written: {self.written}"
+            f"skipped: {self.skipped} processed: {self.count+self.skipped} written: {self.count}"
         )
 
         if self.save_state:

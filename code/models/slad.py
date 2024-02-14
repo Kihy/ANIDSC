@@ -1,10 +1,12 @@
-from .base_model import BaseDeepODModel
+from .base_model import *
 from deepod.core.networks.base_networks import MLPnet, LinearBlock
 import numpy as np
 import torch.nn.functional as F
 import torch
 
-class SLAD(BaseDeepODModel,torch.nn.Module):
+
+
+class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     """
     Fascinating Supervisory Signals and Where to Find Them:
     Deep Anomaly Detection with Scale Learning (ICML'23)
@@ -17,12 +19,13 @@ class SLAD(BaseDeepODModel,torch.nn.Module):
                  magnify_factor=200,
                  n_unified_features=128, # dimensionality after transformation, h in the paper
                  epoch_steps=-1, prt_steps=10, device='cuda',
-                 n_features=100,
+                 n_features=100, preprocessors=[],
                  verbose=2, random_state=42):
-        BaseDeepODModel.__init__(self,
+        BaseOnlineODModel.__init__(self,
             model_name='SLAD', epochs=epochs, batch_size=batch_size, lr=lr,
             epoch_steps=epoch_steps, prt_steps=prt_steps, device=device,
-            verbose=verbose, random_state=random_state, n_features=n_features
+            verbose=verbose, random_state=random_state, n_features=n_features,
+            preprocessors=preprocessors
         )
         torch.nn.Module.__init__(self)
 
@@ -39,13 +42,10 @@ class SLAD(BaseDeepODModel,torch.nn.Module):
         self.n_unified_features = n_unified_features
         self.magnify_factor = magnify_factor
 
-
         self.affine_network_lst = {}
         self.subspace_indices_lst = []
 
         self.f_weight = np.ones(self.n_features)
-
-
         
         self.adaptively_setting()
         
@@ -60,9 +60,6 @@ class SLAD(BaseDeepODModel,torch.nn.Module):
                 bias=False, activation=None
             )
 
-        self.optimizer=torch.optim.Adam(self.net.parameters(),
-                                            lr=self.lr,
-                                            weight_decay=1e-5)
         self.net = MLPnet(
             n_features=self.n_unified_features,
             n_hidden=self.hidden_dims,
@@ -70,21 +67,69 @@ class SLAD(BaseDeepODModel,torch.nn.Module):
             activation=self.act
         ).to(self.device)
         
+        
+        self.optimizer=torch.optim.Adam(self.net.parameters(),
+                                            lr=self.lr,
+                                            weight_decay=1e-5)
+        
         self.criterion= SLADLoss(reduction='none')
-
-        self.preprocessors.append(self._transform_data_ensemble)
+        self.additional_params+=["subspace_indices_lst","affine_network_lst"]
+        
+        
+         # random transformations
+        rng = np.random.RandomState(seed=self.random_state)
+        for i in range(self.n_slad_ensemble):
+            replace = True if self.n_features <= 10 else False
+            subspace_indices = [
+                rng.choice(np.arange(self.n_features), rng.choice(self.len_pool, 1), replace=replace)
+                for _ in range(self.distribution_size)
+            ]
+            self.subspace_indices_lst.append(subspace_indices)
     
 
     def forward(self, X):
-        batch_x, batch_y=self.preprocess(X)
+        X=self.preprocess(X)
         
-        batch_x = batch_x.float().to(self.device)
-        batch_y = batch_y.float().to(self.device)
+        x_new_lst = []
+        y_new_lst = []
+        pred_y_lst=[]
+        
+        for i in range(self.n_slad_ensemble):
+            subspace_indices = self.subspace_indices_lst[i]
+            # the size of newly generated data: [sampling_size, distribution_size(c), n_unified_features(h)]
+            x_new, y_new = self._transform_data(X, subspace_indices, np.arange(len(X)))
+            
+            batch_x = x_new.float().to(self.device)
+            batch_y = y_new.float().to(self.device)
 
-        predict_y = self.net(batch_x)
-        predict_y = predict_y.squeeze(dim=2)        
+            predict_y = self.net(batch_x)
 
-        return predict_y, batch_y
+            predict_y = predict_y.squeeze(dim=2)
+            
+            x_new_lst.append(x_new)
+            y_new_lst.append(batch_y)
+            pred_y_lst.append(predict_y)
+        
+        x_new = torch.hstack(x_new_lst)
+        y_new = torch.hstack(y_new_lst)
+        pred_y=torch.hstack(pred_y_lst)
+        return pred_y, y_new
+    
+    def process(self,X):
+        threshold=self.get_threshold()
+
+        predict_y, batch_y=self.forward(X)
+        loss = self.criterion(predict_y, batch_y)
+        scores = loss.clone().detach().cpu().numpy()
+
+        loss=torch.mean(loss)
+        self.net.zero_grad()
+        loss.backward()
+        self.optimizer.step()        
+
+        self.score_hist.extend(scores)
+        return scores, threshold
+        
     
     def train_step(self, X):
         predict_y, batch_y=self.forward(X)
@@ -97,33 +142,12 @@ class SLAD(BaseDeepODModel,torch.nn.Module):
     
     def predict_scores(self, X):
         predict_y, batch_y=self.forward(X)
-        scores = self.criterion(predict_y, batch_y).cpu().numpy()
-        final_s = np.average(np.array(scores), axis=0)
+        loss = self.criterion(predict_y, batch_y).detach().cpu().numpy()
+
+        final_s = np.average(loss, axis=0)
         return final_s
 
-    def _transform_data_ensemble(self, X):
-        # get newly generated data with supervisory signals
-        x_new_lst = []
-        y_new_lst = []
-        rng = np.random.RandomState(seed=self.random_state)
-        for i in range(self.n_slad_ensemble):
-            replace = True if self.n_features <= 10 else False
-            subspace_indices = [
-                rng.choice(np.arange(self.n_features), rng.choice(self.len_pool, 1), replace=replace)
-                for _ in range(self.distribution_size)
-            ]
-            self.subspace_indices_lst.append(subspace_indices)
-
-            subset_idx = rng.choice(np.arange(X.shape[0]), self.sampling_size, replace=True)
-
-            # the size of newly generated data: [sampling_size, distribution_size(c), n_unified_features(h)]
-            x_new, y_new = self._transform_data(X, subspace_indices, subset_idx)
-            x_new_lst.append(x_new)
-            y_new_lst.append(y_new)
-
-        x_new = np.vstack(x_new_lst)
-        y_new = np.vstack(y_new_lst)
-        return x_new, y_new
+    
 
     def _transform_data(self, X, subspace_indices, subset_idx):
         """generate new data sets with supervision according to subspace indices"""
@@ -148,16 +172,17 @@ class SLAD(BaseDeepODModel,torch.nn.Module):
 
             x_new[:, ii, :], y_new[:, ii] = x_sub_projected, y_true
 
-        return x_new, y_new
+        return torch.from_numpy(x_new), torch.from_numpy(y_new)
 
     def _transformation_function(self, x, n_f):
         """transform phase to obtain a unified dimensionality"""
 
         # # affine transform
         transform_net = self.affine_network_lst[n_f]
+
         transform_net.eval()
         with torch.no_grad():
-            x_projected = transform_net(torch.from_numpy(x).float()).data.cpu().numpy()
+            x_projected = transform_net(x.float()).data.cpu().numpy()
         return x_projected
 
     def adaptively_setting(self):
@@ -214,6 +239,7 @@ class SLADLoss(torch.nn.Module):
         total_m = 0.5 * (preds_smax + true_smax)
 
         js1 = F.kl_div(F.log_softmax(preds_smax, dim=1), total_m, reduction='none')
+
         js2 = F.kl_div(F.log_softmax(true_smax, dim=1), total_m, reduction='none')
         js = torch.sum(js1 + js2, dim=1)
 

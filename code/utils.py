@@ -1,11 +1,12 @@
 import json
 from pathlib import Path
 from io import TextIOWrapper
-from collections import defaultdict
+import numpy as np 
+import torch 
 
 class LazyInitializationMixin:
     def lazy_init(self, **kwargs):
-       
+        
         for k, v in kwargs.items():
             if k in self.allowed:
                 setattr(self, k, v)
@@ -37,8 +38,15 @@ class JSONEncoder(json.JSONEncoder):
             return str(obj)
         if isinstance(obj, TextIOWrapper):
             return obj.name
+        if isinstance(obj, np.float32):
+            return float(obj)
         return super().default(obj)
 
+def to_numpy(x):
+    return x.numpy()
+
+def to_tensor(x):
+    return torch.tensor(x)
 
 def load_dataset_info():
     with open("../../datasets/data_info.json", "r") as f:

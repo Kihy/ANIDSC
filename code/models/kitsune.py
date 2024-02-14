@@ -1,9 +1,10 @@
 import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster, to_tree
 from scipy.stats import norm
+from utils import to_numpy
 
 np.seterr(all="ignore")
-from models.base_model import BaseODModel
+from models.base_model import *
 
 # This class represents a KitNET machine learner.
 # KitNET is a lightweight online anomaly detection algorithm based on an ensemble of autoencoders.
@@ -11,7 +12,7 @@ from models.base_model import BaseODModel
 # For licensing information, see the end of this document
 
 
-class KitNET(BaseODModel):
+class KitNET(BaseOnlineODModel, PickleSaveMixin):
     # n: the number of features in your input dataset (i.e., x \in R^n)
     # m: the maximum size of any autoencoder in the ensemble layer
     # AD_grace_period: the number of instances the network will learn from before producing anomaly scores
@@ -30,12 +31,12 @@ class KitNET(BaseODModel):
         learning_rate=0.1,
         hidden_ratio=0.75,
         feature_map=None,
-        normalize=True,
         input_precision=None,
         quantize=None,
+        preprocessors=[],
         **kwargs
     ):
-        super().__init__(**kwargs)
+        BaseOnlineODModel.__init__(self,preprocessors=preprocessors,**kwargs)
         # Parameters:
         self.AD_grace_period = AD_grace_period
         if FM_grace_period is None:
@@ -50,8 +51,7 @@ class KitNET(BaseODModel):
         self.lr = learning_rate
         self.hr = hidden_ratio
         self.n = n
-        self.normalize = normalize
-        self.model_name = "Kitsune"
+        self.model_name = "KitNET"
         # Variables
         self.n_trained = 0  # the number of training instances so far
         self.n_executed = 0  # the number of executed instances so far
@@ -59,7 +59,7 @@ class KitNET(BaseODModel):
         self.ensembleLayer = []
         self.outputLayer = None
         self.quantize = quantize
-        
+        self.preprocessors=preprocessors
         if self.v is None:
             pass
             # print("Feature-Mapper: train-mode, Anomaly-Detector: off-mode")
@@ -68,22 +68,24 @@ class KitNET(BaseODModel):
             # print("Feature-Mapper: execute-mode, Anomaly-Detector: train-mode")
         # incremental feature cluatering for the feature mapping process
         self.FM = corClust(self.n)
+        
+        self.preprocessors.append(to_numpy)
 
     # If FM_grace_period+AM_grace_period has passed, then this function executes KitNET on x. Otherwise, this function learns from x.
     # x: a numpy array of length n
     # Note: KitNET automatically performs 0-1 normalization on all attributes.
-    def process(self, x):
+    def process(self, X):
+        
+        threshold=self.get_threshold()
         # if all -1 it means the packet was ignored
-        if x.all() == -1:
-            return 0.0
-
-        if (
-            self.n_trained > self.FM_grace_period + self.AD_grace_period
-        ):  # If both the FM and AD are in execute-mode
-            return self.execute(x)
-        else:
-            self.train(x)
-            return 0.0
+        X=self.preprocess(X)
+        scores=[]
+        for i in X:
+            score=self.train_single(i)
+            self.score_hist.append(score)
+            scores.append(score)
+        scores=np.array(scores)
+        return scores, threshold
 
     # alias for execute for it is compatible with tf models, processes in batches
     def predict_scores(self, X):
@@ -150,7 +152,7 @@ class KitNET(BaseODModel):
                 corruption_level=0,
                 gracePeriod=0,
                 hiddenRatio=self.hr,
-                normalize=self.normalize,
+
                 input_precision=self.input_precision,
                 quantize=self.quantize,
             )
@@ -164,7 +166,6 @@ class KitNET(BaseODModel):
             corruption_level=0,
             gracePeriod=0,
             hiddenRatio=self.hr,
-            normalize=self.normalize,
             quantize=self.quantize,
             input_precision=self.input_precision,
         )
@@ -280,7 +281,6 @@ class dA_params:
         corruption_level=0.0,
         gracePeriod=10000,
         hiddenRatio=None,
-        normalize=True,
         input_precision=None,
         quantize=None,
     ):
@@ -290,7 +290,6 @@ class dA_params:
         self.corruption_level = corruption_level
         self.gracePeriod = gracePeriod
         self.hiddenRatio = hiddenRatio
-        self.normalize = normalize
         self.quantize = quantize
         self.input_precision = input_precision
         if quantize:
@@ -343,16 +342,6 @@ class dA:
 
     def train(self, x):
         self.n = self.n + 1
-
-        if self.params.normalize:
-            # update norms
-            self.norm_max[x > self.norm_max] = x[x > self.norm_max]
-            self.norm_min[x < self.norm_min] = x[x < self.norm_min]
-
-            # 0-1 normalize
-            x = (x - self.norm_min) / (
-                self.norm_max - self.norm_min + 0.0000000000000001
-            )
 
         if self.params.input_precision:
             x = squeeze_features(x, self.params.input_precision)
@@ -411,13 +400,7 @@ class dA:
         if self.n < self.params.gracePeriod:
             return 0.0
         else:
-            # 0-1 normalize
             try:
-                if self.params.normalize:
-                    x = (x - self.norm_min) / (
-                        self.norm_max - self.norm_min + 0.0000000000000001
-                    )
-
                 if self.params.input_precision:
                     x = squeeze_features(x, self.params.input_precision)
 

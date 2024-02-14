@@ -94,7 +94,7 @@ def load_dataset(dataset_name, fe_name, file_name,
     total_rows = dataset["num_rows"]
     feature_path = dataset["feature_path"]
     nb_samples=int(total_rows*(percentage[1]-percentage[0]))
-    
+
     if batch_size is None:
         batch_size=nb_samples
         dataset_type=InMemoryCSVDataset
@@ -108,4 +108,4 @@ def load_dataset(dataset_name, fe_name, file_name,
             feature_path, 
             nb_samples=nb_samples, 
             skip_rows=int(total_rows * percentage[0]),
-        ), batch_size=batch_size)
+        ), batch_size=batch_size,pin_memory=True)

@@ -13,6 +13,10 @@ from matplotlib import animation
 from scipy.spatial import cKDTree
 from pathlib import Path
 from utils import *
+import pickle
+from ..feature_extractors import *
+from ..pipelines.base_pipeline import BasePipeline
+from ..metrics.od_metrics import *
 
 def plot_contour(
     pos_history,
@@ -539,10 +543,13 @@ class Traffic(Topology):
         return position
 
 
-class LiuerMihouAttack(BaseAdversarialAttack, LazyInitializationMixin):
+class LiuerMihouAttack(BasePipeline):
     def __init__(
         self,
+        feature_extractor,
+        dataset_name,
         max_num_adv=100,
+        metrics=[],
         bounds={"max_time_delay": 0.1, "max_craft_pkt": 5, "max_payload_size": 1514},
         pso={
             "n_particles": 30,
@@ -552,30 +559,48 @@ class LiuerMihouAttack(BaseAdversarialAttack, LazyInitializationMixin):
             "k": 4,
             "clamp": None,
         },
-        **kwargs,
+        steps=["craft_adversary",
+               "extract_features"],
+        **kwargs        
     ):
+        self.feature_extractor=feature_extractor
         self.max_num_adv = max_num_adv
         self.bounds = bounds
         self.pso = pso
+        self.dataset_name=dataset_name
+        self.metrics=metrics
+        allowed = ["fe", "model", "file_name"]
+        super().__init__(allowed,**kwargs)
+        self.name="LiuerMihouAttack"
+        self.steps=steps
 
-        self.allowed = ["fe", "model", "dataset_name","file_name"]
-        self.lazy_init(**kwargs)
-        self.entry=self.craft_adversary
-
+    def load_feature_extractor(self):
+        with open(f"../../datasets/{self.dataset_name}/{self.feature_extractor}/state.pkl", "rb") as pf:
+            state=pickle.load(pf)
+            
+        return getattr(sys.modules[__name__], self.feature_extractor)(state=state,
+                                                           dataset_name=self.dataset_name)
+        
     def attack_setup(self):
         self.mal_pcap = Path(f"../../datasets/{self.dataset_name}/pcap/{self.file_name}.pcap")
         self.input_pcap = PcapReader(str(self.mal_pcap))
         
-        adv_pcap = Path(f"../../datasets/{self.dataset_name}/pcap/adversarial/LM/{self.model.model_name}/{self.file_name}.pcap")
+        adv_pcap = Path(f"../../datasets/{self.dataset_name}/pcap/adversarial/{self.name}/{self.model.model_name}/{self.file_name}.pcap")
         adv_pcap.parent.mkdir(parents=True, exist_ok=True)
         self.output_pcap = PcapWriter(str(adv_pcap))
         print(f"adverarial pcap at: {adv_pcap}")
-
         
+        self.fe=self.load_feature_extractor()
 
     def attack_teardown(self):
         self.input_pcap.close()
         self.output_pcap.close()
+        self.extract_features()
+        
+    def parse_adv(self):
+        feature_extractor=self.load_feature_extractor()
+        adv_file=f"adverarial/{self.name}/{self.model.model_name}/{self.file_name}"
+        {"file_name":adv_file}>>feature_extractor
 
     def craft_adversary(self):
         self.attack_setup()
