@@ -21,6 +21,9 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
                  epoch_steps=-1, prt_steps=10, device='cuda',
                  n_features=100, preprocessors=[],
                  verbose=2, random_state=42):
+        self.device=device
+        preprocessors.append(self.normalize)
+        preprocessors.append(self.to_device)
         BaseOnlineODModel.__init__(self,
             model_name='SLAD', epochs=epochs, batch_size=batch_size, lr=lr,
             epoch_steps=epoch_steps, prt_steps=prt_steps, device=device,
@@ -45,7 +48,7 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         self.affine_network_lst = {}
         self.subspace_indices_lst = []
 
-        self.f_weight = np.ones(self.n_features)
+        self.f_weight = torch.ones(self.n_features)
         
         self.adaptively_setting()
         
@@ -58,7 +61,7 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             self.affine_network_lst[s] = LinearBlock(
                 in_channels=s, out_channels=self.n_unified_features,
                 bias=False, activation=None
-            )
+            ).to(self.device)
 
         self.net = MLPnet(
             n_features=self.n_unified_features,
@@ -76,7 +79,7 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         self.additional_params+=["subspace_indices_lst","affine_network_lst"]
         
         
-         # random transformations
+        # random transformations to transform data
         rng = np.random.RandomState(seed=self.random_state)
         for i in range(self.n_slad_ensemble):
             replace = True if self.n_features <= 10 else False
@@ -85,6 +88,9 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
                 for _ in range(self.distribution_size)
             ]
             self.subspace_indices_lst.append(subspace_indices)
+        
+    def to_device(self, X):
+        return X.to(self.device)
     
 
     def forward(self, X):
@@ -92,41 +98,49 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         
         x_new_lst = []
         y_new_lst = []
-        pred_y_lst=[]
         
         for i in range(self.n_slad_ensemble):
             subspace_indices = self.subspace_indices_lst[i]
             # the size of newly generated data: [sampling_size, distribution_size(c), n_unified_features(h)]
-            x_new, y_new = self._transform_data(X, subspace_indices, np.arange(len(X)))
-            
-            batch_x = x_new.float().to(self.device)
-            batch_y = y_new.float().to(self.device)
-
-            predict_y = self.net(batch_x)
-
-            predict_y = predict_y.squeeze(dim=2)
-            
-            x_new_lst.append(x_new)
+            batch_x, batch_y = self._transform_data(X, subspace_indices, torch.arange(len(X)))
+                        
+            x_new_lst.append(batch_x)
             y_new_lst.append(batch_y)
-            pred_y_lst.append(predict_y)
+            
+        x_new = torch.vstack(x_new_lst)
+        y_new = torch.vstack(y_new_lst)
         
-        x_new = torch.hstack(x_new_lst)
-        y_new = torch.hstack(y_new_lst)
-        pred_y=torch.hstack(pred_y_lst)
-        return pred_y, y_new
+        predict_y = self.net(x_new)
+        predict_y = predict_y.squeeze(dim=2)
+        
+        return predict_y, y_new
+    
+    
+    def state_dict(self):
+        state = super().state_dict()
+        for i in self.additional_params:
+            state[i] = getattr(self, i)
+        return state
+    
+    def load_state_dict(self, state_dict):
+
+        for i in self.additional_params:
+            setattr(self, i, state_dict[i])
+            del state_dict[i]
     
     def process(self,X):
         threshold=self.get_threshold()
-
+        
+        self.net.zero_grad()
         predict_y, batch_y=self.forward(X)
         loss = self.criterion(predict_y, batch_y)
         scores = loss.clone().detach().cpu().numpy()
 
         loss=torch.mean(loss)
-        self.net.zero_grad()
+
         loss.backward()
         self.optimizer.step()        
-
+        
         self.score_hist.extend(scores)
         return scores, threshold
         
@@ -152,8 +166,11 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     def _transform_data(self, X, subspace_indices, subset_idx):
         """generate new data sets with supervision according to subspace indices"""
 
-        x_new = np.zeros([len(subset_idx), self.distribution_size, self.n_unified_features])
-        y_new = np.zeros([len(subset_idx), self.distribution_size])
+        # x_new = [np.zeros([len(subset_idx), self.distribution_size, self.n_unified_features])]
+        # y_new = np.zeros([len(subset_idx), self.distribution_size])
+
+        x_new=[]
+        y_new=[]
 
         for ii, subspace_idx in enumerate(subspace_indices):
             n_f = len(subspace_idx)
@@ -167,12 +184,17 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             x_sub_projected = self._transformation_function(x_sub, n_f)
 
             # # use feature weight / number of features to set supervision signals
-            target = (np.sum(self.f_weight[subspace_idx]) / self.n_unified_features) * self.magnify_factor
-            y_true = np.array([target] * x_sub.shape[0])
+            target = (torch.sum(self.f_weight[subspace_idx]) / self.n_unified_features) * self.magnify_factor
+            
+            y_true = torch.full((x_sub.shape[0],), target)
 
-            x_new[:, ii, :], y_new[:, ii] = x_sub_projected, y_true
+            # x_new[:, ii, :], y_new[:, ii] = x_sub_projected, y_true
 
-        return torch.from_numpy(x_new), torch.from_numpy(y_new)
+            x_new.append(x_sub_projected)
+            y_new.append(y_true)
+            
+        
+        return torch.stack(x_new, 1).float().to(self.device), torch.stack(y_new,1).float().to(self.device)
 
     def _transformation_function(self, x, n_f):
         """transform phase to obtain a unified dimensionality"""
@@ -182,7 +204,7 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
 
         transform_net.eval()
         with torch.no_grad():
-            x_projected = transform_net(x.float()).data.cpu().numpy()
+            x_projected = transform_net(x.float()) #.data.cpu().numpy()
         return x_projected
 
     def adaptively_setting(self):
@@ -231,15 +253,17 @@ class SLADLoss(torch.nn.Module):
             reduced loss value
         """
 
+        
         reduction = self.reduction
-
-        preds_smax = F.softmax(y_pred, dim=1)
-        true_smax = F.softmax(y_true, dim=1)
+        
+        #add small eps value
+        preds_smax = F.softmax(y_pred, dim=1)+1e-6
+        true_smax = F.softmax(y_true, dim=1)+1e-6
 
         total_m = 0.5 * (preds_smax + true_smax)
 
         js1 = F.kl_div(F.log_softmax(preds_smax, dim=1), total_m, reduction='none')
-
+        
         js2 = F.kl_div(F.log_softmax(true_smax, dim=1), total_m, reduction='none')
         js = torch.sum(js1 + js2, dim=1)
 

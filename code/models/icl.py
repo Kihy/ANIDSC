@@ -17,6 +17,9 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
                  kernel_size='auto', temperature=0.01, max_negatives=1000,
                  epoch_steps=-1, prt_steps=10, device='cuda',n_features=100, preprocessors=[],
                  verbose=2, random_state=42, **kwargs):
+        self.device=device
+        preprocessors.append(self.normalize)
+        preprocessors.append(self.to_device)
         BaseOnlineODModel.__init__(self,
             model_name='ICL', epochs=epochs, batch_size=batch_size,
             lr=lr, n_ensemble=n_ensemble,preprocessors=preprocessors,
@@ -66,7 +69,10 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         self.optimizer=torch.optim.Adam(self.net.parameters(),
                                             lr=self.lr,
                                             weight_decay=1e-5)
-        
+    
+    def to_device(self, X):
+        return X.to(self.device)
+    
     def forward(self, X):
         X = self.preprocess(X)
         X = X.float().to(self.device)
@@ -89,17 +95,32 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
 
     def process(self,X):
         threshold=self.get_threshold()
+        self.net.zero_grad()
         
         predict_y, batch_y=self.forward(X)
         loss = self.criterion(predict_y, batch_y)
         scores = loss.clone().mean(dim=1).detach().cpu().numpy()
         loss=torch.mean(loss)
-        self.net.zero_grad()
+
         loss.backward()
         self.optimizer.step()    
         
         self.score_hist.extend(scores)
         return scores, threshold
+
+
+    def state_dict(self):
+        state = super().state_dict()
+        for i in self.additional_params:
+            state[i] = getattr(self, i)
+        return state
+    
+    def load_state_dict(self, state_dict):
+
+        for i in self.additional_params:
+            setattr(self, i, state_dict[i])
+            del state_dict[i]
+        
 
     def predict_scores(self, X):
         logit, correct_class=self.forward(X)

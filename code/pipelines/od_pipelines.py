@@ -217,7 +217,6 @@ class OutlierDetectionEvaluator(BasePipeline):
             self.results={self.model.model_name:{}}
 
 
-
 class OnlineODEvaluator(BasePipeline):
     def __init__(
         self,
@@ -226,6 +225,7 @@ class OnlineODEvaluator(BasePipeline):
         steps=["process"],
         metrics=[],
         plot=True,
+        percentage=[0,1],
         **kwargs,
     ):
         
@@ -236,6 +236,7 @@ class OnlineODEvaluator(BasePipeline):
         self.profile=profile
         self.metrics=metrics
         self.plot=plot
+        self.percentage=percentage
     
     def plot_scores(self, scores, save_path):
         save_path=Path(save_path)
@@ -252,9 +253,10 @@ class OnlineODEvaluator(BasePipeline):
         
         idx=save_path.parts.index("plots")
         
-        ax.set_title("-".join(save_path.parts[idx+1:]))
+        fig.suptitle("-".join(save_path.parts[idx+1:]))
         ax[0].legend(loc='upper left', bbox_to_anchor=(1, 1))
         ax[1].legend(loc='upper left', bbox_to_anchor=(1, 1))
+        ax[1].set_yscale("log")
         fig.tight_layout()
         fig.savefig(save_path)
         print("save plot at", str(save_path))
@@ -263,14 +265,7 @@ class OnlineODEvaluator(BasePipeline):
     
     def process(self):
         for loader in self.datasets:
-            scores=[]
-            thresholds=[]
-            
-            #initialize save file
-            scores_and_thresholds_path=Path(f"../../datasets/{loader.dataset.dataset_name}/{loader.dataset.fe_name}/outputs/{loader.dataset.file_name}/{self.model.model_name}.npz")
-            scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
-            output_file=open(str(scores_and_thresholds_path),"w")
-            
+          
             #initialize file
             if loader.dataset.file_name not in self.results[self.model.model_name]:
                 self.results[self.model.model_name][loader.dataset.file_name]={}
@@ -281,18 +276,16 @@ class OnlineODEvaluator(BasePipeline):
             
             start_time=time.time()
             count=0
+            
             for feature, label in tqdm(
                 loader, desc=f"processing {self.model.model_name} on {loader.dataset.name}", leave=False
             ):
                 
                 score, threshold = self.model.process(feature)
-                
-                np.savetxt(f, np.array([score, threshold]).T, delimiter=",")
-                
+
                 for metric in self.metrics:
                     self.results[self.model.model_name][loader.dataset.file_name][metric.__name__].append(metric(score, threshold))
-                scores.append(score)
-                thresholds.append(threshold)
+                
                 
                 count+=score.shape[0]
                 
@@ -307,6 +300,11 @@ class OnlineODEvaluator(BasePipeline):
             if self.plot:
                 self.plot_scores(self.results[self.model.model_name][loader.dataset.file_name], f"../../datasets/{loader.dataset.dataset_name}/{loader.dataset.fe_name}/plots/{loader.dataset.file_name}/{self.model.model_name}.png")            
                 
+            #initialize save file
+            scores_and_thresholds_path=Path(f"../../datasets/{loader.dataset.dataset_name}/{loader.dataset.fe_name}/outputs/{loader.dataset.file_name}/{self.model.model_name}.csv")
+            scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(str(scores_and_thresholds_path),"w") as output_file:
+                np.savetxt(output_file, np.array([self.results[self.model.model_name][loader.dataset.file_name]["average_score"],self.results[self.model.model_name][loader.dataset.file_name]["average_threshold"]]).T, delimiter=",")
             
             # measure average
             for metric in self.metrics:
@@ -327,7 +325,8 @@ class OnlineODEvaluator(BasePipeline):
         
         for f in self.files:
             dataset=load_dataset(
-                    **f, batch_size=self.batch_size
+                    **f, batch_size=self.batch_size,
+                    percentage=self.percentage
                 )
             self.datasets.append(dataset)
 

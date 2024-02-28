@@ -69,6 +69,7 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
         # incremental feature cluatering for the feature mapping process
         self.FM = corClust(self.n)
         
+        self.preprocessors.append(self.normalize)
         self.preprocessors.append(to_numpy)
 
     # If FM_grace_period+AM_grace_period has passed, then this function executes KitNET on x. Otherwise, this function learns from x.

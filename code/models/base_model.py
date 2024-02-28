@@ -4,17 +4,42 @@ import pickle
 import torch
 from collections import deque
 import numpy as np
+import models
 
-def load_pkl_model(dataset_id, model_name):
-    with open(f"../../models/{dataset_id}/{model_name}.pkl","rb") as f:
-        model=pickle.load(f) 
-    return model
+def load_model(dataset_id, model_name, save_type, model_config):
+    if save_type=="pkl":
+        with open(f"../../models/{dataset_id}/{model_name}.pkl","rb") as f:
+            model=pickle.load(f) 
+        return model
+    
+    elif save_type=="dict":
+        model = getattr(models, model_name)(**model_config)
+        with open(f"../../models/{dataset_id}/{model_name}.pkl","rb") as f:
+            model_dict=pickle.load(f)
+        
+        model.load_dict(model_dict)
+        return model 
+    
+    elif save_type=="pth":
+        model = getattr(models, model_name)(**model_config)
+        checkpoint = torch.load(f"../../models/{dataset_id}/{model_name}.pth")
+    
+        model.load_state_dict(checkpoint['model_state_dict'])
+        if 'optimizer_state_dict' in checkpoint.keys():
+            model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+        return model
+    else:
+        raise ValueError("unknow save type")
 
-def load_torch_model(model, dataset_id, model_name):
-    checkpoint = torch.load(f"../../models/{dataset_id}/{model_name}.pth")
-    model.load_state_dict(checkpoint['model_state_dict'])
-    model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
-    return model
+class DictSaveMixin:
+    def save(self, dataset_name, suffix=""):
+        save_path=Path(f"../../models/{dataset_name}/{self.model_name}{f'-{suffix}' if suffix !='' else ''}.pkl")
+        save_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(save_path,"wb") as f:
+            pickle.dump(self.to_dict(), f) 
+            
+        print(f"saved at {save_path}")
 
 class PickleSaveMixin:
     def save(self, dataset_name, suffix=""):
@@ -30,24 +55,22 @@ class TorchSaveMixin:
     def save(self, dataset_name, suffix=""):
         checkpoint = {
                     'model_state_dict': self.state_dict(),
-                    'optimizer_state_dict': self.optimizer.state_dict(),
                 }
+        if hasattr(self, "optimizer"):
+            checkpoint["optimizer_state_dict"]=self.optimizer.state_dict(),
         ckpt_path=Path(f"../../models/{dataset_name}/{self.model_name}{f'-{suffix}' if suffix !='' else ''}.pth")
         ckpt_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(checkpoint, str(ckpt_path))
         
+    @abstractmethod
     def state_dict(self):
-        state = super().state_dict()
-        for i in self.additional_params:
-            state[i] = getattr(self, i)
-        return state
-    
+        pass
+     
+    @abstractmethod
     def load_state_dict(self, state_dict):
-        for i in self.additional_params:
-            setattr(self, i, state_dict[i])
-            del state_dict[i]
+        pass
         
-        super().load_state_dict(state_dict)
+        
 
 class BaseModel(ABC):
     def __init__(self, **kwargs):
@@ -64,12 +87,12 @@ class BaseModel(ABC):
 class BaseOnlineODModel(BaseModel):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
-        self.score_hist=deque(maxlen=50000)
+        self.score_hist=deque(maxlen=10000)
         self.data_max=None 
         self.data_min=None
 
-        self.additional_params=["preprocessors", "scores_hist"]
-        self.preprocessors.append(self.normalize)
+        self.additional_params=["preprocessors", "score_hist", "data_max","data_min"]
+        
     
     @abstractmethod        
     def process(self, X):

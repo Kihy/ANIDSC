@@ -43,7 +43,7 @@ class JSONEncoder(json.JSONEncoder):
         return super().default(obj)
 
 def to_numpy(x):
-    return x.numpy()
+    return x.detach().cpu().numpy()
 
 def to_tensor(x):
     return torch.tensor(x)
