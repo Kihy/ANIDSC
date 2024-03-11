@@ -523,6 +523,40 @@ class IncStatDB:
 
         return self.stat1d[ID].all_stats_1D()
 
+    def update_get_link_stats(self, ID1, ID2, t, v):
+        """create 2d incstat if it doesnt exist and updates it.
+        returns only the 2d statistics
+
+        Args:
+            ID1 (str): ID of incstat1
+            ID2 (str): ID of incstat2
+            t (float): current timestamp
+            v (float): value
+
+        Returns:
+            array: 1d+2d statistics
+        """
+        
+        # update 1d after covariance
+        self.update_get_stats_1D(ID1, t, v)
+
+        # the destination receives negative value
+        self.update_get_stats_1D(ID2, t, -v)
+
+        # check for pre-exiting link
+        if (
+            (ID1, ID2) not in self.stat2d
+            or self.stat2d[(ID1, ID2)] is None
+        ):
+            # Link incStats
+            inc_cov = IncStat2D(self.stat1d[ID1], self.stat1d[ID2], t)
+            self.stat2d[(ID1, ID2)] = inc_cov
+
+        self.stat2d[(ID1, ID2)].update_cov(t, v)
+        stats2d = self.stat2d[(ID1, ID2)].all_stats_2D()
+
+        return stats2d
+    
     def update_get_stats_2D(self, ID1, ID2, t, v):
         """updates incstat of ID1 with t, v and ID2 with t, -v.
         create 2d incstat if it doesnt exist and updates it.
@@ -568,16 +602,18 @@ class IncStatDB:
             int: number of removed records and records looked through
         """
         removed = 0
+        removed_keys=[]
         for key, inc_stat in dict(self.stat1d).items():
             if inc_stat.is_outdated(t):
                 # remove 2d links
                 for cov_key in dict(self.stat2d).keys():
                     if key in cov_key:
                         del self.stat2d[cov_key]
+                        removed_keys.append(cov_key)
                 # remove self
                 del self.stat1d[key]
                 removed += 1
-        return removed
+        return removed, removed_keys
 
 
 class NetStat:

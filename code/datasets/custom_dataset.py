@@ -56,8 +56,7 @@ class IterativeCSVDataset(IterableDataset):
         self.name = f"{dataset_name}/{fe_name}/{file_name}"
         self.data = pd.read_csv(
             self.feature_path,
-            skiprows= 1  # +1, since we skip the header
-            + skip_rows,
+            skiprows=  skip_rows,
             chunksize=chunksize,
             nrows=nb_samples,
         )

@@ -282,10 +282,11 @@ class OnlineODEvaluator(BasePipeline):
             ):
                 
                 score, threshold = self.model.process(feature)
+                if hasattr(self.model, "visualize_graph"):
+                    self.model.visualize_graph(loader.dataset.dataset_name,loader.dataset.fe_name,loader.dataset.file_name)
 
                 for metric in self.metrics:
                     self.results[self.model.model_name][loader.dataset.file_name][metric.__name__].append(metric(score, threshold))
-                
                 
                 count+=score.shape[0]
                 

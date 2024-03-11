@@ -382,6 +382,7 @@ class ARCUS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             weighted_scores.append(self._standardize_scores(scores[idx]) * weight)
         final_scores = np.sum(weighted_scores, axis=0)
         
+        
         self.score_hist.extend(final_scores)
         
         #drift detection

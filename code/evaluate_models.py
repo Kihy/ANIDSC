@@ -14,9 +14,6 @@ def train_uq_models(fe_name, dataset_name, model_list):
             "file_name": f"benign/whole_week",
         }
     ]
-
-    
-
     trainer = OnlineODEvaluator(
         batch_size=256,
         dataset_name=dataset_name,
@@ -69,7 +66,7 @@ if __name__ == "__main__":
         "Cam_1",
     ]  # ,
     dataset_name = f"UQ_IoT_IDS21"
-    fe_name = "AfterImage"
+    fe_name = "AfterImageGraph_homo"
     attacks = [
         "ACK_Flooding",
         "Port_Scanning",
@@ -82,7 +79,7 @@ if __name__ == "__main__":
         # ("KitNET", {},"pkl"),
         # (SLAD, {}),
         # (GOAD, {}),
-        ("RRCF", {},"dict"),
+        # ("RRCF", {},"dict"),
         # ("ARCUS",{"seed" :10,
         # "_model_type" :"RAPP",
         # "_inf_type" :"ADP",
@@ -94,7 +91,9 @@ if __name__ == "__main__":
         # "layer_num":3,
         # "learning_rate":1e-4,
         # "_reliability_thred" :0.95,
-        # "_similarity_thred" :0.80}, "pth")
+        # "_similarity_thred" :0.80}, "pth"),
+        ("GNNIDS",{},"pth")
+        
     ]
 
     train_uq_models(fe_name, dataset_name,model_list)

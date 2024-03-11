@@ -26,7 +26,7 @@ def load_model(dataset_id, model_name, save_type, model_config):
     
         model.load_state_dict(checkpoint['model_state_dict'])
         if 'optimizer_state_dict' in checkpoint.keys():
-            model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
+            model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'][0])
         return model
     else:
         raise ValueError("unknow save type")
