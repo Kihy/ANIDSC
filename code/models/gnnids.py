@@ -39,8 +39,8 @@ class LivePercentile:
 
     def add(self, item):
         """ Adds another datum """
-        item=item.cpu().numpy()
-        for i, n in enumerate(item):
+        item=item.numpy()
+        for i, n in enumerate(item.T):
             self.dims[i].update(n)
         self.initialized=True
 
@@ -574,10 +574,8 @@ class HomoGNNIDS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     def to_device(self, x):
         return x.float().to(self.device)
     
-    def update_nodes_stats(self, features):
-        features=features.cpu()
-        for i in features:
-            self.node_stats.add(i)
+
+        
     
     def preprocess_nodes(self, features):
         features=features.cpu()
@@ -615,16 +613,12 @@ class HomoGNNIDS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             self.G.x[self.G.idx==dstID[i]]=normalized_dst_feature[i]
         
         # update feature
-        self.update_nodes_stats(src_feature)
-        self.update_nodes_stats(dst_feature) 
+        self.node_stats.add(src_feature.cpu())
+        self.node_stats.add(dst_feature.cpu())
         
         return unique_nodes
     
-    def update_link_stats(self, features):
-        features=features.cpu()
-        
-        for f in features:
-            self.edge_stats.add(f)
+
             
     def preprocess_links(self, features):
         features=features.cpu()
@@ -658,7 +652,7 @@ class HomoGNNIDS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             self.G.edge_attr=torch.vstack([self.G.edge_attr, normalized_edge_feature[~existing_edge_idx]])
             self.G.edge_as=torch.hstack([self.G.edge_as, torch.zeros(num_new_edges).to(self.device)])  
         
-        self.update_link_stats(edge_feature)
+        self.edge_stats.add(edge_feature.cpu())
         
     def visualize_graph(self, dataset_name, fe_name, file_name):
         G = to_networkx(self.G, node_attrs=["x","node_as","idx"], edge_attrs=["edge_attr","edge_as"],
