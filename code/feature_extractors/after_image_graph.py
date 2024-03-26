@@ -32,7 +32,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
                 limit=float("inf"),
             ),
                        "node_map":{},
-                       "protocol_map":{},
+                       "protocol_map":{"UDP":0,"TCP":1,"ARP":2,"ICMP":3,"Other":4},
                        "last_timetamp":None 
                         }    
 
@@ -46,7 +46,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
                 limit=float("inf"),
             ),
                        "node_map":{},
-                       "protocol_map":{},
+                       "protocol_map":{"UDP":0,"TCP":1,"ARP":2,"ICMP":3,"Other":4},
                        "last_timetamp":None 
                         } 
 
@@ -73,6 +73,8 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
 
         features_list = []
         meta_list = []
+        
+        chunk_size=0
         for packet in tqdm(self.input_pcap, desc=f"parsing {self.file_name}"):
             if self.count>self.max_pkt:
                 break
@@ -94,11 +96,12 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
             feature = self.update(traffic_vector)
             features_list.append(feature)
             
-            meta_list.append([i for i in traffic_vector.values()])
-            self.count += 1
+            meta_list.append([self.count]+[i for i in traffic_vector.values()])
             
-
-            if self.count % 1e4 == 0:
+            self.count += feature.shape[0]
+            chunk_size+=feature.shape[0]
+            
+            if chunk_size > 1e4:
                 np.savetxt(
                     self.feature_file,
                     np.vstack(features_list),
@@ -110,6 +113,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
                 )
                 features_list = []
                 meta_list = []
+                chunk_size=0
 
         # save remaining
         np.savetxt(
@@ -138,13 +142,15 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
         src_stat=self.state["db"].update_get_stats_1D(srcID, traffic_vector['timestamp'], traffic_vector['packet_size'])
         dst_stat=self.state["db"].update_get_stats_1D(dstID, traffic_vector['timestamp'], -traffic_vector['packet_size'])
         
+        protocol=self.state["protocol_map"].get(traffic_vector['protocol'], 4)
+        
         #udpate link stats
         if self.graph_type=="homo":
             src_link=f"{srcID}"
             dst_link=f"{dstID}"
         elif self.graph_type=="hetero":    
-            src_link=f"{srcID}:{traffic_vector['protocol']}"
-            dst_link=f"{dstID}:{traffic_vector['protocol']}"
+            src_link=f"{srcID}/{protocol}"
+            dst_link=f"{dstID}/{protocol}"
         else:
             raise ValueError("Unknow graph_type")
             
@@ -156,7 +162,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
         #encode ID and traffic_vector 
         srcID=self.state["node_map"].setdefault(srcID, len(self.state["node_map"]))
         dstID=self.state["node_map"].setdefault(dstID, len(self.state["node_map"]))
-        protocol=self.state["protocol_map"].setdefault(traffic_vector['protocol'], len(self.state["protocol_map"]))
+        
         
         feature=np.hstack([1, srcID, dstID, protocol, src_stat, dst_stat, jitter_stat, link_stat])
         
@@ -165,10 +171,16 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
             n, keys=self.state["db"].clean_records(traffic_vector['timestamp'])
             all_records=[feature]
             for src,dst in keys:
-                all_records.append([0,self.state["node_map"][src],self.state["node_map"][dst],0]+[0 for _ in range(65)])
+                if self.graph_type=="homo":
+                    all_records.append([0,self.state["node_map"][src],self.state["node_map"][dst],0]+[0 for _ in range(65)])
+                else:
+                    srcIP=src.split("/")[0]
+                    dstIP, protocol=dst.split("/")
+                    all_records.append([0,self.state["node_map"][srcIP],self.state["node_map"][dstIP],protocol]+[0 for _ in range(65)])
+      
             return np.vstack(all_records)
         else:
-            return feature
+            return np.expand_dims(feature,axis=0)
 
     def get_traffic_vector(self, packet):
         """extracts the traffic vectors from packet
@@ -244,7 +256,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
             "srcport":srcproto,
             "dstIP":dstIP,
             "dstport":dstproto,
-            "protocol":lowest_layer,
+            "protocol": str(lowest_layer),
             "timestamp":float(timestamp),
             "packet_size":int(framelen)}
 
@@ -278,6 +290,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
             list: names of traffic vectors
         """
         return [
+            "idx",
             "srcMAC",
             "dstMAC",
             "srcIP",

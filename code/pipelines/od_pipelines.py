@@ -241,23 +241,23 @@ class OnlineODEvaluator(BasePipeline):
     def plot_scores(self, scores, save_path):
         save_path=Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
-            
-        fig, ax = plt.subplots(nrows=2, figsize=(6, 8))
-        
+    
+        n_metrics=len(self.metrics)
+        fig, ax = plt.subplots(nrows=n_metrics, figsize=(6, n_metrics*4), constrained_layout=True)
+
+        i=0
         for name, value in scores.items():
-            
-            if name in ["detection_rate"]:
-                ax[0].scatter(range(len(value)), value, s=5, label=name)
-            if name in ["average_score","average_threshold"]:
-                ax[1].scatter(range(len(value)), value, s=5, label=name)
-        
+            if isinstance(value, list):
+                ax[i].scatter(range(len(value)), value, s=5, label=name)
+                # ax[i].legend(loc='upper left', bbox_to_anchor=(1, 1))
+                ax[i].set_title(name)
+                i+=1
+                
         idx=save_path.parts.index("plots")
         
         fig.suptitle("-".join(save_path.parts[idx+1:]))
-        ax[0].legend(loc='upper left', bbox_to_anchor=(1, 1))
-        ax[1].legend(loc='upper left', bbox_to_anchor=(1, 1))
-        ax[1].set_yscale("log")
-        fig.tight_layout()
+        
+        # fig.tight_layout(rect=[0, 0.03, 1, 0.95])
         fig.savefig(save_path)
         print("save plot at", str(save_path))
         plt.close(fig)
@@ -277,18 +277,30 @@ class OnlineODEvaluator(BasePipeline):
             start_time=time.time()
             count=0
             
-            for feature, label in tqdm(
-                loader, desc=f"processing {self.model.model_name} on {loader.dataset.name}", leave=False
-            ):
+            batch_count=0
+            
+            base_desc=f"processing {self.model.model_name} on {loader.dataset.name}"
+            t_bar=tqdm(
+                loader, desc= base_desc, leave=False
+            )
+            for feature, label in t_bar:
                 
-                score, threshold = self.model.process(feature)
-                if hasattr(self.model, "visualize_graph"):
+                outputs = self.model.process(feature)
+                count+=feature.shape[0]
+                batch_count+=1
+                
+                
+                if hasattr(self.model, "visualize_graph") and np.random.uniform()<0.001: 
                     self.model.visualize_graph(loader.dataset.dataset_name,loader.dataset.fe_name,loader.dataset.file_name)
-
-                for metric in self.metrics:
-                    self.results[self.model.model_name][loader.dataset.file_name][metric.__name__].append(metric(score, threshold))
+                 
                 
-                count+=score.shape[0]
+                if outputs is None:
+                    continue 
+                
+                for metric in self.metrics:
+                    self.results[self.model.model_name][loader.dataset.file_name][metric.__name__].append(metric(outputs))
+
+                t_bar.set_description(f"processing {self.model.model_name} on {loader.dataset.name}"+outputs.get("desc",""), refresh=True)
                 
             duration=time.time()-start_time
             
@@ -296,6 +308,7 @@ class OnlineODEvaluator(BasePipeline):
             
             self.results[self.model.model_name][loader.dataset.file_name]["time"]=duration
             self.results[self.model.model_name][loader.dataset.file_name]["count"]=count
+            
             
             #plot metrics
             if self.plot:
@@ -309,7 +322,6 @@ class OnlineODEvaluator(BasePipeline):
             
             # measure average
             for metric in self.metrics:
-                
                 self.results[self.model.model_name][loader.dataset.file_name][metric.__name__]=np.mean(self.results[self.model.model_name][loader.dataset.file_name][metric.__name__])
                 
             loader.dataset.reset()

@@ -19,7 +19,7 @@ def train_uq_models(fe_name, dataset_name, model_list):
         dataset_name=dataset_name,
         files=train_file,
         # percentage=[0,0.0001],
-        metrics=[detection_rate, average_score, average_threshold],
+        metrics=[average_metric("edge_loss"),average_metric("node_loss"), average_metric("structural_loss")],
         steps=["process", "save_model"],
     )
 
@@ -44,7 +44,8 @@ def evaluate_uq_models(devices, fe_name, attacks, models, dataset_name):
             batch_size=256,
             dataset_name=dataset_name,
             files=test_file,
-            metrics=[detection_rate, average_score, average_threshold],
+            metrics=[average_metric("node_energy"), average_metric("edge_energy"), average_metric("node_reliability"),
+                 average_metric("edge_loss"),average_metric("node_loss"), average_metric("structural_loss")],
             steps=["process"],
         )
 
@@ -65,7 +66,7 @@ if __name__ == "__main__":
         "Lenovo_Bulb_1",
         "Cam_1",
     ]  # ,
-    dataset_name = f"UQ_IoT_IDS21"
+    dataset_name = "UQ_IoT_IDS21"
     fe_name = "AfterImageGraph_homo"
     attacks = [
         "ACK_Flooding",
@@ -92,7 +93,7 @@ if __name__ == "__main__":
         # "learning_rate":1e-4,
         # "_reliability_thred" :0.95,
         # "_similarity_thred" :0.80}, "pth"),
-        ("GNNIDS",{},"pth")
+        ("HomoGNNIDS",{},"pth")
         
     ]
 

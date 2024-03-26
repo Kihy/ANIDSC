@@ -11,7 +11,8 @@
             "program": "${file}",
             "console": "integratedTerminal",
             "args": "${command:pickArgs}",
-            "cwd": "/workspace/ANIDSC/code"
+            "cwd": "/workspace/ANIDSC/code",
+            "env": {"CUDA_LAUNCH_BLOCKING": "1"}
         }
     ]
 }
