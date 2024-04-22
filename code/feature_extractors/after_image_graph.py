@@ -27,14 +27,15 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
         self.max_pkt =max_pkt
         self.clean_up_round=5000     
         
-        self.state={"db": IncStatDB(
-                decay_factors=self.decay_factors,
-                limit=float("inf"),
-            ),
-                       "node_map":{},
-                       "protocol_map":{"UDP":0,"TCP":1,"ARP":2,"ICMP":3,"Other":4},
-                       "last_timetamp":None 
-                        }    
+        if self.state is None:
+            self.state={"db": IncStatDB(
+                    decay_factors=self.decay_factors,
+                    limit=float("inf"),
+                ),
+                        "node_map":{},
+                        "protocol_map":{"UDP":0,"TCP":1,"ARP":2,"ICMP":3,"Other":4},
+                        "last_timetamp":None 
+                            }    
 
     def setup(self):
         """sets up after image"""
@@ -133,36 +134,44 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
         Returns:
             array: the extracted features
         """
-        #update source node
-        srcID=f"{traffic_vector['srcMAC']}"
+        srcMAC=f"{traffic_vector['srcMAC']}"
+        dstMAC=f"{traffic_vector['dstMAC']}"
         
-        #update dst 
-        dstID=f"{traffic_vector['dstMAC']}"
+        #get protocol
+        protocol=self.state["protocol_map"].get(traffic_vector['protocol'], 4)
+               
+        #udpate link stats
+        if self.graph_type=="homo":
+            srcID=srcMAC
+            dstID=dstMAC
+            src_link=srcMAC
+            dst_link=dstMAC
+        elif self.graph_type=="hetero":
+            srcID=srcMAC
+            dstID=dstMAC
+            src_link=f"{srcID}/{protocol}"
+            dst_link=f"{dstID}/{protocol}"
+        elif self.graph_type=="multi_layer":
+            srcID=f"{srcMAC}/{protocol}"
+            dstID=f"{dstMAC}/{protocol}"
+            src_link=srcID
+            dst_link=dstID
+        else:
+            raise ValueError("Unknow graph_type")
         
+        #update node stats
         src_stat=self.state["db"].update_get_stats_1D(srcID, traffic_vector['timestamp'], traffic_vector['packet_size'])
         dst_stat=self.state["db"].update_get_stats_1D(dstID, traffic_vector['timestamp'], -traffic_vector['packet_size'])
         
-        protocol=self.state["protocol_map"].get(traffic_vector['protocol'], 4)
-        
-        #udpate link stats
-        if self.graph_type=="homo":
-            src_link=f"{srcID}"
-            dst_link=f"{dstID}"
-        elif self.graph_type=="hetero":    
-            src_link=f"{srcID}/{protocol}"
-            dst_link=f"{dstID}/{protocol}"
-        else:
-            raise ValueError("Unknow graph_type")
-            
+        #get link stats
         link_stat=self.state["db"].update_get_link_stats(src_link, dst_link, traffic_vector['timestamp'], traffic_vector['packet_size'])
         jitter_stat=self.state["db"].update_get_stats_1D(f"{src_link}-{dst_link}",traffic_vector['timestamp'], None)
         
         self.state["db"].num_updated += 1
 
         #encode ID and traffic_vector 
-        srcID=self.state["node_map"].setdefault(srcID, len(self.state["node_map"]))
-        dstID=self.state["node_map"].setdefault(dstID, len(self.state["node_map"]))
-        
+        srcID=self.state["node_map"].setdefault(srcMAC, len(self.state["node_map"]))
+        dstID=self.state["node_map"].setdefault(dstMAC, len(self.state["node_map"]))
         
         feature=np.hstack([1, srcID, dstID, protocol, src_stat, dst_stat, jitter_stat, link_stat])
         
@@ -177,7 +186,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
                     srcIP=src.split("/")[0]
                     dstIP, protocol=dst.split("/")
                     all_records.append([0,self.state["node_map"][srcIP],self.state["node_map"][dstIP],protocol]+[0 for _ in range(65)])
-      
+
             return np.vstack(all_records)
         else:
             return np.expand_dims(feature,axis=0)
@@ -193,7 +202,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
         """
         packet = packet[0]
 
-        # only process IP packets,
+        # only process IP packets and non broadcast/localhost or packet.dst in ["ff:ff:ff:ff:ff:ff","00:00:00:00:00:00"]
         if not (packet.haslayer(IP) or packet.haslayer(IPv6) or packet.haslayer(ARP)):
             return None
 

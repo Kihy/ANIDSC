@@ -226,6 +226,7 @@ class OnlineODEvaluator(BasePipeline):
         metrics=[],
         plot=True,
         percentage=[0,1],
+        epochs=1,
         **kwargs,
     ):
         
@@ -237,21 +238,28 @@ class OnlineODEvaluator(BasePipeline):
         self.metrics=metrics
         self.plot=plot
         self.percentage=percentage
+        self.epochs=epochs
     
     def plot_scores(self, scores, save_path):
         save_path=Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
     
         n_metrics=len(self.metrics)
-        fig, ax = plt.subplots(nrows=n_metrics, figsize=(6, n_metrics*4), constrained_layout=True)
+        
+        n_rows=int(np.sqrt(n_metrics))
+        n_cols=int(np.ceil(n_metrics/n_rows))
+        fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(6*n_cols, n_rows*4), constrained_layout=True, squeeze=False)
 
-        i=0
+        i,j=0,0
         for name, value in scores.items():
             if isinstance(value, list):
-                ax[i].scatter(range(len(value)), value, s=5, label=name)
+                ax[i][j].scatter(range(len(value)), value, s=5, label=name)
                 # ax[i].legend(loc='upper left', bbox_to_anchor=(1, 1))
-                ax[i].set_title(name)
-                i+=1
+                ax[i][j].set_title(name)
+                j+=1
+                if j==n_cols:
+                    i+=1
+                    j=0
                 
         idx=save_path.parts.index("plots")
         
@@ -265,7 +273,10 @@ class OnlineODEvaluator(BasePipeline):
     
     def process(self):
         for loader in self.datasets:
-          
+            
+            #create tensorboard 
+            writer = SummaryWriter(log_dir=f"runs/{self.model.model_name}/{loader.dataset.dataset_name}/{loader.dataset.fe_name}{loader.dataset.file_name}")
+            
             #initialize file
             if loader.dataset.file_name not in self.results[self.model.model_name]:
                 self.results[self.model.model_name][loader.dataset.file_name]={}
@@ -273,6 +284,14 @@ class OnlineODEvaluator(BasePipeline):
             # create list to store scores
             for metric in self.metrics:
                 self.results[self.model.model_name][loader.dataset.file_name][metric.__name__]=[]
+                
+            # file to store outputs
+            scores_and_thresholds_path=Path(f"../../datasets/{loader.dataset.dataset_name}/{loader.dataset.fe_name}/outputs/{loader.dataset.file_name}/{self.model.model_name}.csv")
+            scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
+            output_file=open(str(scores_and_thresholds_path),"w")
+            write_header=True
+            # with open(str(scores_and_thresholds_path),"w") as output_file:
+            #     np.savetxt(output_file, np.array([self.results[self.model.model_name][loader.dataset.file_name]["average_score"],self.results[self.model.model_name][loader.dataset.file_name]["average_threshold"]]).T, delimiter=",")
             
             start_time=time.time()
             count=0
@@ -284,23 +303,41 @@ class OnlineODEvaluator(BasePipeline):
                 loader, desc= base_desc, leave=False
             )
             for feature, label in t_bar:
+                prediction_results, raw_results = self.model.process(feature)
+                t_bar.set_description(f"processing {self.model.model_name} on {loader.dataset.name}", refresh=True)
                 
-                outputs = self.model.process(feature)
                 count+=feature.shape[0]
-                batch_count+=1
                 
-                
-                if hasattr(self.model, "visualize_graph") and np.random.uniform()<0.001: 
+                if hasattr(self.model, "visualize_graph") and np.random.uniform()<0.001 : #
                     self.model.visualize_graph(loader.dataset.dataset_name,loader.dataset.fe_name,loader.dataset.file_name)
-                 
                 
-                if outputs is None:
+                if prediction_results is None:
                     continue 
                 
-                for metric in self.metrics:
-                    self.results[self.model.model_name][loader.dataset.file_name][metric.__name__].append(metric(outputs))
+                batch_count+=1
+                
+                for layer_idx, layer_results in enumerate(raw_results):
+                    
+                    writer.add_scalar(f'layer_{layer_idx}/loss', layer_results["loss"].mean(), batch_count)
+                    writer.add_scalar(f'layer_{layer_idx}/model_idx', layer_results["model_index"], batch_count)
+                    writer.add_histogram(f'layer_{layer_idx}/node_embed', layer_results["node_embed"], batch_count)
+                    
+                    for node, loss in layer_results["node_loss"].items():
+                        writer.add_scalar(f'layer_{layer_idx}/{node}_loss', loss, batch_count)
+                    
+                    # drop 
+                    del layer_results["node_embed"]
+                    del layer_results["node_loss"]
+                    if write_header:
+                        output_file.write(",".join(list(layer_results.keys()))+"\n")
+                        write_header=False
+                        
+                    output_file.write(",".join(list(map(str, list(layer_results.values()))))+"\n")
 
-                t_bar.set_description(f"processing {self.model.model_name} on {loader.dataset.name}"+outputs.get("desc",""), refresh=True)
+                                        
+                for metric in self.metrics:
+                    self.results[self.model.model_name][loader.dataset.file_name][metric.__name__].append(metric(prediction_results))
+
                 
             duration=time.time()-start_time
             
@@ -313,16 +350,10 @@ class OnlineODEvaluator(BasePipeline):
             #plot metrics
             if self.plot:
                 self.plot_scores(self.results[self.model.model_name][loader.dataset.file_name], f"../../datasets/{loader.dataset.dataset_name}/{loader.dataset.fe_name}/plots/{loader.dataset.file_name}/{self.model.model_name}.png")            
-                
-            #initialize save file
-            scores_and_thresholds_path=Path(f"../../datasets/{loader.dataset.dataset_name}/{loader.dataset.fe_name}/outputs/{loader.dataset.file_name}/{self.model.model_name}.csv")
-            scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(str(scores_and_thresholds_path),"w") as output_file:
-                np.savetxt(output_file, np.array([self.results[self.model.model_name][loader.dataset.file_name]["average_score"],self.results[self.model.model_name][loader.dataset.file_name]["average_threshold"]]).T, delimiter=",")
             
             # measure average
             for metric in self.metrics:
-                self.results[self.model.model_name][loader.dataset.file_name][metric.__name__]=np.mean(self.results[self.model.model_name][loader.dataset.file_name][metric.__name__])
+                self.results[self.model.model_name][loader.dataset.file_name][metric.__name__]=np.nanmean(self.results[self.model.model_name][loader.dataset.file_name][metric.__name__])
                 
             loader.dataset.reset()
             
@@ -339,7 +370,8 @@ class OnlineODEvaluator(BasePipeline):
         for f in self.files:
             dataset=load_dataset(
                     **f, batch_size=self.batch_size,
-                    percentage=self.percentage
+                    percentage=self.percentage,
+                    epochs=self.epochs
                 )
             self.datasets.append(dataset)
 

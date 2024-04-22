@@ -47,6 +47,7 @@ class IterativeCSVDataset(IterableDataset):
         nb_samples=None,
         chunksize=2**14,
         skip_rows=0,
+        epochs=1
     ):
         self.feature_path =feature_path
         self.dataset_name=dataset_name
@@ -63,7 +64,8 @@ class IterativeCSVDataset(IterableDataset):
         self.nb_samples=nb_samples
         self.skip_rows=skip_rows
         self.chunksize=chunksize
-        self.skip_rows=skip_rows 
+        self.skip_rows=skip_rows
+        self.epochs=epochs
     
     def reset(self):
         self.data = pd.read_csv(
@@ -75,18 +77,20 @@ class IterativeCSVDataset(IterableDataset):
         )
         
     def __iter__(self):
-        for chunk in self.data:
-            for i in chunk.values:
-                yield i, self.file_name
+        for i in range(self.epochs):
+            for chunk in self.data:
+                for j in chunk.values:
+                    yield j, self.file_name
+            self.reset()
         
     def __len__(self):
-        return self.nb_samples
+        return self.nb_samples*self.epochs
     
 
 
 
 def load_dataset(dataset_name, fe_name, file_name,
-                 percentage=[0,1], batch_size=1024):
+                 percentage=[0,1], batch_size=1024, epochs=1):
     dataset_info = load_dataset_info()
     
     dataset=dataset_info[dataset_name][fe_name][file_name]
@@ -106,5 +110,5 @@ def load_dataset(dataset_name, fe_name, file_name,
             file_name,
             feature_path, 
             nb_samples=nb_samples, 
-            skip_rows=int(total_rows * percentage[0]),
-        ), batch_size=batch_size,pin_memory=True)
+            skip_rows=int(total_rows * percentage[0]),epochs=epochs
+        ), batch_size=batch_size, pin_memory=True)

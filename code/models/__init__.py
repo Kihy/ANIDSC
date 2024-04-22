@@ -7,4 +7,4 @@ from .sklearn_models import SklearnOutlierDetector
 from .slad import SLAD
 from .rrcf import RRCF
 from .arcus import ARCUS
-from .gnnids import HomoGNNIDS, HeteroGNNIDS
+from .gnnids import HomoGNNIDS, HeteroGNNIDS,MultiLayerGNNIDS

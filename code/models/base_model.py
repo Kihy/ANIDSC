@@ -21,15 +21,28 @@ def load_model(dataset_id, model_name, save_type, model_config):
         return model 
     
     elif save_type=="pth":
-        model = getattr(models, model_name)(**model_config)
+        if "_" in model_name:
+            model_type=model_name.split("_")[0]
+        else:
+            model_type=model_name
+        model = getattr(models, model_type)(**model_config)
         checkpoint = torch.load(f"../../models/{dataset_id}/{model_name}.pth")
     
         model.load_state_dict(checkpoint['model_state_dict'])
         if 'optimizer_state_dict' in checkpoint.keys():
             model.optimizer.load_state_dict(checkpoint['optimizer_state_dict'][0])
         return model
+    elif save_type=="ensemble":
+        model = getattr(models, model_name)(**model_config)
+        model.layer_map={i:load_model(dataset_id, v, "pth", model_config) for i, v in enumerate(model.ensemble_models)}
+        return model
     else:
         raise ValueError("unknow save type")
+
+class EnsembleSaveMixin:
+    def save(self, dataset_name, suffix=""):
+        for protocol, model in self.layer_map.items():
+            model.save(dataset_name, suffix)
 
 class DictSaveMixin:
     def save(self, dataset_name, suffix=""):
