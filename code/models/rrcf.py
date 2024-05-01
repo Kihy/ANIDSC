@@ -1,6 +1,6 @@
 
 import numpy as np
-from utils import to_numpy
+
 from rrcf import RCTree
 from models.base_model import *
 
@@ -28,7 +28,8 @@ class RRCF(BaseOnlineODModel, DictSaveMixin):
         
     def to_dict(self):
         ret={"index":self.index,
-             "score_hist":self.score_hist, "data_max":self.data_max, "data_min":self.data_min,
+             "loss_queue":self.loss_queue,
+             "scaler":self.scaler, 
              "forest":[]}
         for i in self.forest:
             ret["forest"].append(i.to_dict())
@@ -69,3 +70,4 @@ class RRCF(BaseOnlineODModel, DictSaveMixin):
             self.score_hist.append(avg_codisp)
             self.index+=1
         return np.array(scores), threshold
+    

@@ -4,6 +4,97 @@ from io import TextIOWrapper
 import numpy as np 
 import torch 
 import pickle
+import scipy
+from pytdigest import TDigest
+import robustats
+
+class LivePercentile:
+    def __init__(self, ndim=None):
+        """ Constructs a LiveStream object
+        """
+
+        if isinstance(ndim, int):
+            self.dims=[TDigest() for _ in range(ndim)]
+            self.patience=0
+            self.ndim=ndim
+        elif isinstance(ndim, list):
+            self.dims=self.of_centroids(ndim)
+            self.ndim=len(ndim)
+            self.patience=10
+
+        else:
+            raise ValueError("ndim must be int or list")
+        
+
+    def add(self, item):
+        """ Adds another datum """
+
+        
+        if isinstance(item, torch.Tensor):
+            item=item.cpu().numpy()
+        
+        if self.ndim==1:
+            self.dims[0].update(item)
+        else:
+            for i, n in enumerate(item.T):
+                self.dims[i].update(n)
+        
+        self.patience+=1
+
+    def reset(self):
+        
+        self.dims=[TDigest() for _ in range(self.ndim)]
+        self.patience=0
+    
+    def quantiles(self, p):
+        """ Returns a list of tuples of the quantile and its location """
+        
+        if self.ndim==0 or self.patience<1:
+            return None 
+        percentiles=np.zeros((len(p),self.ndim))
+        
+        for d in range(self.ndim):
+            percentiles[:,d]=self.dims[d].inverse_cdf(p)
+        
+        return torch.tensor(percentiles).float()
+    
+    def to_centroids(self):
+        return [i.get_centroids() for i in self.dims]
+    
+    def of_centroids(self, dim_list):
+
+        return [TDigest.of_centroids(i) for i in dim_list]
+    
+    def __getstate__(self):
+        state=self.__dict__.copy()
+        state["dims"]=self.to_centroids()
+        return state 
+    
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self.dims=self.of_centroids(self.dims)
+
+
+def calc_quantile(x, p):
+    x=np.log(x)
+    mean=np.mean(x) 
+    std=np.std(x)
+
+    quantile=np.exp(mean+np.sqrt(2)*std*scipy.special.erfinv(2*p-1))
+    return quantile
+
+def is_stable(x, p=0.95, return_quantile=False):
+    if len(x)!=x.maxlen:
+        stability=False
+        quantile=0.
+    else:
+        quantile=calc_quantile(x, p)
+        stability=(np.array(x)<quantile).all()
+        
+    if return_quantile:
+        return stability, quantile
+    else:
+        return stability
 
 def uniqueXT(x, sorted=True, return_index=False, return_inverse=False, return_counts=False,
              occur_last=False, dim=None):
@@ -85,8 +176,6 @@ class JSONEncoder(json.JSONEncoder):
             return float(obj)
         return super().default(obj)
 
-def to_numpy(x):
-    return x.detach().cpu().numpy()
 
 def to_tensor(x):
     return torch.tensor(x)
@@ -100,3 +189,12 @@ def load_dataset_info():
 def save_dataset_info(data_info):
     with open("../../datasets/data_info.json", "w") as f:
         json.dump(data_info, f, indent=4, cls=JSONEncoder)
+        
+def get_node_map(fe_name, dataset_name):
+    try:
+        with open(f"../../datasets/{dataset_name}/{fe_name}/state.pkl", "rb") as pf:
+            state=pickle.load(pf)
+            
+        return state["node_map"]
+    except FileNotFoundError as e:
+        return None

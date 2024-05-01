@@ -230,7 +230,7 @@ class OnlineODEvaluator(BasePipeline):
         **kwargs,
     ):
         
-        super().__init__(allowed=["model", "dataset_name", "files"],**kwargs)
+        super().__init__(allowed=["model", "dataset_name", "fe_name", "files"],**kwargs)
         self.steps = steps
         self.batch_size = batch_size
         self.training_size=0
@@ -244,10 +244,10 @@ class OnlineODEvaluator(BasePipeline):
         save_path=Path(save_path)
         save_path.parent.mkdir(parents=True, exist_ok=True)
     
-        n_metrics=len(self.metrics)
+        n_metrics=len(scores)
         
-        n_rows=int(np.sqrt(n_metrics))
-        n_cols=int(np.ceil(n_metrics/n_rows))
+        n_rows=int(np.ceil(np.sqrt(n_metrics)))
+        n_cols=n_metrics//n_rows
         fig, ax = plt.subplots(nrows=n_rows, ncols=n_cols, figsize=(6*n_cols, n_rows*4), constrained_layout=True, squeeze=False)
 
         i,j=0,0
@@ -275,7 +275,7 @@ class OnlineODEvaluator(BasePipeline):
         for loader in self.datasets:
             
             #create tensorboard 
-            writer = SummaryWriter(log_dir=f"runs/{self.model.model_name}/{loader.dataset.dataset_name}/{loader.dataset.fe_name}{loader.dataset.file_name}")
+            writer = SummaryWriter(log_dir=f"runs/{self.model.model_name}/{self.dataset_name}/{self.fe_name}/{loader.dataset.file_name}")
             
             #initialize file
             if loader.dataset.file_name not in self.results[self.model.model_name]:
@@ -286,9 +286,16 @@ class OnlineODEvaluator(BasePipeline):
                 self.results[self.model.model_name][loader.dataset.file_name][metric.__name__]=[]
                 
             # file to store outputs
-            scores_and_thresholds_path=Path(f"../../datasets/{loader.dataset.dataset_name}/{loader.dataset.fe_name}/outputs/{loader.dataset.file_name}/{self.model.model_name}.csv")
+            scores_and_thresholds_path=Path(f"../../datasets/{self.dataset_name}/{self.fe_name}/outputs/{loader.dataset.file_name}/{self.model.model_name}.csv")
             scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
             output_file=open(str(scores_and_thresholds_path),"w")
+            
+            # file to store outputs
+            raw_score_path=Path(f"../../datasets/{self.dataset_name}/{self.fe_name}/outputs/{loader.dataset.file_name}/{self.model.model_name}_raw_scores.csv")
+            raw_score_path.parent.mkdir(parents=True, exist_ok=True)
+            
+            
+            
             write_header=True
             # with open(str(scores_and_thresholds_path),"w") as output_file:
             #     np.savetxt(output_file, np.array([self.results[self.model.model_name][loader.dataset.file_name]["average_score"],self.results[self.model.model_name][loader.dataset.file_name]["average_threshold"]]).T, delimiter=",")
@@ -303,57 +310,63 @@ class OnlineODEvaluator(BasePipeline):
                 loader, desc= base_desc, leave=False
             )
             for feature, label in t_bar:
-                prediction_results, raw_results = self.model.process(feature)
+                prediction_results = self.model.process(feature)
                 t_bar.set_description(f"processing {self.model.model_name} on {loader.dataset.name}", refresh=True)
                 
                 count+=feature.shape[0]
                 
                 if hasattr(self.model, "visualize_graph") and np.random.uniform()<0.001 : #
-                    self.model.visualize_graph(loader.dataset.dataset_name,loader.dataset.fe_name,loader.dataset.file_name)
+                    self.model.visualize_graph(self.dataset_name,self.fe_name,loader.dataset.file_name)
                 
                 if prediction_results is None:
                     continue 
                 
                 batch_count+=1
                 
-                for layer_idx, layer_results in enumerate(raw_results):
-                    
-                    writer.add_scalar(f'layer_{layer_idx}/loss', layer_results["loss"].mean(), batch_count)
-                    writer.add_scalar(f'layer_{layer_idx}/model_idx', layer_results["model_index"], batch_count)
-                    writer.add_histogram(f'layer_{layer_idx}/node_embed', layer_results["node_embed"], batch_count)
-                    
-                    for node, loss in layer_results["node_loss"].items():
-                        writer.add_scalar(f'layer_{layer_idx}/{node}_loss', loss, batch_count)
-                    
-                    # drop 
-                    del layer_results["node_embed"]
-                    del layer_results["node_loss"]
-                    if write_header:
-                        output_file.write(",".join(list(layer_results.keys()))+"\n")
-                        write_header=False
+                if isinstance(prediction_results, dict):
+                    prediction_results["protocol"]="all"
+                    prediction_results=[prediction_results]
+                
+                for pred_res in prediction_results:
+                    scalar_dict={}
+                    for metric in self.metrics:
+                        metric_value=metric(pred_res)
+                        metric_name=f"{pred_res['protocol']}_{metric.__name__}"
+                        if metric_name not in self.results[self.model.model_name][loader.dataset.file_name] or isinstance(self.results[self.model.model_name][loader.dataset.file_name][metric_name], float):
+                            self.results[self.model.model_name][loader.dataset.file_name][metric_name]=[]
+                        self.results[self.model.model_name][loader.dataset.file_name][metric_name].append(metric_value)
+                        scalar_dict[metric.__name__]=metric_value
+
+                    pred_res["score"]=np.nan_to_num(pred_res["score"], nan=0., posinf=0, neginf=0)
+                    writer.add_histogram(f"{pred_res['protocol']}_score", pred_res["score"], batch_count)
                         
-                    output_file.write(",".join(list(map(str, list(layer_results.values()))))+"\n")
-
-                                        
-                for metric in self.metrics:
-                    self.results[self.model.model_name][loader.dataset.file_name][metric.__name__].append(metric(prediction_results))
-
+                    pred_res[f"score"]=np.mean(pred_res[f"score"])
+                    
+                    scalar_dict["score"]=pred_res["score"]
+                    scalar_dict["threshold"]=pred_res["threshold"]
+                    scalar_dict["num_model"]=pred_res["num_model"]
+                    
+                    writer.add_scalars(f"{pred_res['protocol']}", scalar_dict, batch_count)
+                    
+                    #write results to file
+                    if write_header:
+                        output_file.write(",".join(list(pred_res.keys()))+"\n")
+                        write_header=False
+                    output_file.write(",".join(list(map(str, list(pred_res.values()))))+"\n")    
                 
             duration=time.time()-start_time
             
             #record time and count
-            
             self.results[self.model.model_name][loader.dataset.file_name]["time"]=duration
             self.results[self.model.model_name][loader.dataset.file_name]["count"]=count
-            
             
             #plot metrics
             if self.plot:
                 self.plot_scores(self.results[self.model.model_name][loader.dataset.file_name], f"../../datasets/{loader.dataset.dataset_name}/{loader.dataset.fe_name}/plots/{loader.dataset.file_name}/{self.model.model_name}.png")            
             
             # measure average
-            for metric in self.metrics:
-                self.results[self.model.model_name][loader.dataset.file_name][metric.__name__]=np.nanmean(self.results[self.model.model_name][loader.dataset.file_name][metric.__name__])
+            for metric_name, metric_values in self.results[self.model.model_name][loader.dataset.file_name].items():
+                self.results[self.model.model_name][loader.dataset.file_name][metric_name]=np.nanmean(metric_values)
                 
             loader.dataset.reset()
             
@@ -369,14 +382,16 @@ class OnlineODEvaluator(BasePipeline):
         
         for f in self.files:
             dataset=load_dataset(
-                    **f, batch_size=self.batch_size,
+                dataset_name=self.dataset_name,
+                fe_name=self.fe_name,
+                    file_name=f["file_name"], batch_size=self.batch_size,
                     percentage=self.percentage,
                     epochs=self.epochs
                 )
             self.datasets.append(dataset)
 
 
-        self.results_path=Path(f"../../datasets/{self.dataset_name}/results.json")
+        self.results_path=Path(f"../../datasets/{self.dataset_name}/{self.fe_name}/results.json")
         
         if self.results_path.is_file():
             self.results=json.load(open((str(self.results_path))))

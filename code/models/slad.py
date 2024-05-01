@@ -14,24 +14,23 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     def __init__(self, epochs=100, batch_size=128, lr=1e-3,
                  hidden_dims=100, act='LeakyReLU',
                  distribution_size=10, # the member size in a group, c in the paper
-                 n_slad_ensemble=20,
-                 subspace_pool_size=50,
-                 magnify_factor=200,
-                 n_unified_features=128, # dimensionality after transformation, h in the paper
+                 n_slad_ensemble=5,
+                 subspace_pool_size=25,
+                 magnify_factor=100,
+                 n_unified_features=64, # dimensionality after transformation, h in the paper
                  epoch_steps=-1, prt_steps=10, device='cuda',
                  n_features=100, preprocessors=[],
-                 verbose=2, random_state=42):
+                 verbose=2, random_state=42, **kwargs):
         self.device=device
-        preprocessors.append(self.normalize)
-        preprocessors.append(self.to_device)
+
         BaseOnlineODModel.__init__(self,
-            model_name='SLAD', epochs=epochs, batch_size=batch_size, lr=lr,
+            epochs=epochs, batch_size=batch_size, lr=lr,
             epoch_steps=epoch_steps, prt_steps=prt_steps, device=device,
             verbose=verbose, random_state=random_state, n_features=n_features,
-            preprocessors=preprocessors
+            preprocessors=preprocessors, **kwargs
         )
         torch.nn.Module.__init__(self)
-
+        self.device=device
         self.hidden_dims = hidden_dims
         self.act = act
 
@@ -89,13 +88,12 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             ]
             self.subspace_indices_lst.append(subspace_indices)
         
+
     def to_device(self, X):
         return X.to(self.device)
-    
 
     def forward(self, X):
-        X=self.preprocess(X)
-        
+        X=self.preprocess(X)     
         x_new_lst = []
         y_new_lst = []
         
@@ -113,6 +111,8 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         predict_y = self.net(x_new)
         predict_y = predict_y.squeeze(dim=2)
         
+
+        
         return predict_y, y_new
     
     
@@ -128,12 +128,21 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             setattr(self, i, state_dict[i])
             del state_dict[i]
     
+    def get_loss(self, X):
+        predict_y, batch_y=self.forward(X)
+        loss = self.criterion(predict_y, batch_y)
+        loss=torch.mean(loss)
+        return loss
+    
     def process(self,X):
         threshold=self.get_threshold()
         
         self.net.zero_grad()
         predict_y, batch_y=self.forward(X)
         loss = self.criterion(predict_y, batch_y)
+        #average over ensemble
+        loss=loss.view(-1, self.n_slad_ensemble).mean(dim=1)
+        
         scores = loss.clone().detach().cpu().numpy()
 
         loss=torch.mean(loss)
@@ -147,19 +156,25 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     
     def train_step(self, X):
         predict_y, batch_y=self.forward(X)
+        
         loss = self.criterion(predict_y, batch_y)
+        #average over ensemble
+        loss=loss.view(-1, self.n_slad_ensemble).mean(dim=1)
+        
         loss=torch.mean(loss)
         self.net.zero_grad()
         loss.backward()
         self.optimizer.step()
-        return loss.item()
+        return loss.detach().cpu().item()
     
     def predict_scores(self, X):
         predict_y, batch_y=self.forward(X)
-        loss = self.criterion(predict_y, batch_y).detach().cpu().numpy()
-
-        final_s = np.average(loss, axis=0)
-        return final_s
+        loss = self.criterion(predict_y, batch_y)
+        
+        #average over ensemble
+        loss=loss.view(-1, self.n_slad_ensemble).mean(dim=1).detach().cpu().numpy()
+        
+        return loss, self.get_threshold()
 
     
 

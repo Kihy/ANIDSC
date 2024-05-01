@@ -79,8 +79,6 @@ class AfterImage(BaseTrafficFeatureExtractor):
                 self.offset_time = 0
             traffic_vector[-2] -= self.offset_time
 
-
-
             feature = self.update(traffic_vector)
             features_list.append(feature)
             meta_list.append(traffic_vector)

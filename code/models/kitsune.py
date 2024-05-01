@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster, to_tree
 from scipy.stats import norm
-from utils import to_numpy
+
 
 np.seterr(all="ignore")
 from models.base_model import *
@@ -24,9 +24,9 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
     #           For example, [[2,5,3],[4,0,1],[6,7]]
     def __init__(
         self,
-        n=100,
+        n_features=100,
         max_autoencoder_size=10,
-        FM_grace_period=None,
+        FM_grace_period=100,
         AD_grace_period=10000,
         learning_rate=0.1,
         hidden_ratio=0.75,
@@ -36,7 +36,8 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
         preprocessors=[],
         **kwargs
     ):
-        BaseOnlineODModel.__init__(self,preprocessors=preprocessors,**kwargs)
+        BaseOnlineODModel.__init__(self,
+                                   preprocessors=preprocessors,n_features=n_features,**kwargs)
         # Parameters:
         self.AD_grace_period = AD_grace_period
         if FM_grace_period is None:
@@ -50,8 +51,7 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
             self.m = max_autoencoder_size
         self.lr = learning_rate
         self.hr = hidden_ratio
-        self.n = n
-        self.model_name = "KitNET"
+
         # Variables
         self.n_trained = 0  # the number of training instances so far
         self.n_executed = 0  # the number of executed instances so far
@@ -59,7 +59,7 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
         self.ensembleLayer = []
         self.outputLayer = None
         self.quantize = quantize
-        self.preprocessors=preprocessors
+  
         if self.v is None:
             pass
             # print("Feature-Mapper: train-mode, Anomaly-Detector: off-mode")
@@ -67,16 +67,14 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
             self.__createAD__()
             # print("Feature-Mapper: execute-mode, Anomaly-Detector: train-mode")
         # incremental feature cluatering for the feature mapping process
-        self.FM = corClust(self.n)
+        self.FM = corClust(self.n_features)
         
-        self.preprocessors.append(self.normalize)
-        self.preprocessors.append(to_numpy)
+        
 
     # If FM_grace_period+AM_grace_period has passed, then this function executes KitNET on x. Otherwise, this function learns from x.
     # x: a numpy array of length n
     # Note: KitNET automatically performs 0-1 normalization on all attributes.
     def process(self, X):
-        
         threshold=self.get_threshold()
         # if all -1 it means the packet was ignored
         X=self.preprocess(X)
@@ -91,12 +89,15 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
     # alias for execute for it is compatible with tf models, processes in batches
     def predict_scores(self, X):
         X=self.preprocess(X)
-        return np.array([self.execute(i) for i in X])
+        return np.array([self.execute(i) for i in X]), self.get_threshold()
 
+    def to_device(self,X):
+      
+        return X.detach().cpu().numpy()
 
     def train_step(self, X):
         X=self.preprocess(X)
-        return np.array([self.train_single(i) for i in X])
+        return np.array([self.train_single(i) for i in X]).mean()
             
 
     # force train KitNET on x
@@ -129,9 +130,7 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
     # force execute KitNET on x
     def execute(self, x):
         if self.v is None:
-            raise RuntimeError(
-                "KitNET Cannot execute x, because a feature mapping has not yet been learned or provided. Try running process(x) instead."
-            )
+            return self.train_single(x)
         else:
             self.n_executed += 1
             # Ensemble Layer

@@ -1,4 +1,4 @@
-from .base_model import *
+from .base_model import OnlineCDModel,GNNOCDModel, MultiLayerOCDModel
 from .goad import GOAD 
 from .icl import ICL 
 from .kitsune import KitNET
@@ -7,4 +7,5 @@ from .sklearn_models import SklearnOutlierDetector
 from .slad import SLAD
 from .rrcf import RRCF
 from .arcus import ARCUS
-from .gnnids import HomoGNNIDS, HeteroGNNIDS,MultiLayerGNNIDS
+from .gnnids import HomoGNN, GCNNodeEncoder
+from .autoencoder import AE, VAE

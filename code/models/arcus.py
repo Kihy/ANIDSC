@@ -222,7 +222,7 @@ class ARCUS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
                  n_features=100, preprocessors=[],
                  **kwargs):
         self.device=device
-        preprocessors.append(self.normalize)
+        preprocessors.append(self.standardize)
         preprocessors.append(self.to_device)
         BaseOnlineODModel.__init__(self,
             model_name='ARCUS', n_features=n_features,

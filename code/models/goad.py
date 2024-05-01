@@ -11,20 +11,19 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     Classification-Based Anomaly Detection for General Data (ICLR'20)
     """
     def __init__(self, epochs=100, batch_size=64, lr=1e-3,
-                 n_trans=128, trans_dim=16,
+                 n_trans=64, trans_dim=16,
                  alpha=0.1, margin=1., eps=0,
                  kernel_size=1, hidden_dim=8, n_layers=5,
                  act='LeakyReLU', bias=False,
                  epoch_steps=-1, prt_steps=10, device='cuda',
                  n_features=100, preprocessors=[],
-                 verbose=2, random_state=42):
+                 verbose=2, random_state=42, **kwargs):
         self.device=device
-        preprocessors.append(self.normalize)
-        preprocessors.append(self.to_device)
+        
         BaseOnlineODModel.__init__(self,
-            model_name='GOAD', epochs=epochs, batch_size=batch_size, lr=lr,
+            epochs=epochs, batch_size=batch_size, lr=lr,n_features=n_features,
             epoch_steps=epoch_steps, prt_steps=prt_steps, device=device,preprocessors=preprocessors,
-            verbose=verbose, random_state=random_state
+            verbose=verbose, random_state=random_state,**kwargs
         )
         torch.nn.Module.__init__(self)
         
@@ -42,7 +41,6 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         self.act = act
         self.bias = bias
         self.device=device
-        self.n_features=n_features
 
         self.affine_weights = torch.from_numpy(np.random.randn(self.n_trans, self.n_features, self.trans_dim)).float().to(self.device)
         self.net = GoadNet(
@@ -61,16 +59,14 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
                                             weight_decay=1e-5)      
         
         
-        self.preprocessors=preprocessors
+        self.preprocessors=list(preprocessors)
         
-        self.preprocessors.append(self.goad_transforms)
+        self.preprocessors.append("goad_transforms")
         
         self.rep_means=None
         self.nb=0
         self.train()
         
-        
-    
     def to_device(self, X):
         return X.to(self.device)
     
@@ -88,10 +84,17 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         
         return batch_rep, batch_pred, labels
     
-    def train_step(self, X):
+    
+    def get_loss(self, X):
         batch_rep, batch_pred, labels=self.forward(X)
-        loss = self.criterion(batch_rep, batch_pred, labels)
+        loss = self.criterion(batch_rep, batch_pred, labels).mean()
+        return loss
+    
+    def train_step(self, X):
         self.net.zero_grad()
+        batch_rep, batch_pred, labels=self.forward(X)
+        loss = self.criterion(batch_rep, batch_pred, labels).mean()
+
         loss.backward()
         self.optimizer.step()
         return loss.item()
@@ -106,7 +109,7 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         s = -torch.diagonal(logp_sz, 0, 1, 2)
         s = s.sum(1)
         
-        return s.detach().cpu().numpy()
+        return s.detach().cpu().numpy(), self.get_threshold()
 
 
     def state_dict(self):
@@ -142,7 +145,7 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         loss.backward()
         self.optimizer.step()
         
-        self.score_hist.extend(scores)
+        self.loss_queue.extend(scores)
 
         return scores, threshold
 
@@ -166,16 +169,6 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     
     def on_train_end(self):
         self.eval()
-
-
-
-    def predict_labels(self, X):
-        if self.threshold is None:
-            raise ValueError(
-                "predict_labels only works after threshold is calculated. Call calc_threshold() first"
-            )
-        label = self.predict_scores(X) > self.threshold
-        return label
 
 
 
@@ -210,7 +203,7 @@ class GoadNet(torch.nn.Module):
 class GoadLoss(torch.nn.Module):
     def __init__(self, alpha=0.1, margin=1., device='cuda'):
         super(GoadLoss, self).__init__()
-        self.ce_criterion = torch.nn.CrossEntropyLoss()
+        self.ce_criterion = torch.nn.CrossEntropyLoss(reduction='none')
         self.alpha = alpha
         self.margin = margin
         self.device = device

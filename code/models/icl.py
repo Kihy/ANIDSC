@@ -14,14 +14,12 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     
     def __init__(self, epochs=100, batch_size=64, lr=1e-3, n_ensemble='auto',
                  rep_dim=128, hidden_dims='100,50', act='LeakyReLU', bias=False,
-                 kernel_size='auto', temperature=0.01, max_negatives=1000,
-                 epoch_steps=-1, prt_steps=10, device='cuda',n_features=100, preprocessors=[],
+                 kernel_size='auto', temperature=0.01, max_negatives=1000,n_features=100,
+                 epoch_steps=-1, prt_steps=10, device='cuda', preprocessors=[],
                  verbose=2, random_state=42, **kwargs):
         self.device=device
-        preprocessors.append(self.normalize)
-        preprocessors.append(self.to_device)
         BaseOnlineODModel.__init__(self,
-            model_name='ICL', epochs=epochs, batch_size=batch_size,
+            epochs=epochs, batch_size=batch_size,n_features=n_features,
             lr=lr, n_ensemble=n_ensemble,preprocessors=preprocessors,
             epoch_steps=epoch_steps, prt_steps=prt_steps, device=device,
             verbose=verbose, random_state=random_state, **kwargs
@@ -36,7 +34,7 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         self.kernel_size = kernel_size
         self.tau = temperature
         self.max_negatives = max_negatives
-        self.n_features=n_features
+
         
 
         if self.kernel_size == 'auto':
@@ -75,7 +73,6 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     
     def forward(self, X):
         X = self.preprocess(X)
-        X = X.float().to(self.device)
         positives, query = self.net(X)
         logit = self.cal_logit(query, positives)
         logit = logit.permute(0, 2, 1)
@@ -84,14 +81,18 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
                                     dtype=torch.long).to(self.device)
         return logit, correct_class
 
-    def train_step(self, X):
+    def get_loss(self, X):
         logit, correct_class=self.forward(X)
         loss = self.criterion(logit, correct_class)
         loss=torch.mean(loss)
+        return loss
+
+    def train_step(self, X):
+        loss=self.get_loss(X)
         self.net.zero_grad()
         loss.backward()
         self.optimizer.step()
-        return loss.item()
+        return loss.detach().cpu().item()
 
     def process(self,X):
         threshold=self.get_threshold()
@@ -116,7 +117,6 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         return state
     
     def load_state_dict(self, state_dict):
-
         for i in self.additional_params:
             setattr(self, i, state_dict[i])
             del state_dict[i]
@@ -125,8 +125,8 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     def predict_scores(self, X):
         logit, correct_class=self.forward(X)
         loss = self.criterion(logit, correct_class)
-        
-        return loss.mean(dim=1).detach().cpu().numpy()
+
+        return loss.mean(dim=1).detach().cpu().numpy(), self.get_threshold()
 
     def cal_logit(self, query, pos):
         n_pos = query.shape[1]

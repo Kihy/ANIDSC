@@ -28,6 +28,6 @@ def extract_network_features(dataset_name, fe_name, fe_config):
     {"dataset_name":dataset_name, "file_name":"malicious/Host_Discovery_10"}>>f
 
 if __name__=="__main__":
-    # extract_network_features("UQ_IoT_IDS21","AfterImageGraph",{"graph_type":"multi_layer"})
+    extract_network_features("UQ_IoT_IDS21","AfterImageGraph",{"graph_type":"multi_layer"})
     # get_node_map("AfterImageGraph_homo","UQ_IoT_IDS21")
-    synthetic_features("FakeGraphData","SyntheticFeatureExtractor")
+    # synthetic_features("FakeGraphData","SyntheticFeatureExtractor")

@@ -3,7 +3,7 @@ from scipy import stats
 
 
 def detection_rate(result_dict):
-    return np.mean(result_dict["scores"]> result_dict["threshold"])
+    return np.mean(result_dict["score"]> result_dict["threshold"])
 
 def average_metric(result_name):
     def metric(result_dict):
