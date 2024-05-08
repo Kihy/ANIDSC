@@ -25,12 +25,13 @@ class VAE(BaseOnlineODModel, torch.nn.Module, TorchSaveMixin):
         
         self.mse=torch.nn.MSELoss(reduction='none').to(self.device)
         self.kl_div=torch.nn.KLDivLoss(reduction='none').to(self.device)
-    
+        self.optimizer= torch.optim.Adam(self.parameters())
     def to_device(self,X):
         return X.to(self.device)
     
     def reparameterize(self, mu, logvar):
         std=torch.exp(0.5*logvar)
+        
         eps=torch.rand_like(std)
         return eps*std+mu 
     
@@ -39,6 +40,7 @@ class VAE(BaseOnlineODModel, torch.nn.Module, TorchSaveMixin):
         encoded = self.encoder(x)
         mu=self.fc_mu(encoded)
         logvar=self.fc_logvar(encoded)
+        logvar=torch.clip(logvar, max=10.)
         z=self.reparameterize(mu, logvar)
         decoded = self.decoder(z)
         return x, decoded, mu, logvar
@@ -51,7 +53,7 @@ class VAE(BaseOnlineODModel, torch.nn.Module, TorchSaveMixin):
         return loss
     
     def train_step(self, X):
-        self.net.zero_grad()
+        self.optimizer.zero_grad()
         loss=self.get_loss(X)
         loss.backward()
         self.optimizer.step()
@@ -59,10 +61,15 @@ class VAE(BaseOnlineODModel, torch.nn.Module, TorchSaveMixin):
 
     def process(self,x):        
         score, threshold=self.predict_scores(x)
-        self.score_hist.extend(score)
+        self.loss_queue.extend(score)
+        self.update_scaler(x)
         self.train_step(x)
         
-        return score, threshold
+        return {
+            "threshold": threshold,
+            "score": score,
+            "batch_num":self.num_batch
+        }
     
     def predict_scores(self, x):
         x, recon, mu, logvar=self.forward(x)
@@ -91,6 +98,8 @@ class AE(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         ).to(self.device)
         
         self.criterion=torch.nn.MSELoss(reduction='none').to(self.device)
+        
+        self.optimizer=torch.optim.Adam(params=self.parameters())
     
     def to_device(self,X):
         return X.to(self.device)
@@ -108,7 +117,7 @@ class AE(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         return loss
     
     def train_step(self, X):
-        self.net.zero_grad()
+        self.optimizer.zero_grad()
         loss=self.get_loss(X)
         loss.backward()
         self.optimizer.step()
@@ -116,10 +125,16 @@ class AE(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
 
     def process(self,x):        
         score, threshold=self.predict_scores(x)
-        self.score_hist.extend(score)
+        self.loss_queue.extend(score)
+        self.update_scaler(x)
         self.train_step(x)
-        
-        return score, threshold
+
+
+        return {
+            "threshold": threshold,
+            "score": score,
+            "batch_num":self.num_batch
+        }
     
     def predict_scores(self, x):
         x, recon=self.forward(x)

@@ -589,25 +589,11 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
             self.G.edge_index=torch.hstack([self.G.edge_index, new_edges]).long()
             
             self.G.edge_attr=torch.vstack([self.G.edge_attr, edge_feature[~existing_edge_idx]])
-
-    
-    def visualize_graph(self, dataset_name, fe_name, file_name):
-        
-        fig, ax = plt.subplots(figsize=(8, 5))
-        
-        node_map=get_node_map(fe_name, dataset_name)
-        node_map={v:k for k,v in node_map.items()}
-        
-        self.draw_graph(self, fig, ax, node_map)
-        
-        fig.tight_layout()
-        path=Path(f"../../datasets/{dataset_name}/{fe_name}/graph_plots/{file_name}/{self.model_name}_{self.processed}.png")
-        path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, format='png')
-        # Close the figure to release resources
-        plt.close(fig)
         
     def visualize_graph(self, fig, ax, node_map):
+        if self.G.x.numel() ==0:
+            ax.text(0,0,"empty Graph")
+            return
         
         G = to_networkx(self.G, node_attrs=["node_as","idx"],
                      to_undirected=False, to_multi=True)
@@ -616,7 +602,6 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
         idx_node_map={i:n for i, n in enumerate(self.G.idx.long().cpu().numpy())}
         node_idx_map={v:k for k,v in idx_node_map.items()}
 
-        
         subset=[node_idx_map[i] for i in self.subset]
         
         node_as=np.array(list(nx.get_node_attributes(G, "node_as").values()))
@@ -625,7 +610,6 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
 
         node_sm = ScalarMappable(norm=Normalize(vmin=np.min(node_as),  vmax=np.max(node_as)), cmap=plt.cm.winter)
         
-
         # Visualize the graph using NetworkX
         pos = nx.shell_layout(G)  # Layout algorithm for positioning nodes 
 

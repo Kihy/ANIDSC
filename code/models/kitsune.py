@@ -81,11 +81,15 @@ class KitNET(BaseOnlineODModel, PickleSaveMixin):
         scores=[]
         for i in X:
             score=self.train_single(i)
-            self.score_hist.append(score)
+            self.update_scaler(i)
+            self.loss_queue.append(score)
             scores.append(score)
         scores=np.array(scores)
-        return scores, threshold
-
+        return {
+            "threshold": threshold,
+            "score": scores,
+            "batch_num":self.num_batch
+        }
     # alias for execute for it is compatible with tf models, processes in batches
     def predict_scores(self, X):
         X=self.preprocess(X)

@@ -154,7 +154,7 @@ class OutlierDetectionEvaluator(BasePipeline):
             
         fig, ax = plt.subplots(figsize=(6, 4))
         
-        ax.scatter(range(len(scores)), scores, s=5)
+        ax.plot(scores, s=5)
         ax.axhline(threshold)
         ax.set_yscale('symlog', linthresh=2*threshold)
         idx=save_path.parts.index("plots")
@@ -227,6 +227,7 @@ class OnlineODEvaluator(BasePipeline):
         plot=True,
         percentage=[0,1],
         epochs=1,
+        write_to_tensorboard=True,
         **kwargs,
     ):
         
@@ -239,6 +240,7 @@ class OnlineODEvaluator(BasePipeline):
         self.plot=plot
         self.percentage=percentage
         self.epochs=epochs
+        self.write_to_tensorboard=write_to_tensorboard
     
     def plot_scores(self, scores, save_path):
         save_path=Path(save_path)
@@ -274,16 +276,13 @@ class OnlineODEvaluator(BasePipeline):
     def process(self):
         for loader in self.datasets:
             
-            #create tensorboard 
-            writer = SummaryWriter(log_dir=f"runs/{self.model.model_name}/{self.dataset_name}/{self.fe_name}/{loader.dataset.file_name}")
+            if self.write_to_tensorboard:
+                #create tensorboard 
+                writer = SummaryWriter(log_dir=f"runs/{self.model.model_name}/{self.dataset_name}/{self.fe_name}/{loader.dataset.file_name}")
             
             #initialize file
-            if loader.dataset.file_name not in self.results[self.model.model_name]:
-                self.results[self.model.model_name][loader.dataset.file_name]={}
             
-            # create list to store scores
-            for metric in self.metrics:
-                self.results[self.model.model_name][loader.dataset.file_name][metric.__name__]=[]
+            self.results[self.model.model_name][loader.dataset.file_name]={}
                 
             # file to store outputs
             scores_and_thresholds_path=Path(f"../../datasets/{self.dataset_name}/{self.fe_name}/outputs/{loader.dataset.file_name}/{self.model.model_name}.csv")
@@ -332,21 +331,26 @@ class OnlineODEvaluator(BasePipeline):
                     for metric in self.metrics:
                         metric_value=metric(pred_res)
                         metric_name=f"{pred_res['protocol']}_{metric.__name__}"
-                        if metric_name not in self.results[self.model.model_name][loader.dataset.file_name] or isinstance(self.results[self.model.model_name][loader.dataset.file_name][metric_name], float):
+                        if metric_name not in self.results[self.model.model_name][loader.dataset.file_name]:
                             self.results[self.model.model_name][loader.dataset.file_name][metric_name]=[]
                         self.results[self.model.model_name][loader.dataset.file_name][metric_name].append(metric_value)
-                        scalar_dict[metric.__name__]=metric_value
+                        
+                        if self.write_to_tensorboard:
+                            scalar_dict[metric.__name__]=metric_value
 
                     pred_res["score"]=np.nan_to_num(pred_res["score"], nan=0., posinf=0, neginf=0)
-                    writer.add_histogram(f"{pred_res['protocol']}_score", pred_res["score"], batch_count)
+                    pred_res["threshold"]=np.nan_to_num(pred_res["threshold"], nan=0., posinf=0, neginf=0)
+                    if self.write_to_tensorboard:
+                        writer.add_histogram(f"{pred_res['protocol']}_score", pred_res["score"], batch_count)
                         
-                    pred_res[f"score"]=np.mean(pred_res[f"score"])
+                    pred_res[f"score"]=np.median(pred_res[f"score"])
+                    pred_res[f"threshold"]=np.median(pred_res[f"threshold"])
                     
-                    scalar_dict["score"]=pred_res["score"]
-                    scalar_dict["threshold"]=pred_res["threshold"]
-                    scalar_dict["num_model"]=pred_res["num_model"]
-                    
-                    writer.add_scalars(f"{pred_res['protocol']}", scalar_dict, batch_count)
+                    if self.write_to_tensorboard:
+                        scalar_dict["score"]=pred_res["score"]
+                        scalar_dict["threshold"]=pred_res["threshold"]
+                        scalar_dict["num_model"]=pred_res.get("num_model",1)
+                        writer.add_scalars(f"{pred_res['protocol']}", scalar_dict, batch_count)
                     
                     #write results to file
                     if write_header:
@@ -377,7 +381,7 @@ class OnlineODEvaluator(BasePipeline):
     def save_model(self):
         self.model.save(self.dataset_name)        
     
-    def setup_dataset(self):
+    def setup(self):
         self.datasets = []
         
         for f in self.files:
@@ -394,12 +398,14 @@ class OnlineODEvaluator(BasePipeline):
         self.results_path=Path(f"../../datasets/{self.dataset_name}/{self.fe_name}/results.json")
         
         if self.results_path.is_file():
-            self.results=json.load(open((str(self.results_path))))
-            if self.model.model_name not in self.results.keys():
-                self.results[self.model.model_name]={}
+            with open((str(self.results_path))) as f:
+                self.results=json.load(open((str(self.results_path))))
+                if self.model.model_name not in self.results.keys():
+                    self.results[self.model.model_name]={}
         else:
             self.results_path.parent.mkdir(parents=True, exist_ok=True)
             self.results={self.model.model_name:{}}
         
-        
+    def teardown(self):
+        pass
         

@@ -75,7 +75,9 @@ def NAP(H):
     U = torch.mean(D, dim=0)  # (d1 + d2 + ...)
     
     D_bar = D - U  # N X (d1 + d2 + ...)
-    u, s, v = torch.linalg.svd(D_bar,full_matrices=False)
+        
+
+    u, s, v = torch.linalg.svd(D_bar,full_matrices=False, driver="gesvd")
     s = torch.where(s == 0, torch.ones_like(s), s)
     
     # When N < (d1+d2+..) tensorflow gives v of shape [(d1+d2+..), N] while torch gives [N, (d1+d2+..)] 
@@ -222,10 +224,10 @@ class ARCUS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
                  n_features=100, preprocessors=[],
                  **kwargs):
         self.device=device
-        preprocessors.append(self.standardize)
-        preprocessors.append(self.to_device)
+        preprocessors.append("standardize")
+        preprocessors.append("to_device")
         BaseOnlineODModel.__init__(self,
-            model_name='ARCUS', n_features=n_features,
+            n_features=n_features,
             preprocessors=preprocessors, **kwargs
         )
         torch.nn.Module.__init__(self)
@@ -382,8 +384,7 @@ class ARCUS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             weighted_scores.append(self._standardize_scores(scores[idx]) * weight)
         final_scores = np.sum(weighted_scores, axis=0)
         
-        
-        self.score_hist.extend(final_scores)
+        self.loss_queue.extend(final_scores)
         
         #drift detection
         pool_reliability = 1-np.prod([1-p for p in model_reliabilities])
@@ -393,6 +394,7 @@ class ARCUS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         else:
             drift = False
         
+        self.update_scaler(x)
  
         if drift:
             #Create new model
@@ -407,7 +409,11 @@ class ARCUS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             self._train_model(curr_model, x, self._intm_epoch)
             
         self.steps+=1
-        return final_scores, threshold
+        return {
+            "threshold": threshold,
+            "score": final_scores,
+            "batch_num":self.num_batch
+        }
     
     
     def to_device(self, X):

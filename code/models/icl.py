@@ -95,19 +95,19 @@ class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         return loss.detach().cpu().item()
 
     def process(self,X):
-        threshold=self.get_threshold()
-        self.net.zero_grad()
+        scores, threshold=self.predict_scores(X)
         
-        predict_y, batch_y=self.forward(X)
-        loss = self.criterion(predict_y, batch_y)
-        scores = loss.clone().mean(dim=1).detach().cpu().numpy()
-        loss=torch.mean(loss)
-
-        loss.backward()
-        self.optimizer.step()    
+        self.update_scaler(X)
         
-        self.score_hist.extend(scores)
-        return scores, threshold
+        # update
+        self.train_step(X)
+        
+        self.loss_queue.extend(scores)
+        return {
+            "threshold": threshold,
+            "score": scores,
+            "batch_num":self.num_batch
+        }
 
 
     def state_dict(self):

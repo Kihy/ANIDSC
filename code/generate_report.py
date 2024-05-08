@@ -16,16 +16,16 @@ def get_results(dataset_name):
     with open(str(results_path)) as f:
         results=json.load(f)
     
-    records=[]
-    for model, contents in results.items():
-        dr_dict=defaultdict(list)
-        for file, metrics in contents.items():
-            name=file.split("/")[-1]
-            dr_dict[name].append(metrics["detection_rate"])
-        
-        records.append([model]+[np.mean(v) for k, v in sorted(dr_dict.items())])
+    records=pd.DataFrame.from_dict({(i,j): results[i][j]
+                           for i in results.keys() 
+                           for j in results[i].keys()},
+                       orient='index')
     
-    records=pd.DataFrame(records,columns=["Model"]+[k for k, v in sorted(dr_dict.items())])
+    records=records.reset_index()
+    records=records.replace("benign/whole_week","benign/all_device/whole_week")
+    records=records.rename(columns={"level_0":"model","level_1":"file"})
+
+    records[["label","device","name"]]=records["file"].str.split("/", expand=True)
     print(records.to_csv())
 
 
@@ -50,36 +50,57 @@ def plot_concept_drift(dataset_name, fe_name, file_name, model_name):
     results_file=Path(f"../../datasets/{dataset_name}/{fe_name}/outputs/{file_name}/{model_name}.csv")
     df=pd.read_csv(str(results_file))
     
+    df["relative_batch_num"]=df["batch_num"]-df.iloc[0]["batch_num"]
     
+    x_str="relative_batch_num"
     
-    df["model_idx"]=df["model_idx"].astype('string')
+    if "model_idx" not in df:
+        df["model_idx"]=1
+        
+    df["model_idx"]=df["model_idx"].astype(str)
+    
+    df=df.melt(id_vars=[x_str,"protocol","model_idx"], value_vars=["score","threshold"])
+
     g = sns.relplot(
     data=df,
-    x="index",
-    y="score",
-    s=3,
-    hue="model_idx",
+    kind="line",
+    x=x_str,
+    y="value",
+    hue="variable",
     col="protocol",
-    # hue=f"drift_level",
-    edgecolor=None,
+    row="model_idx",
+    aspect=3,
+    errorbar=None,
+    height=3,
+    # facet_kws=dict(legend_out=False)
     )
-    for i, protocol in enumerate(["UDP","TCP","ARP","ICMP","Other"]):
-        g.axes[0,i].scatter(x=df[df["protocol"]==protocol]["index"], y=df[df["protocol"]==protocol]["threshold"], s=1)
- 
-    # g.axes[0,0].scatter(x=df["index"], y=df["threshold"], s=3)
+
     
+    # g.set(xlim=(0, 4000), ylim=(1,10000)) 
+    g.set_titles("")
+    g.set_ylabels("Anomaly Score")
+    g.set_xlabels("Batch Number")
+    g._legend.set_title("")
+    sns.move_legend(g, "upper center", bbox_to_anchor=(.5, .9))
+
+    if "ARCUS" not in model_name:
+        for ax in g.axes.flat:
+            ax.set_yscale('log')
+             
     g.tight_layout()
-    # g.set(yscale="log")
-    
-    fig_path=f"../../datasets/{dataset_name}/{fe_name}/plots/{file_name}/{model_name}_drift.png"
+    fig_path=f"../../datasets/{dataset_name}/{fe_name}/plots/{file_name}/{model_name}_drift.pdf"
     g.savefig(fig_path)
     print(f"concept drift plot saved at {fig_path}")
     plt.close()
 
 if __name__=="__main__":
     # get_results("UQ_IoT_IDS21/AfterImage")
-    # compare_spikes("UQ_IoT_IDS21", "AfterImage", "benign/whole_week", "OnlineCDModel-ICL-100-50")
-    plot_concept_drift("UQ_IoT_IDS21", "AfterImageGraph_multi_layer", "benign/whole_week", "MultiLayerOCDModel-100-50-GCNNodeEncoder-gaussian-VAE")
+    get_results("UQ_IoT_IDS21/AfterImageGraph_multi_layer")
+    # compare_spikes("UQ_IoT_IDS21", "AfterImage", "benign/whole_week", "AE")
+    # plot_concept_drift("UQ_IoT_IDS21", "AfterImage", "benign/whole_week", "AE")
+    # plot_concept_drift("UQ_IoT_IDS21", "AfterImage", "malicious/Smart_TV/ACK_Flooding", "AE")
+    # plot_concept_drift("UQ_IoT_IDS21", "AfterImageGraph_multi_layer", "benign/whole_week", "MultiLayerOCDModel-100-50-GCNNodeEncoder-gaussian-AE")
+
     # plot_concept_drift("UQ_IoT_IDS21", "AfterImageGraph_multi_layer", "malicious/Smart_TV/ACK_Flooding", "MultiLayerGNNIDS-gaussian")
     # plot_concept_drift("FakeGraphData", "SyntheticFeatureExtractor", "benign/mean_std_drift_4", "MultiLayerGNNIDS")
     

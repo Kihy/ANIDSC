@@ -19,15 +19,20 @@ class BasePipeline(ABC, LazyInitializationMixin):
         self.entry = self.run_pipeline
     
     @abstractmethod
-    def setup_dataset(self):
+    def setup(self):
+        pass
+    
+    @abstractmethod
+    def teardown(self):
         pass
     
     def run_pipeline(self):
-        self.setup_dataset()
+        self.setup()
         results = {}
         for step in self.steps:
             func = getattr(self, step)
             results[step] = func()
+        self.teardown()
         return results
     
     def metric_names(self):

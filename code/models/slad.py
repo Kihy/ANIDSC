@@ -135,23 +135,19 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         return loss
     
     def process(self,X):
-        threshold=self.get_threshold()
+        scores, threshold=self.predict_scores(X)
         
-        self.net.zero_grad()
-        predict_y, batch_y=self.forward(X)
-        loss = self.criterion(predict_y, batch_y)
-        #average over ensemble
-        loss=loss.view(-1, self.n_slad_ensemble).mean(dim=1)
+        self.update_scaler(X)
         
-        scores = loss.clone().detach().cpu().numpy()
-
-        loss=torch.mean(loss)
-
-        loss.backward()
-        self.optimizer.step()        
+        # update
+        self.train_step(X)
         
-        self.score_hist.extend(scores)
-        return scores, threshold
+        self.loss_queue.extend(scores)
+        return {
+            "threshold": threshold,
+            "score": scores,
+            "batch_num":self.num_batch
+        }
         
     
     def train_step(self, X):

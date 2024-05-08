@@ -89,7 +89,7 @@ def is_stable(x, p=0.95, return_quantile=False):
         quantile=0.
     else:
         quantile=calc_quantile(x, p)
-        stability=(np.array(x)<quantile).all()
+        stability=np.mean(np.array(x)<quantile)<p
         
     if return_quantile:
         return stability, quantile

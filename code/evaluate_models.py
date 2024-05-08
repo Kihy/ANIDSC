@@ -2,9 +2,8 @@ from datasets.custom_dataset import *
 from generate_report import plot_concept_drift
 from pipelines.od_pipelines import *
 from metrics.od_metrics import *
-
+import argparse
 import models
-
 
 def train_models(fe_name, dataset_name, model_dict, file_name, metrics, batch_size):
     train_file = [
@@ -23,7 +22,7 @@ def train_models(fe_name, dataset_name, model_dict, file_name, metrics, batch_si
         steps=["process", "save_model"],
     )
 
-
+    torch.cuda.empty_cache()
     model = getattr(models, model_dict["cls"])(**model_dict["conf"])
     {"model": model} >> trainer
 
@@ -50,21 +49,30 @@ def evaluate_uq_models(
                 files=test_file,
                 metrics=metrics,
                 steps=["process"],
+                write_to_tensorboard=False
             )
 
             # eval models
             
-
-            model = load_model(dataset_name, model_dict["cls"], model_dict["config"])
+            torch.cuda.empty_cache()
+            model = load_model(dataset_name, model_dict["cls"], model_dict["conf"])
 
             {"model": model} >> evaluator
-
-            plot_concept_drift(
-                dataset_name, fe_name, test_file[0]["file_name"], model.model_name
-            )
+            
+            # plot_concept_drift(
+            #     dataset_name, fe_name, test_file[0]["file_name"], model.model_name
+            # )
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Train and evaluate models')
+    parser.add_argument('model_idx', metavar='N', type=int,
+                        help='index of model')
+    parser.add_argument('--graph_based',action=argparse.BooleanOptionalAction,
+                        help='whether to use graph based features')
+   
+    args = parser.parse_args()
+
     devices = [
         "Smart_TV",
         "Raspberry_Pi_telnet",
@@ -76,6 +84,7 @@ if __name__ == "__main__":
     ]  # ,
     dataset_name = "UQ_IoT_IDS21"
     fe_name = "AfterImageGraph_multi_layer"
+    # fe_name = "AfterImage"
     file_name = "benign/whole_week"
 
     # fe_name="SyntheticFeatureExtractor"
@@ -91,9 +100,16 @@ if __name__ == "__main__":
     ]  #
 
     batch_size = 256
+    
+    
     base_configs = {"n": 10000,
+                    "n_features":100,
                     "device":"cuda",
                     "preprocessors":["to_device"]}
+    
+    if not args.graph_based:
+        base_configs["preprocessors"].insert(0,"standardize")
+    
     model_list = [
         ("AE", "AE", base_configs, "pth"),
         ("VAE", "VAE", base_configs, "pth"),
@@ -101,24 +117,18 @@ if __name__ == "__main__":
         ("SLAD","SLAD", base_configs, "pth"),
         ("GOAD", "GOAD", base_configs, "pth"),
         ("KitNET", "KitNET", base_configs, "pkl"),
-
-        # ("RRCF", base_configs,"dict"),
-        # ("ARCUS",base_configs.update({"seed" :10,
-        # "_model_type" :"RAPP",
-        # "_inf_type" :"ADP",
-        # "_batch_size" :256,
-        # "_min_batch_size":32,
-        # "_init_epoch" :5,
-        # "_intm_epoch" :1,
-        # "hidden_dim":24,
-        # "layer_num":3,
-        # "learning_rate":1e-4,
-        # "_reliability_thred" :0.95,
-        # "_similarity_thred" :0.80}), "pth"),
-        # ("HomoGNNIDS",{},"pth")
-        # ("MultiLayerGNNIDS", {"use_edge_attr":True, "l_features":15,
-        #                       "embedding_dist":"gaussian",
-        #                      "node_latent_dim":16},"ensemble")
+        ("ARCUS", "ARCUS", dict(base_configs, **{"seed" :10,
+        "_model_type" :"RAPP",
+        "_inf_type" :"ADP",
+        "_batch_size" :256,
+        "_min_batch_size":32,
+        "_init_epoch" :5,
+        "_intm_epoch" :1,
+        "hidden_dim":24,
+        "layer_num":3,
+        "learning_rate":1e-4,
+        "_reliability_thred" :0.95,
+        "_similarity_thred" :0.80}), "pth")
     ]
 
     gnn_kwargs = {
@@ -129,12 +139,16 @@ if __name__ == "__main__":
         "node_latent_dim": 15,
         "save_type":"pth"
     }
-    patience = 100
+    patience = 1000
     confidence = 50
     metrics = [detection_rate]
-    for name, cls, conf, save_type in model_list:
-        conf["model_name"] = name
-        conf["save_type"] = save_type
+
+    
+    name, cls, conf, save_type = model_list[args.model_idx]
+    conf["model_name"] = name
+    conf["save_type"] = save_type
+    
+    if args.graph_based:
         model_dict = {
                 "cls":"MultiLayerOCDModel",
                 "conf":{
@@ -156,21 +170,23 @@ if __name__ == "__main__":
                         "patience": patience,
                         "confidence": confidence,
                     }
-                    
-                
                 }
                 }
-                
-            
-
+        
         conf["n_features"] = gnn_kwargs["node_latent_dim"]
+    else:
+        model_dict = {
+                "cls": cls,
+                "conf": conf
+            }
         
-        # torch.autograd.set_detect_anomaly(True)
-        train_models(fe_name, dataset_name, model_dict, file_name, metrics, batch_size)
-        torch.cuda.empty_cache()
-        
-        evaluate_uq_models(
-            devices, fe_name, attacks, model_dict, dataset_name, metrics, batch_size
-        )
-        
-        # torch.cuda.empty_cache()
+    
+    # torch.autograd.set_detect_anomaly(True)
+    train_models(fe_name, dataset_name, model_dict, file_name, metrics, batch_size)
+    
+    
+    evaluate_uq_models(
+        devices, fe_name, attacks, model_dict, dataset_name, metrics, batch_size
+    )
+    
+    

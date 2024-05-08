@@ -9,10 +9,12 @@ from utils import *
 import matplotlib.pyplot as plt
 
 
-def load_model(dataset_id, model_cls, model_config, indent=""):
+def load_model(dataset_id, model_cls, model_config, indent="", verbose=False):
     save_type = model_config["save_type"]
     model_name = model_config["model_name"]
-    print(f"{indent}loading {model_name}")
+    
+    if verbose:
+        print(f"{indent}loading {model_name}")
     if save_type == "ensemble":
         with open(f"../../models/{dataset_id}/{model_name}.pkl", "rb") as f:
             model = pickle.load(f)
@@ -200,12 +202,20 @@ class GNNOCDModel(torch.nn.Module, MixtureSaveMixin):
 
         self.save_modules = ["od", "gnn"]
         self.save_module_names = [od_conf["model_name"], gnn_conf["model_name"]]
-
-        # add od attributes
-        include_attrs = ["converged", "loss_queue"]
-        for i in include_attrs:
-            setattr(self, i, getattr(self.od, i))
-
+            
+    @property
+    def num_batch(self):
+        return self.od.num_batch
+    
+    @property
+    def converged(self):
+        return self.od.converged
+    @property
+    def loss_queue(self):
+        return self.od.loss_queue
+    
+    
+    
     def state_dict(self):
         return {"save_module_names": self.save_module_names}
 
@@ -232,12 +242,9 @@ class GNNOCDModel(torch.nn.Module, MixtureSaveMixin):
 
     def update_scaler(self, data):
         x, edge_index, edge_attr = data
-        node_embed = self.gnn(x, edge_index, edge_attr)
-
         self.gnn.node_stats.add(x)
         self.gnn.edge_stats.add(edge_attr)
-        self.od.update_scaler(node_embed.clone().detach())
-
+        
 
 class MultiLayerOCDModel(EnsembleSaveMixin):
     def __init__(
@@ -278,6 +285,7 @@ class MultiLayerOCDModel(EnsembleSaveMixin):
                     model.draw_graph = True
 
                     results["protocol"] = model.protocol
+                    results["batch_num"] = self.batch_num
 
                     all_results.append(results)
 
@@ -341,7 +349,7 @@ class OnlineCDModel(EnsembleSaveMixin):
         self.base_model_cls = base_model_cls
         self.base_model_config = base_model_config
         self.model_idx = 0
-
+        self.max_model_pool_size=20
         self.model_pool = []
         self.model_names = []
         self.model_pool.append(self.create_model())
@@ -358,108 +366,119 @@ class OnlineCDModel(EnsembleSaveMixin):
             f"{self.model_name}/{self.base_model_name}/{len(self.model_pool)}"
         )
         self.model_names.append(model_config["model_name"])
+        
         return getattr(models, self.base_model_cls)(**model_config)
 
-    def no_cd(self, score):
-        # add average AS to queue
-        self.loss_queue.append(np.mean(score))
-        # empty potential queue
-        self.clear_potential_queue()
-
-    def cd(self, score, x):
-        self.potential_queue.append(np.mean(score))
-        self.potential_x_queue.append(x)
-
+    def cd(self, score, threshold, x):
+        if np.median(score)>threshold:
+            self.potential_queue.append(np.median(score))
+            self.potential_x_queue.append(x)
+                   
+        else:
+            self.loss_queue.append(np.median(score))
+        
     def clear_potential_queue(self):
         self.potential_queue.clear()
         self.potential_x_queue.clear()
 
+    def next_model(self):
+        self.model_idx=(self.model_idx+1)%len(self.model_pool)
+        
     def process(self, x):
         if self.base_model_cls == "GNNOCDModel":
             x = self.graph_state.update_graph(x)
 
-        if x is None:
-            return None
+            if x is None:
+                return None
         
-        score, threshold = self.model_pool[self.model_idx].predict_scores(x)
-        
-        
-        loss_diff = np.mean(score) - threshold
+        start_idx=self.model_idx
+        while True:
+            score, threshold = self.model_pool[self.model_idx].predict_scores(x)
+            
+            # found one in model pool
+            if np.median(score)<threshold:
+                self.model_pool[self.model_idx].update_scaler(x)
+                self.model_pool[self.model_idx].train_step(x)
+                self.model_pool[self.model_idx].loss_queue.extend(score)
+                self.model_pool[self.model_idx].last_batch_num=self.num_batch
+                break
 
-        # if model has converged and loss is high, find alternative model in model pool
-        if loss_diff > 0 and self.model_pool[self.model_idx].converged:
-            for i, model in enumerate(self.model_pool):
-                tmp_score, tmp_threshold = model.predict_scores(x)
-                tmp_loss_diff = np.mean(tmp_score) - tmp_threshold
-                if tmp_loss_diff < loss_diff:
-                    loss_diff = tmp_loss_diff
-                    score = tmp_score
-                    threshold = tmp_threshold
-                    self.model_idx = i
+            
+            self.model_idx+=1
+            self.model_idx%=len(self.model_pool)
+            
+            # if cannot find one
+            if self.model_idx==start_idx:
+                break
 
+            
+        self.num_batch+=1
         # update anomaly score
         if self.base_model_cls == "GNNOCDModel":
             self.graph_state.update_node_score(score)
-
         
-        # if still greater than 0, it indicates concept drift
-        if loss_diff > 0 and self.model_pool[self.model_idx].converged:
-            self.cd(score, x)
-        else:
-            # other wise, train the model
-            self.model_pool[self.model_idx].train_step(x)
-
-            self.model_pool[self.model_idx].loss_queue.extend(score)
-            if not self.model_pool[self.model_idx].converged and is_stable(
-                self.model_pool[self.model_idx].loss_queue
-            ):
-                self.model_pool[self.model_idx].converged = True
-
-            self.no_cd(score)
-            self.model_pool[self.model_idx].update_scaler(x)
-
+        self.cd(score, threshold, x)
+        
         if (
             len(self.loss_queue) == self.patience
             and len(self.potential_queue) == self.patience
         ):
             difference = np.median(self.potential_queue) - np.median(self.loss_queue)
-            range = max(np.max(self.potential_queue), np.max(self.loss_queue)) - min(
-                np.min(self.potential_queue), np.min(self.loss_queue)
+            as_range = max(np.percentile(self.potential_queue,99), np.percentile(self.loss_queue,99)) - min(
+                np.percentile(self.potential_queue,1), np.percentile(self.loss_queue,1)
             )
-            diff_magnitude = (self.patience * difference**2) / (range**2)
+            diff_magnitude = (self.patience * difference**2) / (as_range**2)
 
             if diff_magnitude > self.confidence:
                 drift_level = "malicious"
                 self.clear_potential_queue()
             else:
                 drift_level = "benign"
+                if len(self.model_pool)==self.max_model_pool_size:
+                    
+                    #remove last unused from model pool
+                    lowest_idx=0
+                    lowest_batch_num=np.inf
+                    for i in range(self.max_model_pool_size):
+                        if self.model_pool[self.model_idx].last_batch_num< lowest_batch_num:
+                            lowest_idx=i 
+                            lowest_batch_num=self.model_pool[self.model_idx].last_batch_num
+                            
+                    del self.model_pool[lowest_idx]
+                    del self.model_name[lowest_idx]
+                
                 new_model = self.create_model()
                 # train model on existing features
-                for potential_x in self.potential_x_queue:
-
-                    new_model.train_step(potential_x)
-                    new_model.update_scaler(potential_x)
-
+                
+                for old_x in self.potential_x_queue:
+                    new_model.update_scaler(old_x)
+                    
+                for old_x in self.potential_x_queue:
+                    new_model.train_step(old_x)
+                
                 score, threshold = new_model.predict_scores(x)
+                
+                new_model.loss_queue.extend(score)
+                                
                 self.model_idx = len(self.model_pool)
                 self.model_pool.append(new_model)
 
                 self.ensemble_size += 1
-                self.no_cd(score)
+                self.clear_potential_queue()
+                self.cd(score, threshold, x)
+                
 
         elif len(self.loss_queue) != self.patience:
             drift_level = "unfull loss queue"
         else:
             drift_level = "no drift"
 
-        self.num_batch += 1
-        
         return {
             "drift_level": drift_level,
             "threshold": threshold,
             "score": score,
-            "index": self.num_batch,
-            "count":self.graph_state.processed,
+            "batch_num": self.num_batch,
+            "model_batch_num":self.model_pool[self.model_idx].num_batch,
             "model_idx": self.model_idx,
             "num_model": len(self.model_pool),
         }
@@ -473,16 +492,17 @@ class BaseOnlineODModel(BaseModel):
         self.converged = False
         self.scaler = LivePercentile(ndim=self.n_features)
         self.additional_params = ["preprocessors", "loss_queue", "scaler", "converged"]
-
+        self.num_batch=0
+        
     @abstractmethod
     def process(self, X):
         pass
 
     def get_threshold(self):
-        if len(self.loss_queue) == 0:
-            threshold = 0
-        else:
+        if len(self.loss_queue)>100:
             threshold=calc_quantile(self.loss_queue, 0.95)
+        else:
+            threshold = np.inf
         return threshold
 
     def standardize(self, x):
@@ -501,6 +521,7 @@ class BaseOnlineODModel(BaseModel):
 
     def update_scaler(self, x):
         self.scaler.add(x)
+        self.num_batch+=1
 
 
 class BaseODModel(BaseModel):

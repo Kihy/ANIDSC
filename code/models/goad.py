@@ -125,29 +125,20 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
             del state_dict[i]
 
     def process(self, X):
-        threshold=self.get_threshold()
-        self.net.zero_grad()
+        scores, threshold=self.predict_scores(X)
         
-        batch_rep, batch_pred, labels=self.forward(X)
-
-        
-        # calc anomly score
-        diffs = ((batch_rep.clone().unsqueeze(2) - self.rep_means) ** 2).sum(-1)
-        diffs_eps = self.eps * torch.ones_like(diffs)
-        diffs = torch.max(diffs, diffs_eps)
-        
-        logp_sz = torch.nn.functional.log_softmax(-diffs, dim=2)
-        scores = -torch.diagonal(logp_sz, 0, 1, 2)
-        scores = scores.sum(1).detach().cpu().numpy()
+        self.update_scaler(X)
         
         # update
-        loss = self.criterion(batch_rep, batch_pred, labels)
-        loss.backward()
-        self.optimizer.step()
+        self.train_step(X)
         
         self.loss_queue.extend(scores)
 
-        return scores, threshold
+        return {
+            "threshold": threshold,
+            "score": scores,
+            "batch_num":self.num_batch
+        }
 
     def goad_transforms(self, X):
         X=X.float().to(self.device)
