@@ -46,7 +46,6 @@ class SWLoss(torch.nn.Module):
         # Let projae be the projection of the encoded samples
         projae = torch.tensordot(encoded, theta.T, dims=1)
 
-
         # Let projz be the projection of the q_Z samples
         projz = torch.tensordot(z, theta.T, dims=1)
 
@@ -179,6 +178,80 @@ class VariationalGATEncoder(torch.nn.Module):
         logvar = self.gcn_logvar(x, edge_index, edge_attr)
         return mu, logvar
 
+class GATNodeEncoder(torch.nn.Module, TorchSaveMixin):
+    def __init__(self, model_name, n_features,
+                 node_latent_dim, l_features=None, 
+                 embedding_dist="gaussian", **kwargs):
+        super().__init__()
+        self.model_name=model_name
+        self.node_embed = GAT(in_channels=n_features, hidden_channels=n_features, out_channels=node_latent_dim, num_layers=2, norm=None).cuda()
+        self.linear=torch.nn.Linear(node_latent_dim,node_latent_dim).cuda()
+        self.node_stats=LivePercentile(n_features)
+        
+        self.edge_stats=LivePercentile(l_features)
+        self.l_features=l_features
+        self.sw_loss=SWLoss(50, embedding_dist).to("cuda")
+        
+        
+    def forward(self, x, edge_index, edge_attr=None):
+        normalized_x=self.preprocess_features(x, self.node_stats)
+        normalized_edge_attr=self.preprocess_features(edge_attr, self.edge_stats)
+        
+        node_embeddings=self.node_embed(x=normalized_x, edge_index=edge_index, edge_attr=normalized_edge_attr)
+        return self.linear(node_embeddings)
+    
+    def preprocess_features(self, features, live_stats):
+        if live_stats.ndim==0:
+            return None
+        else:
+            features=features[:,:live_stats.ndim]
+            
+        features=features.cpu()
+        
+        percentiles=live_stats.quantiles([0.25,0.50,0.75])
+
+        if percentiles is None:
+            percentiles=np.percentile(features.numpy(), [25,50,75], axis=0)
+        
+        scaled_features= (features-percentiles[1])/(percentiles[2]-percentiles[0])
+        scaled_features=torch.nan_to_num(scaled_features, nan=0., posinf=0., neginf=0.)
+        return scaled_features.to("cuda").float()
+
+class LinearNodeEncoder(torch.nn.Module, TorchSaveMixin):
+    def __init__(self, model_name, n_features,
+                 node_latent_dim, l_features=None, 
+                 embedding_dist="gaussian", **kwargs):
+        super().__init__()
+        self.model_name=model_name
+        self.node_embed = MLP(in_channels=n_features, hidden_channels=n_features, out_channels=node_latent_dim, num_layers=2, norm=None).cuda()
+        self.linear=torch.nn.Linear(node_latent_dim,node_latent_dim).cuda()
+        self.node_stats=LivePercentile(n_features)
+        
+        self.edge_stats=LivePercentile(l_features)
+        self.l_features=l_features
+        self.sw_loss=SWLoss(50, embedding_dist).to("cuda")
+        
+        
+    def forward(self, x, edge_index, edge_attr=None):
+        normalized_x=self.preprocess_features(x, self.node_stats)
+        # normalized_edge_attr=self.preprocess_features(edge_attr, self.edge_stats)
+        node_embeddings=self.node_embed(x=normalized_x)
+        return self.linear(node_embeddings)
+    
+    def preprocess_features(self, features, live_stats):
+        if live_stats.ndim==0:
+            return None
+        features=features.cpu()
+        
+        percentiles=live_stats.quantiles([0.25,0.50,0.75])
+
+        if percentiles is None:
+            percentiles=np.percentile(features.numpy(), [25,50,75], axis=0)
+        
+        scaled_features= (features-percentiles[1])/(percentiles[2]-percentiles[0])
+        scaled_features=torch.nan_to_num(scaled_features, nan=0., posinf=0., neginf=0.)
+        return scaled_features.to("cuda").float()
+
 class GCNNodeEncoder(torch.nn.Module, TorchSaveMixin):
     def __init__(self, model_name, n_features,
                  node_latent_dim, l_features=None, 
@@ -196,9 +269,8 @@ class GCNNodeEncoder(torch.nn.Module, TorchSaveMixin):
         
     def forward(self, x, edge_index, edge_attr=None):
         normalized_x=self.preprocess_features(x, self.node_stats)
-        normalized_edge_attr=self.preprocess_features(edge_attr, self.edge_stats)
         
-        node_embeddings=self.node_embed(x=normalized_x, edge_index=edge_index, edge_attr=normalized_edge_attr)
+        node_embeddings=self.node_embed(x=normalized_x, edge_index=edge_index)
         return self.linear(node_embeddings)
     
     def preprocess_features(self, features, live_stats):
@@ -515,6 +587,7 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
         self.G.x=torch.empty((0,n_features)).to(self.device)
         self.G.node_as=torch.empty(0).to(self.device)
         self.G.idx=torch.empty(0).long().to(self.device)
+        self.G.updated=torch.empty(0).to(self.device)
         
         #initialize edge features
         self.G.edge_index=torch.empty((2,0)).to(self.device)
@@ -523,7 +596,7 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
 
             
         self.processed=0
-        self.subset=[]
+        
         
         self.mac_device_map={"d2:19:d4:e9:94:86":"Router",
                              "22:c9:ca:f6:da:60":"Smartphone 1",
@@ -543,11 +616,15 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
     def to_device(self, x):
         return x.float().to(self.device)
     
-
+    def update_threshold(self, threshold):
+        self.G.threshold=torch.tensor(threshold).to(self.device)
+        
     def update_node_score(self, score):
         self.G.node_as=torch.tensor(score).to(self.device)
         
     def update_nodes(self, srcID, src_feature, dstID, dst_feature):
+        self.G.updated=torch.zeros_like(self.G.updated).to(self.device)
+        
         unique_nodes=torch.unique(torch.cat([srcID, dstID]))
                         
         #find set difference unique_nodes-self.G.node_idx
@@ -560,13 +637,15 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
             self.G.x=torch.vstack([self.G.x, torch.zeros((expand_size, self.n_features)).to(self.device)])
             self.G.node_as=torch.hstack([self.G.node_as, torch.zeros(expand_size).to(self.device)])
             self.G.idx=torch.hstack([self.G.idx, difference.to(self.device)]).long()
-            
+            self.G.updated=torch.hstack([self.G.updated, torch.ones(expand_size).to(self.device)])     
+        
         #update 
         for i in range(len(srcID)):
             self.G.x[self.G.idx==srcID[i]]=src_feature[i]
             self.G.x[self.G.idx==dstID[i]]=dst_feature[i]
         
-        return unique_nodes.tolist()
+        self.G.updated=torch.isin(self.G.idx, unique_nodes)
+        
             
 
     def update_edges(self, srcID, dstID, protocol, edge_feature):
@@ -587,16 +666,20 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
         if num_new_edges>0:
             new_edges=torch.vstack([src_idx[~existing_edge_idx],dst_idx[~existing_edge_idx]])
             self.G.edge_index=torch.hstack([self.G.edge_index, new_edges]).long()
-            
             self.G.edge_attr=torch.vstack([self.G.edge_attr, edge_feature[~existing_edge_idx]])
+    
+    def get_graph_state(self):
+        G = to_networkx(self.G, node_attrs=["node_as","idx","updated"],
+                        graph_attrs=["threshold"],
+                     to_undirected=False, to_multi=False)
+        return G
         
     def visualize_graph(self, fig, ax, node_map):
         if self.G.x.numel() ==0:
             ax.text(0,0,"empty Graph")
             return
         
-        G = to_networkx(self.G, node_attrs=["node_as","idx"],
-                     to_undirected=False, to_multi=True)
+        G = self.get_graph_state()
         
         #indices to label map 
         idx_node_map={i:n for i, n in enumerate(self.G.idx.long().cpu().numpy())}
@@ -650,7 +733,9 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
         dst_features=x[:, 19:34].float()
         edge_features=x[:, 34:].float()
         
-        return srcIDs, dstIDs, protocols, src_features, dst_features,edge_features
+        
+        
+        return srcIDs, dstIDs, protocols, src_features, dst_features, edge_features
     
     def sample_edges(self, p):
         n=self.G.x.size(0)

@@ -13,7 +13,7 @@ from tqdm import tqdm
 from .after_image import IncStatDB
 
 class AfterImageGraph(BaseTrafficFeatureExtractor):
-    def __init__(self, graph_type="homo",decay_factors=[5, 3, 1, 0.1, 0.01], max_pkt=float("inf"), **kwargs):
+    def __init__(self, graph_type="homo",decay_factors=[5, 3, 1, 0.1, 0.01], max_pkt=float("inf"), protocols=["UDP","TCP","ARP"], **kwargs):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
         Args:
@@ -22,10 +22,12 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
         """
         super().__init__(**kwargs)
         self.decay_factors = decay_factors
-        self.name = f"AfterImageGraph_{graph_type}"
+        self.name = f"AfterImageGraph"
         self.graph_type=graph_type
         self.max_pkt =max_pkt
-        self.clean_up_round=5000     
+        self.clean_up_round=5000
+        protocols+=["Other"]
+        self.protocol_map={p:i for i,p in enumerate(protocols)}
         
         if self.state is None:
             self.state={"db": IncStatDB(
@@ -33,7 +35,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
                     limit=float("inf"),
                 ),
                         "node_map":{},
-                        "protocol_map":{"UDP":0,"TCP":1,"ARP":2,"ICMP":3,"Other":4},
+                        "protocol_map":self.protocol_map,
                         "last_timetamp":None 
                             }    
 
@@ -47,7 +49,7 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
                 limit=float("inf"),
             ),
                        "node_map":{},
-                       "protocol_map":{"UDP":0,"TCP":1,"ARP":2,"ICMP":3,"Other":4},
+                       "protocol_map":self.protocol_map,
                        "last_timetamp":None 
                         } 
 

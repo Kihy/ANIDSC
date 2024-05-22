@@ -6,12 +6,14 @@ import pickle
 
 
 class BaseTrafficFeatureExtractor(ABC, LazyInitializationMixin):
-    def __init__(self, **kwargs):
+    def __init__(self, state=None, **kwargs):
         """base feature extractor. By default three variables must be
         set: dataset_name, file_name, and state.
         """
-        self.allowed = ["dataset_name", "file_name", "state"]
+        self.allowed = ["dataset_name", "file_name", "state", "save_state"]
+        self.state=state
         self.lazy_init(**kwargs)
+        
         self.entry = self.extract_features
 
     @abstractmethod
@@ -78,11 +80,11 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializationMixin):
 
         if self.state is not None:
             self.reset_state = False
-            self.save_state = False
+            
             self.offset_timestamp = True
         else:
             self.reset_state = True
-            self.save_state = True
+            
             self.offset_timestamp = False
         self.offset_time = None
 
@@ -126,7 +128,7 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializationMixin):
 
         if self.save_state:
             state_path = Path(
-                f"../../datasets/{self.dataset_name}/{self.name}/state.pkl"
+                f"../../datasets/{self.dataset_name}/{self.name}/state/{self.file_name}.pkl"
             )
             state_path.parent.mkdir(parents=True, exist_ok=True)
             with open(state_path, "wb") as pf:

@@ -314,11 +314,9 @@ class OnlineODEvaluator(BasePipeline):
                 
                 count+=feature.shape[0]
                 
-                if hasattr(self.model, "visualize_graph") and np.random.uniform()<0.001 : #
-                    self.model.visualize_graph(self.dataset_name,self.fe_name,loader.dataset.file_name)
-                
                 if prediction_results is None:
                     continue 
+                
                 
                 batch_count+=1
                 
@@ -327,6 +325,10 @@ class OnlineODEvaluator(BasePipeline):
                     prediction_results=[prediction_results]
                 
                 for pred_res in prediction_results:
+                    if hasattr(self.model, "save_graph") and np.median(pred_res["score"])>pred_res["threshold"] : #
+                        self.model.save_graph(self.dataset_name, self.fe_name, loader.dataset.file_name, pred_res["protocol"])
+                
+                    
                     scalar_dict={}
                     for metric in self.metrics:
                         metric_value=metric(pred_res)

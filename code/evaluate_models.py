@@ -6,10 +6,12 @@ import argparse
 import models
 
 def train_models(fe_name, dataset_name, model_dict, file_name, metrics, batch_size):
+    
     train_file = [
         {
-            "file_name": file_name,
+            "file_name": f,
         }
+        for f in file_name
     ]
     trainer = OnlineODEvaluator(
         batch_size=batch_size,
@@ -25,8 +27,6 @@ def train_models(fe_name, dataset_name, model_dict, file_name, metrics, batch_si
     torch.cuda.empty_cache()
     model = getattr(models, model_dict["cls"])(**model_dict["conf"])
     {"model": model} >> trainer
-
-    plot_concept_drift(dataset_name, fe_name, file_name, model.model_name)
 
 
 def evaluate_uq_models(
@@ -70,6 +70,14 @@ if __name__ == "__main__":
                         help='index of model')
     parser.add_argument('--graph_based',action=argparse.BooleanOptionalAction,
                         help='whether to use graph based features')
+    
+    parser.add_argument('--embedding_dist', action='store', type=str, help='The embedding distribution.', default="gaussian")
+    parser.add_argument('--GNN', action='store', type=str, help='The GNN model.', default="GCNNodeEncoder")
+    
+    parser.add_argument('--dataset_name', action='store', type=str, help='The dataset used.', default="UQ_IoT_IDS21")
+    parser.add_argument('--fe_name', action='store', type=str, help='The feature extractor used.', default="AfterImageGraph_multi_layer")
+    parser.add_argument('--file_name', nargs='+', type=str, help='The benign file name.', default="benign/whole_week")
+
    
     args = parser.parse_args()
 
@@ -82,14 +90,9 @@ if __name__ == "__main__":
         "Lenovo_Bulb_1",
         "Cam_1",
     ]  # ,
-    dataset_name = "UQ_IoT_IDS21"
-    fe_name = "AfterImageGraph_multi_layer"
-    # fe_name = "AfterImage"
-    file_name = "benign/whole_week"
+    
+    
 
-    # fe_name="SyntheticFeatureExtractor"
-    # file_name="benign/mean_std_drift_4"
-    # dataset_name = "FakeGraphData"
 
     attacks = [
         "Port_Scanning",
@@ -109,7 +112,8 @@ if __name__ == "__main__":
     
     if not args.graph_based:
         base_configs["preprocessors"].insert(0,"standardize")
-    
+        
+        
     model_list = [
         ("AE", "AE", base_configs, "pth"),
         ("VAE", "VAE", base_configs, "pth"),
@@ -132,10 +136,10 @@ if __name__ == "__main__":
     ]
 
     gnn_kwargs = {
-        "l_features": 35,
+        "l_features": 15,
         "n_features": 15,
-        "embedding_dist": "gaussian",
-        "model_name":"GCNNodeEncoder-gaussian",
+        "embedding_dist": args.embedding_dist,
+        "model_name":f"{args.GNN}-{args.embedding_dist}",
         "node_latent_dim": 15,
         "save_type":"pth"
     }
@@ -149,11 +153,15 @@ if __name__ == "__main__":
     conf["save_type"] = save_type
     
     if args.graph_based:
+        conf["n_features"] = gnn_kwargs["node_latent_dim"]
+        if cls=="KitNET":
+            conf["FM_grace_period"]=100
         model_dict = {
                 "cls":"MultiLayerOCDModel",
                 "conf":{
                     "model_name":f"MultiLayerOCDModel-{patience}-{confidence}-{gnn_kwargs['model_name']}-{name}",
                     "base_model_cls": "OnlineCDModel",
+                    "protocols":["TCP", "DNS", "TLS", "SSH", "FTP", "HTTP"],
                     "save_type":"ensemble",
                     "base_model_config": {
                         "model_name": f"OnlineCDModel",
@@ -162,7 +170,7 @@ if __name__ == "__main__":
                         "base_model_config": {
                             "model_name": "GNNOCDModel",
                             "save_type": "mix",
-                            "gnn_cls": "GCNNodeEncoder",
+                            "gnn_cls": args.GNN,
                             "gnn_kwargs": gnn_kwargs,
                             "od_cls": cls,
                             "od_kwargs": conf,
@@ -173,7 +181,7 @@ if __name__ == "__main__":
                 }
                 }
         
-        conf["n_features"] = gnn_kwargs["node_latent_dim"]
+        
     else:
         model_dict = {
                 "cls": cls,
@@ -182,11 +190,11 @@ if __name__ == "__main__":
         
     
     # torch.autograd.set_detect_anomaly(True)
-    train_models(fe_name, dataset_name, model_dict, file_name, metrics, batch_size)
+    train_models(args.fe_name, args.dataset_name, model_dict, args.file_name, metrics, batch_size)
     
     
-    evaluate_uq_models(
-        devices, fe_name, attacks, model_dict, dataset_name, metrics, batch_size
-    )
+    # evaluate_uq_models(
+    #     devices, args.fe_name, attacks, model_dict, args.dataset_name, metrics, batch_size
+    # )
     
     

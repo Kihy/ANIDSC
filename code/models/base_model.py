@@ -7,7 +7,7 @@ import numpy as np
 import models
 from utils import *
 import matplotlib.pyplot as plt
-
+import networkx as nx
 
 def load_model(dataset_id, model_cls, model_config, indent="", verbose=False):
     save_type = model_config["save_type"]
@@ -251,11 +251,14 @@ class MultiLayerOCDModel(EnsembleSaveMixin):
         self,
         base_model_cls,
         base_model_config,
+        protocols,
         model_name="MultiLayerOCDModel",
         **kwargs,
     ):
         self.model_name = f"{model_name}"
-        self.protocols = {0: "UDP", 1: "TCP", 2: "ARP", 3: "ICMP", 4: "Other"}
+        protocols+=["Other"]
+        self.protocols = {i:p for i,p in enumerate(protocols)}
+        self.protocol_inv={p:i for i,p in self.protocols.items()}
         self.base_model_name = base_model_config["model_name"]
 
         self.processed = 0
@@ -296,39 +299,22 @@ class MultiLayerOCDModel(EnsembleSaveMixin):
             return None
 
         return all_results
-
-    def visualize_graph(self, dataset_name, fe_name, file_name):
-        n_plots = np.sum([m.draw_graph for m in self.model_pool])
-        if n_plots == 0:
-            return
-
-        fig, ax = plt.subplots(figsize=(3, n_plots * 2), nrows=n_plots, squeeze=False)
-
-        node_map = get_node_map(fe_name, dataset_name)
-        if node_map is not None:
-            node_map = {v: k for k, v in node_map.items()}
-
-        ax_idx = 0
-        for m in self.model_pool:
-            if m.draw_graph:
-                ax[ax_idx][0].set_title(
-                    f"{m.protocol} after {m.graph_state.processed} packets"
-                )
-                
-                m.graph_state.visualize_graph(fig, ax[ax_idx][0], node_map)
-                ax_idx += 1
-                m.draw_graph = False
-
-        fig.tight_layout()
+                   
+    
+    def save_graph(self, dataset_name, fe_name, file_name, protocol=None):
+        # node_map = get_node_map(fe_name, dataset_name)
+        # if node_map is not None:
+        #     node_map = {v: k for k, v in node_map.items()}
+        
+        m=self.model_pool[self.protocol_inv[protocol]]
         path = Path(
-            f"../../datasets/{dataset_name}/{fe_name}/graph_plots/{file_name}/{self.model_name}_{self.processed}.png"
+            f"../../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{self.model_name}/{self.processed}/{m.protocol}.dot"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
-        fig.savefig(path, format="png")
-        # Close the figure to release resources
-        plt.close(fig)
-
-
+        G = m.graph_state.get_graph_state()
+        
+        nx.drawing.nx_agraph.write_dot(G, path)
+                
 class OnlineCDModel(EnsembleSaveMixin):
     def __init__(
         self,
@@ -353,7 +339,7 @@ class OnlineCDModel(EnsembleSaveMixin):
         self.model_pool = []
         self.model_names = []
         self.model_pool.append(self.create_model())
-
+        self.time_since_last_drift=0
         self.num_batch = 0
         self.ensemble_size = 1
 
@@ -373,9 +359,13 @@ class OnlineCDModel(EnsembleSaveMixin):
         if np.median(score)>threshold:
             self.potential_queue.append(np.median(score))
             self.potential_x_queue.append(x)
-                   
+            self.time_since_last_drift=0
         else:
             self.loss_queue.append(np.median(score))
+            self.time_since_last_drift+=1
+        
+        if self.time_since_last_drift>self.patience//5:
+            self.clear_potential_queue()
         
     def clear_potential_queue(self):
         self.potential_queue.clear()
@@ -399,7 +389,8 @@ class OnlineCDModel(EnsembleSaveMixin):
             if np.median(score)<threshold:
                 self.model_pool[self.model_idx].update_scaler(x)
                 self.model_pool[self.model_idx].train_step(x)
-                self.model_pool[self.model_idx].loss_queue.extend(score)
+                if (score!=0).all():
+                    self.model_pool[self.model_idx].loss_queue.extend(score)
                 self.model_pool[self.model_idx].last_batch_num=self.num_batch
                 break
 
@@ -416,6 +407,7 @@ class OnlineCDModel(EnsembleSaveMixin):
         # update anomaly score
         if self.base_model_cls == "GNNOCDModel":
             self.graph_state.update_node_score(score)
+            self.graph_state.update_threshold(threshold)
         
         self.cd(score, threshold, x)
         

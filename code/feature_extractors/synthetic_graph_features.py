@@ -12,8 +12,16 @@ class Node:
 
         self.rng=np.random.default_rng()
 
-    def gen_feature(self):
+    def gen_random_feature(self):
         return self.rng.normal(self.mean, self.std, size=self.dim)
+    
+    def gen_correlated_feature(self):
+        val=self.rng.normal(self.mean, self.std)
+        feature=[val]
+        for i in range(self.dim-1):
+            feature.append(val*i)
+        
+        return np.array(feature)
 
 class Graph:
     def __init__(self, means, stds, node_dim, connections, output_file,meta_file):
@@ -37,7 +45,7 @@ class Graph:
     def simulate(self, num_drifts):
         count=0
         #initial state for random duration
-        duration=self.rng.integers(10000,50000)
+        duration=self.rng.integers(5000,10000)
         
         
         self.meta_file.write(f"initial duration {duration}\n")
@@ -57,7 +65,7 @@ class Graph:
             for i,j in self.connections.T:
                 src=self.node_list[i]
                 dst=self.node_list[j]
-                feature_list.append(np.hstack([1, src.id, dst.id, 0, src.gen_feature(), dst.gen_feature(), 0]))
+                feature_list.append(np.hstack([1, src.id, dst.id, 0, src.gen_correlated_feature(), dst.gen_correlated_feature(), np.zeros(35)]))
         
         np.savetxt(
             self.feature_file,
@@ -73,14 +81,14 @@ class Graph:
         return desc
 
     def rand_mean(self):
-        return self.rng.uniform(100,200)
+        return self.rng.uniform(15,30)
 
     def rand_std(self):
         return self.rng.uniform(1,10)
 
     def change_mean(self):
-        random_node=self.rand_node()
-        random_node.mean=self.rand_mean()
+        random_node=  self.node_list[1]#self.rand_node()
+        random_node.mean= 30 #self.rand_mean()
         return f"alter {random_node.id} mean = {random_node.mean:.2f}"
     
     def change_std(self):
