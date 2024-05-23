@@ -2,8 +2,7 @@ from torch.utils.data import Dataset, IterableDataset, DataLoader
 import pandas as pd
 from pathlib import Path
 import numpy as np
-from utils import *
-
+from utils import load_dataset_info
 
 class InMemoryCSVDataset(Dataset):
     def __init__(
@@ -54,7 +53,7 @@ class IterativeCSVDataset(IterableDataset):
         self.file_name=file_name
         self.fe_name=fe_name
         
-        self.name = f"{dataset_name}/{fe_name}/{file_name}"
+        self.name = f"{dataset_name}-{fe_name}-{file_name}"
         self.data = pd.read_csv(
             self.feature_path,
             skiprows=  skip_rows,
@@ -85,9 +84,6 @@ class IterativeCSVDataset(IterableDataset):
         
     def __len__(self):
         return self.nb_samples*self.epochs
-    
-
-
 
 def load_dataset(dataset_name, fe_name, file_name,
                  percentage=[0,1], batch_size=1024, epochs=1):

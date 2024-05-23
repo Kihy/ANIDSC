@@ -287,7 +287,6 @@ class PyFlowMeter(BaseTrafficFeatureExtractor):
                 self.skipped+=1
                 continue
             
-            
             traffic_vector = self.get_traffic_vector(packet)
             
             if self.offset_time is None and self.offset_timestamp:

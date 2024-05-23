@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "ANIDSC"
+version = "0.0.1"
+authors = [
+  { name="Ke He", email="khe429@aucklanduni.ac.nz" },
+]
+description = "Adversarial testing framework for NIDS"
+readme = "README.md"
+requires-python = ">=3.10"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: GNU General Public License (GPL)",
+    "Operating System :: OS Independent",
+    "Development Status :: 1 - Planning"
+]
+
+[project.urls]
+Homepage = "https://github.com/kihy/ANIDSC"
+Issues = "https://github.com/kihy/ANIDSC/issues"

@@ -59,11 +59,11 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializationMixin):
         )
 
         feature_file = Path(
-            f"../../datasets/{self.dataset_name}/{self.name}/{self.file_name}.csv"
+            f"../../datasets/{self.dataset_name}/{self.name}/features/{self.file_name}.csv"
         )
         feature_file.parent.mkdir(parents=True, exist_ok=True)
         meta_file = Path(
-            f"../../datasets/{self.dataset_name}/{self.name}/{self.file_name}_meta.csv"
+            f"../../datasets/{self.dataset_name}/{self.name}/metadata/{self.file_name}.csv"
         )
         meta_file.parent.mkdir(parents=True, exist_ok=True)
 
