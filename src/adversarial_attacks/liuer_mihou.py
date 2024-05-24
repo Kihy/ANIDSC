@@ -563,14 +563,15 @@ class LiuerMihouAttack(BasePipeline):
                "extract_features"],
         **kwargs        
     ):
+        super().__init__(["fe", "model", "file_name"],**kwargs)
         self.feature_extractor=feature_extractor
         self.max_num_adv = max_num_adv
         self.bounds = bounds
         self.pso = pso
         self.dataset_name=dataset_name
         self.metrics=metrics
-        allowed = ["fe", "model", "file_name"]
-        super().__init__(allowed,**kwargs)
+        
+       
         self.name="LiuerMihouAttack"
         self.steps=steps
 

@@ -3,20 +3,20 @@ from datasets.custom_dataset import *
 import pickle
 from abc import ABC, abstractmethod
 from tqdm import tqdm
-from utils import LazyInitializationMixin
+from utils import LazyInitializer
 import matplotlib.pyplot as plt
 import time
 import torch
 from torch.utils.tensorboard import SummaryWriter
 
-class BasePipeline(ABC, LazyInitializationMixin):
+class BasePipeline(ABC, LazyInitializer):
     def __init__(self, 
-                 allowed=["model", "dataset_name", "files"],
+                 allowed,
                  **kwargs):
         
-        self.allowed = allowed
-        self.lazy_init(**kwargs)
-        self.entry = self.run_pipeline
+        LazyInitializer.__init__(allowed)
+        self.set_attr(**kwargs)
+        self.entry_func = self.run_pipeline
     
     @abstractmethod
     def setup(self):

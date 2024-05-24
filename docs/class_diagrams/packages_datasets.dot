@@ -1,0 +1,6 @@
+digraph "packages_datasets" {
+rankdir=BT
+charset="utf-8"
+"src.datasets" [color="black", label=<src.datasets>, shape="box", style="solid"];
+"src.datasets.custom_dataset" [color="black", label=<src.datasets.custom_dataset>, shape="box", style="solid"];
+}

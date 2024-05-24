@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 
 class AfterImage(BaseTrafficFeatureExtractor):
-    def __init__(self, limit=float("inf"), decay_factors=[5, 3, 1, 0.1, 0.01], max_pkt=float("inf"), **kwargs):
+    def __init__(self, limit=float("inf"), decay_factors=[5, 3, 1, 0.1, 0.01], **kwargs):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
         Args:
@@ -24,7 +24,6 @@ class AfterImage(BaseTrafficFeatureExtractor):
         self.limit = limit
         self.decay_factors = decay_factors
         self.name = "AfterImage"
-        self.max_pkt =max_pkt
 
     def setup(self):
         """sets up after image"""
@@ -52,59 +51,6 @@ class AfterImage(BaseTrafficFeatureExtractor):
             vectors.append(self.state.update_get_stats(*tv, fake_db))
         return vectors
 
-    def extract_features(self):
-        """main loop to extract the features. If state is set,
-        change the time so that it is starts immediately after the benign
-        traffic.
-        for each packet, extract the traffic vectors and get features. Write to
-        file every 10000 records
-        """
-        self.setup()
-
-        features_list = []
-        meta_list = []
-        for packet in tqdm(self.input_pcap, desc=f"parsing {self.file_name}"):
-            if self.count>self.max_pkt:
-                break
-            
-            traffic_vector = self.get_traffic_vector(packet)
-            
-            if traffic_vector is None:
-                self.skipped += 1
-                continue
-
-            if self.offset_time is None and self.offset_timestamp:
-                self.offset_time = traffic_vector[-2] - self.state.last_timestamp
-            else:
-                self.offset_time = 0
-            traffic_vector[-2] -= self.offset_time
-
-            feature = self.update(traffic_vector)
-            features_list.append(feature)
-            meta_list.append(traffic_vector)
-            self.count += 1
-            
-
-            if self.count % 1e4 == 0:
-                np.savetxt(
-                    self.feature_file,
-                    np.vstack(features_list),
-                    delimiter=",",
-                    fmt="%.7f",
-                )
-                np.savetxt(
-                    self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s"
-                )
-                features_list = []
-                meta_list = []
-
-        # save remaining
-        np.savetxt(
-            self.feature_file, np.vstack(features_list), delimiter=",", fmt="%.7f"
-        )
-        np.savetxt(self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s")
-
-        self.teardown()
 
     def update(self, traffic_vector):
         """updates the internal state with traffic vector

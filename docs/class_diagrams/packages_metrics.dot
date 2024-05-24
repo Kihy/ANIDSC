@@ -1,0 +1,6 @@
+digraph "packages_metrics" {
+rankdir=BT
+charset="utf-8"
+"src.metrics" [color="black", label=<src.metrics>, shape="box", style="solid"];
+"src.metrics.od_metrics" [color="black", label=<src.metrics.od_metrics>, shape="box", style="solid"];
+}

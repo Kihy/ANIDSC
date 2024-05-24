@@ -1,4 +1,4 @@
-digraph "classes" {
+digraph "classes_feature_extractors" {
 rankdir=BT
 charset="utf-8"
 "src.feature_extractors.after_image.AfterImage" [color="black", fontcolor="black", label=<{AfterImage|count<br ALIGN="LEFT"/>decay_factors : list<br ALIGN="LEFT"/>limit : float<br ALIGN="LEFT"/>max_pkt : float<br ALIGN="LEFT"/>name : str<br ALIGN="LEFT"/>offset_time : int<br ALIGN="LEFT"/>skipped<br ALIGN="LEFT"/>state<br ALIGN="LEFT"/>|extract_features()<br ALIGN="LEFT"/>get_headers()<br ALIGN="LEFT"/>get_meta_headers()<br ALIGN="LEFT"/>get_traffic_vector(packet)<br ALIGN="LEFT"/>peek(traffic_vectors)<br ALIGN="LEFT"/>setup()<br ALIGN="LEFT"/>update(traffic_vector)<br ALIGN="LEFT"/>}>, shape="record", style="solid"];

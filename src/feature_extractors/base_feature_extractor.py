@@ -1,21 +1,24 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
-from utils import *
+from utils import LazyInitializer, load_dataset_info, save_dataset_info
 from scapy.all import *
 import pickle
+from tqdm import tqdm 
+import numpy as np
 
-
-class BaseTrafficFeatureExtractor(ABC, LazyInitializationMixin):
-    def __init__(self, state=None, **kwargs):
+class BaseTrafficFeatureExtractor(ABC, LazyInitializer):
+    def __init__(self, state=None, max_pkt=float("inf"), **kwargs):
         """base feature extractor. By default three variables must be
         set: dataset_name, file_name, and state.
         """
-        self.allowed = ["dataset_name", "file_name", "state", "save_state"]
-        self.state=state
-        self.lazy_init(**kwargs)
-        
-        self.entry = self.extract_features
+        LazyInitializer.__init__(["dataset_name", "file_name", "state", "save_state"])
+        self.set_attr(**kwargs)
 
+        
+        self.state=state
+        self.max_pkt=max_pkt
+        self.entry_func=self.extract_features
+        
     @abstractmethod
     def update(self, traffic_vector):
         """Updates the feature extractor with traffic_vector, and returns
@@ -134,10 +137,58 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializationMixin):
             with open(state_path, "wb") as pf:
                 pickle.dump(self.state, pf)
 
-    @abstractmethod
+    
     def extract_features(self):
         """The main entry point of feature extractor, this function
         should define the process of extracting the features from input
         pcap file
         """
-        pass
+        self.setup()
+
+        features_list = []
+        meta_list = []
+        for packet in tqdm(self.input_pcap, desc=f"parsing {self.file_name}"):
+            if self.count>self.max_pkt:
+                break
+            
+            traffic_vector = self.get_traffic_vector(packet)
+            
+            if traffic_vector is None:
+                self.skipped += 1
+                continue
+
+            if self.offset_time is None and self.offset_timestamp:
+                self.offset_time = traffic_vector[-2] - self.state.last_timestamp
+            else:
+                self.offset_time = 0
+            traffic_vector[-2] -= self.offset_time
+
+            feature = self.update(traffic_vector)
+            features_list.append(feature)
+            
+            meta_list.append([self.count]+[i for i in traffic_vector.values()])
+            
+            self.count += feature.shape[0]
+            chunk_size+=feature.shape[0]
+            
+            if chunk_size > 1e4:
+                np.savetxt(
+                    self.feature_file,
+                    np.vstack(features_list),
+                    delimiter=",",
+                    fmt="%s",
+                )
+                np.savetxt(
+                    self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s"
+                )
+                features_list = []
+                meta_list = []
+                chunk_size=0
+
+        # save remaining
+        np.savetxt(
+            self.feature_file, np.vstack(features_list), delimiter=",", fmt="%s"
+        )
+        np.savetxt(self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s")
+
+        self.teardown()

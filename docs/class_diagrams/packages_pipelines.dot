@@ -1,0 +1,8 @@
+digraph "packages_pipelines" {
+rankdir=BT
+charset="utf-8"
+"src.pipelines" [color="black", label=<src.pipelines>, shape="box", style="solid"];
+"src.pipelines.base_pipeline" [color="black", label=<src.pipelines.base_pipeline>, shape="box", style="solid"];
+"src.pipelines.od_pipelines" [color="black", label=<src.pipelines.od_pipelines>, shape="box", style="solid"];
+"src.pipelines.od_pipelines" -> "src.pipelines.base_pipeline" [arrowhead="open", arrowtail="none"];
+}

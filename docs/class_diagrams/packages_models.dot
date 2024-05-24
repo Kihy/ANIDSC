@@ -1,0 +1,34 @@
+digraph "packages_models" {
+rankdir=BT
+charset="utf-8"
+"src.models" [color="black", label=<src.models>, shape="box", style="solid"];
+"src.models.arcus" [color="black", label=<src.models.arcus>, shape="box", style="solid"];
+"src.models.autoencoder" [color="black", label=<src.models.autoencoder>, shape="box", style="solid"];
+"src.models.base_model" [color="black", label=<src.models.base_model>, shape="box", style="solid"];
+"src.models.gnnids" [color="black", label=<src.models.gnnids>, shape="box", style="solid"];
+"src.models.goad" [color="black", label=<src.models.goad>, shape="box", style="solid"];
+"src.models.icl" [color="black", label=<src.models.icl>, shape="box", style="solid"];
+"src.models.kitsune" [color="black", label=<src.models.kitsune>, shape="box", style="solid"];
+"src.models.misc_models" [color="black", label=<src.models.misc_models>, shape="box", style="solid"];
+"src.models.rrcf" [color="black", label=<src.models.rrcf>, shape="box", style="solid"];
+"src.models.sklearn_models" [color="black", label=<src.models.sklearn_models>, shape="box", style="solid"];
+"src.models.slad" [color="black", label=<src.models.slad>, shape="box", style="solid"];
+"src.models" -> "src.models.arcus" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.autoencoder" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.base_model" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.gnnids" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.goad" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.icl" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.kitsune" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.misc_models" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.rrcf" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.sklearn_models" [arrowhead="open", arrowtail="none"];
+"src.models" -> "src.models.slad" [arrowhead="open", arrowtail="none"];
+"src.models.arcus" -> "src.models.base_model" [arrowhead="open", arrowtail="none"];
+"src.models.autoencoder" -> "src.models.base_model" [arrowhead="open", arrowtail="none"];
+"src.models.gnnids" -> "src.models.base_model" [arrowhead="open", arrowtail="none"];
+"src.models.goad" -> "src.models.base_model" [arrowhead="open", arrowtail="none"];
+"src.models.icl" -> "src.models.base_model" [arrowhead="open", arrowtail="none"];
+"src.models.rrcf" -> "src.models.rrcf" [arrowhead="open", arrowtail="none"];
+"src.models.slad" -> "src.models.base_model" [arrowhead="open", arrowtail="none"];
+}

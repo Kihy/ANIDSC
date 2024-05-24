@@ -1,0 +1,6 @@
+digraph "classes_datasets" {
+rankdir=BT
+charset="utf-8"
+"src.datasets.custom_dataset.InMemoryCSVDataset" [color="black", fontcolor="black", label=<{InMemoryCSVDataset|data : NoneType, TextFileReader<br ALIGN="LEFT"/>dataset_name<br ALIGN="LEFT"/>fe_name<br ALIGN="LEFT"/>feature_path<br ALIGN="LEFT"/>file_name<br ALIGN="LEFT"/>name<br ALIGN="LEFT"/>|}>, shape="record", style="solid"];
+"src.datasets.custom_dataset.IterativeCSVDataset" [color="black", fontcolor="black", label=<{IterativeCSVDataset|chunksize : int<br ALIGN="LEFT"/>data : NoneType, TextFileReader<br ALIGN="LEFT"/>dataset_name<br ALIGN="LEFT"/>epochs : int<br ALIGN="LEFT"/>fe_name<br ALIGN="LEFT"/>feature_path<br ALIGN="LEFT"/>file_name<br ALIGN="LEFT"/>name<br ALIGN="LEFT"/>nb_samples : NoneType<br ALIGN="LEFT"/>skip_rows : int<br ALIGN="LEFT"/>|reset()<br ALIGN="LEFT"/>}>, shape="record", style="solid"];
+}

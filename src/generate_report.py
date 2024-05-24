@@ -100,7 +100,7 @@ def plot_concept_drift(
         f"../../datasets/{dataset_name}/{fe_name}/outputs/{file_name}/{model_name}.csv"
     )
     df = pd.read_csv(str(results_file))
-
+    
     df["relative_batch_num"] = df["batch_num"] - df.iloc[0]["batch_num"]
 
     x_str = "relative_batch_num"
@@ -134,7 +134,6 @@ def plot_concept_drift(
     )
 
     if drift_idx is not None:
-
         drift_idx = [0] + drift_idx + [df[x_str].max()]
 
     all_idx = []

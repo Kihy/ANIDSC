@@ -8,6 +8,8 @@ import scipy
 from pytdigest import TDigest
 import robustats
 import matplotlib
+from abc import ABC, abstractmethod
+
 
 class LivePercentile:
     def __init__(self, ndim=None):
@@ -138,31 +140,44 @@ def uniqueXT(x, sorted=True, return_index=False, return_inverse=False, return_co
             return_counts=return_counts, dim=dim)
 
 
-class LazyInitializationMixin:
-    def lazy_init(self, **kwargs):
-        
+class LazyInitializer:
+    """allows subclass to be lazily initialized. Allowable attributes are stored in allowed and children must implement entry() function
+
+    """    
+    def __init__(self, allowed:list[str])->None:
+        """initialize 
+
+        Args:
+            allowed (list[str]): list of allowed variables
+        """        
+        self.allowed=allowed
+    
+    def set_attr(self, **kwargs):
+        """sets attributes in kwargs
+
+        Raises:
+            ValueError: if key in kwargs is not in allowed
+        """        
         for k, v in kwargs.items():
-            if k in self.allowed:
+            if k in list(self.allowed):
                 setattr(self, k, v)
             else:
                 raise ValueError(f"{k} not allowed")
             setattr(self, k, v)
             self.allowed.remove(k)
             
-    def start(self, **kwargs):
-        assigned=list(self.allowed)
-        for k, v in kwargs.items():
-            if k in self.allowed:
-                setattr(self, k, v)
-            else:
-                raise ValueError(f"{k} not allowed")
-            assigned.remove(k)
+    def start(self, **kwargs): 
+        self.set_attr(**kwargs)
         
-        if len(assigned)>0:
-            raise ValueError("Must assign the following variables",",".join(assigned))
+        if len(self.allowed)>0:
+            raise ValueError("Must assign the following variables",",".join(self.allowed))
 
-        return self.entry()
-
+        self.entry_func()
+        
+    @abstractmethod
+    def entry_func(self):
+        pass
+           
     def __rrshift__(self, other):
         return self.start(**other)
 
@@ -202,45 +217,3 @@ def get_node_map(dataset_name, fe_name,file_name):
         print(e)
         return None
 
-def hex_to_rgb(value):
-    '''
-    Converts hex to rgb colours
-    value: string of 6 characters representing a hex colour.
-    Returns: list length 3 of RGB values'''
-    value = value.strip("#") # removes hash symbol if present
-    lv = len(value)
-    return tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
-
-
-def rgb_to_dec(value):
-    '''
-    Converts rgb to decimal colours (i.e. divides each value by 256)
-    value: list (length 3) of RGB values
-    Returns: list (length 3) of decimal values'''
-    return [v/256 for v in value]
-
-def get_continuous_cmap(hex_list, float_list=None):
-    ''' creates and returns a color map that can be used in heat map figures.
-        If float_list is not provided, colour map graduates linearly between each color in hex_list.
-        If float_list is provided, each color in hex_list is mapped to the respective location in float_list. 
-        
-        Parameters
-        ----------
-        hex_list: list of hex code strings
-        float_list: list of floats between 0 and 1, same length as hex_list. Must start with 0 and end with 1.
-        
-        Returns
-        ----------
-        colour map'''
-    rgb_list = [rgb_to_dec(hex_to_rgb(i)) for i in hex_list]
-    if float_list:
-        pass
-    else:
-        float_list = list(np.linspace(0,1,len(rgb_list)))
-        
-    cdict = dict()
-    for num, col in enumerate(['red', 'green', 'blue']):
-        col_list = [[float_list[i], rgb_list[i][num], rgb_list[i][num]] for i in range(len(float_list))]
-        cdict[col] = col_list
-    cmp = matplotlib.colors.LinearSegmentedColormap('my_cmp', segmentdata=cdict, N=256)
-    return cmp

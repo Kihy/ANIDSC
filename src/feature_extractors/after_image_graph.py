@@ -65,66 +65,6 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
         """
         pass
 
-    def extract_features(self):
-        """main loop to extract the features. If state is set,
-        change the time so that it is starts immediately after the benign
-        traffic.
-        for each packet, extract the traffic vectors and get features. Write to
-        file every 10000 records
-        """
-        self.setup()
-
-        features_list = []
-        meta_list = []
-        
-        chunk_size=0
-        for packet in tqdm(self.input_pcap, desc=f"parsing {self.file_name}"):
-            if self.count>self.max_pkt:
-                break
-            
-            traffic_vector = self.get_traffic_vector(packet)
-            
-            if traffic_vector is None:
-                self.skipped += 1
-                continue
-            
-            self.state["last_timestamp"]=traffic_vector["timestamp"]
-
-            if self.offset_timestamp:
-                if self.offset_time is None:
-                    self.offset_time = traffic_vector["timestamp"] - self.state["last_timestamp"]
-                        
-                traffic_vector["timestamp"] -= self.offset_time
-            
-            feature = self.update(traffic_vector)
-            features_list.append(feature)
-            
-            meta_list.append([self.count]+[i for i in traffic_vector.values()])
-            
-            self.count += feature.shape[0]
-            chunk_size+=feature.shape[0]
-            
-            if chunk_size > 1e4:
-                np.savetxt(
-                    self.feature_file,
-                    np.vstack(features_list),
-                    delimiter=",",
-                    fmt="%s",
-                )
-                np.savetxt(
-                    self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s"
-                )
-                features_list = []
-                meta_list = []
-                chunk_size=0
-
-        # save remaining
-        np.savetxt(
-            self.feature_file, np.vstack(features_list), delimiter=",", fmt="%s"
-        )
-        np.savetxt(self.meta_file, np.vstack(meta_list), delimiter=",", fmt="%s")
-
-        self.teardown()
 
     def update(self, traffic_vector):
         """updates the internal state with traffic vector
@@ -176,6 +116,8 @@ class AfterImageGraph(BaseTrafficFeatureExtractor):
         dstID=self.state["node_map"].setdefault(dstMAC, len(self.state["node_map"]))
         
         feature=np.hstack([1, srcID, dstID, protocol, src_stat, dst_stat, jitter_stat, link_stat])
+        
+        self.state["last_timestamp"]=traffic_vector["timestamp"]
         
         # clean our records
         if self.state["db"].num_updated % self.clean_up_round == 0:

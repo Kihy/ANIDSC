@@ -1,4 +1,4 @@
-digraph "packages" {
+digraph "packages_feature_extractors" {
 rankdir=BT
 charset="utf-8"
 "src.feature_extractors" [color="black", label=<src.feature_extractors>, shape="box", style="solid"];
