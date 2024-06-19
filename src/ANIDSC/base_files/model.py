@@ -28,6 +28,8 @@ class BaseOnlineODModel(PipelineComponent):
         self.suffix.append(context.get('protocol',None))
         
         if self.profile:
+            log_dir=f"{context['dataset_name']}/runs/{context['pipeline_name']}"
+            
             self.prof = torch.profiler.profile(
                 activities=[
                     torch.profiler.ProfilerActivity.CPU,
@@ -37,7 +39,7 @@ class BaseOnlineODModel(PipelineComponent):
                     wait=1, warmup=1, active=2, repeat=1
                 ),
                 on_trace_ready=torch.profiler.tensorboard_trace_handler(
-                    context['tb_dir']),
+                    log_dir),
                 record_shapes=False,
                 with_stack=False,
             )
@@ -121,6 +123,7 @@ class ConceptDriftWrapper(PipelineComponent):
     
     def setup(self):
         self.model_pool.append(self.create_model())
+        self.parent.context["concept_drift_detection"]=True
  
     def process(self, data):
         start_idx=self.model_idx

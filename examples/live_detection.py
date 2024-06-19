@@ -21,7 +21,7 @@ if __name__ == "__main__":
 
     # data sources
     live_sniffer = LiveSniffer("lo")
-    offline_reader = PacketReader(dataset_name, file_name, max_pkts=1e4)  #
+    offline_reader = PacketReader(dataset_name, file_name)  #
     csv_reader = CSVReader(dataset_name, fe_name, file_name, n_features=100)
 
     protocols = ["TCP", "UDP", "ARP"]
@@ -34,7 +34,6 @@ if __name__ == "__main__":
         save_results=False,
         draw_graph_rep_interval=10,
     )
-    
     
     collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
 
@@ -66,6 +65,7 @@ if __name__ == "__main__":
     )
     
     pipeline = feature_extraction | protocol_splitter | collate_evaluator
+
     
     offline_reader >> pipeline
     offline_reader.start()
