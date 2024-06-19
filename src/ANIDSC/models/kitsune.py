@@ -12,7 +12,7 @@ from .base_model import *
 # For licensing information, see the end of this document
 
 
-class KitNET(BaseOnlineODModel, PickleSaveMixin):
+class KitNET(BaseOnlineODModel, JSONSaveMixin):
     # n: the number of features in your input dataset (i.e., x \in R^n)
     # m: the maximum size of any autoencoder in the ensemble layer
     # AD_grace_period: the number of instances the network will learn from before producing anomaly scores

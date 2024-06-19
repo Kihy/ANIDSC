@@ -235,7 +235,7 @@ class ARCUS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
         self._itr_num    = int(kwargs["_batch_size"]/kwargs["_min_batch_size"])
         self._model_generator = ModelGenerator(input_dim=n_features, **kwargs)
         self.model_pool=[]
-        self.additional_params+=["model_pool", "steps"]
+        self.custom_params+=["model_pool", "steps"]
         self.steps=0
     
     def _standardize_scores(self, score):
@@ -248,13 +248,13 @@ class ARCUS(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     
     def state_dict(self):
         state = super().state_dict()
-        for i in self.additional_params:
+        for i in self.custom_params:
             state[i] = getattr(self, i)
         return state
     
     def load_state_dict(self, state_dict):
 
-        for i in self.additional_params:
+        for i in self.custom_params:
             setattr(self, i, state_dict[i])
             del state_dict[i]
     

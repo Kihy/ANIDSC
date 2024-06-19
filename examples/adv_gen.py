@@ -9,7 +9,7 @@ from ANIDSC.models.kitsune import KitNET
 from ANIDSC.models.base_model import *
 import pyshark
 from ANIDSC.models.misc_models import *
-from ANIDSC.pipelines.od_pipelines import OutlierDetectionEvaluator
+from ANIDSC.pipelines.online_pipelines import OutlierDetectionEvaluator
 
 
 fe="AfterImage"

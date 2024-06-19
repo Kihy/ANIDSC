@@ -1,10 +1,40 @@
 from ANIDSC.templates import extract_network_features
+from itertools import product 
 
-if __name__ == "__main__":
-    # targetted attacks
-    # devices=["Smart_TV","Cam_1","Raspberry_Pi_telnet","Smart_Clock_1","Google_Nest_Mini_1","Smartphone_1","Smartphone_2","Lenovo_Bulb_1",]
-    # attacks=["ACK_Flooding", "SYN_Flooding", "UDP_Flooding", "Port_Scanning", "Service_Detection"]
+def extract_uq_features():
+    #benign features 
+    file="benign/whole_week"
+    extract_network_features(
+            "UQ_IoT_IDS21",
+            "AfterImageGraph",
+            {
+                "graph_type": "multi_layer",
+                "protocols": ["UDP", "TCP","ARP", "ICMP"],
+            },
+            file,
+            state=None,
+        )
+    
+        # targetted attacks
+    devices=["Smart_TV","Cam_1","Raspberry_Pi_telnet","Smart_Clock_1","Google_Nest_Mini_1","Smartphone_1","Smartphone_2","Lenovo_Bulb_1",]
+    attacks=["ACK_Flooding", "SYN_Flooding", "UDP_Flooding", "Port_Scanning", "Service_Detection"]
 
+    for d, a in product(devices, attacks):
+        extract_network_features(
+                "UQ_IoT_IDS21",
+                "AfterImageGraph",
+                {
+                    "graph_type": "multi_layer",
+                    "protocols": ["UDP", "TCP","ARP", "ICMP"],
+                },
+                f"malicious/{d}/{a}",
+                state="benign/whole_week",
+            )
+    
+
+
+def extract_cic_features():
+    # extract features from CIC-IDS 
     cic_files = [
         "Monday-WorkingHours",
         "Tuesday-WorkingHours",
@@ -66,3 +96,11 @@ if __name__ == "__main__":
     #
 
     # synthetic_features("FakeGraphData","SyntheticFeatureExtractor")
+
+
+if __name__ == "__main__":
+
+    #extract features from UQ
+    
+    extract_uq_features()
+    

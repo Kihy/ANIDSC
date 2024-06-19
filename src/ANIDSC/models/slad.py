@@ -75,7 +75,7 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
                                             weight_decay=1e-5)
         
         self.criterion= SLADLoss(reduction='none')
-        self.additional_params+=["subspace_indices_lst","affine_network_lst"]
+        self.custom_params+=["subspace_indices_lst","affine_network_lst"]
         
         
         # random transformations to transform data
@@ -118,13 +118,13 @@ class SLAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
     
     def state_dict(self):
         state = super().state_dict()
-        for i in self.additional_params:
+        for i in self.custom_params:
             state[i] = getattr(self, i)
         return state
     
     def load_state_dict(self, state_dict):
 
-        for i in self.additional_params:
+        for i in self.custom_params:
             setattr(self, i, state_dict[i])
             del state_dict[i]
     

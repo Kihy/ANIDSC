@@ -13,7 +13,7 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializer):
         """base feature extractor. By default three variables must be
         set: dataset_name, file_name, and state.
         """
-        LazyInitializer.__init__(self,["dataset_name", "file_name", "state", "save_state"])
+        LazyInitializer.__init__(self,["dataset_name", "file_name", "state"])
         self.set_attr(**kwargs)
 
         self.state=state
@@ -79,7 +79,6 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializer):
         self.count = 0
         self.skipped = 0
 
-
         self.input_pcap = PcapReader(str(self.path))
 
         if self.state is None:
@@ -131,13 +130,14 @@ class BaseTrafficFeatureExtractor(ABC, LazyInitializer):
             f"skipped: {self.skipped} processed: {self.count+self.skipped} written: {self.count}"
         )
 
-        if self.save_state:
-            state_path = Path(
-                f"../datasets/{self.dataset_name}/{self.name}/state/{self.file_name}.pkl"
-            )
-            state_path.parent.mkdir(parents=True, exist_ok=True)
-            with open(state_path, "wb") as pf:
-                pickle.dump(self.state, pf)
+        
+        state_path = Path(
+            f"../datasets/{self.dataset_name}/{self.name}/state/{self.file_name}.pkl"
+        )
+        state_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(state_path, "wb") as pf:
+            pickle.dump(self.state, pf)
+        print("state saved at ", str(state_path))
 
     
     def extract_features(self):

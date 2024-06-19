@@ -33,6 +33,7 @@ class InMemoryCSVDataset(Dataset):
 
     def __len__(self):
         return len(self.data)
+
     
 class IterativeCSVDataset(IterableDataset):
     def __init__(
@@ -54,7 +55,7 @@ class IterativeCSVDataset(IterableDataset):
         self.name = f"{dataset_name}-{fe_name}-{file_name}"
         self.data = pd.read_csv(
             self.feature_path,
-            skiprows=  skip_rows,
+            skiprows =  skip_rows,
             chunksize=chunksize,
             nrows=nb_samples,
         )

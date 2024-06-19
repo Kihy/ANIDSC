@@ -1,5 +1,7 @@
 import torch
 import numpy as np
+
+from ANIDSC.base_files.pipeline import PipelineComponent
 from .base_model import BaseOnlineODModel, TorchSaveMixin,EnsembleSaveMixin
 from torch_geometric.data import Data, HeteroData
 from collections import defaultdict
@@ -245,40 +247,24 @@ class LinearNodeEncoder(torch.nn.Module, TorchSaveMixin):
         scaled_features=torch.nan_to_num(scaled_features, nan=0., posinf=0., neginf=0.)
         return scaled_features.to("cuda").float()
 
-class GCNNodeEncoder(torch.nn.Module, TorchSaveMixin):
-    def __init__(self, model_name, n_features,
-                 node_latent_dim, l_features=None, 
-                 embedding_dist="gaussian", **kwargs):
-        super().__init__()
-        self.model_name=model_name
-        self.node_embed = GCN(in_channels=n_features, hidden_channels=n_features, out_channels=node_latent_dim, num_layers=2, norm=None).cuda()
-        self.linear=torch.nn.Linear(node_latent_dim,node_latent_dim).cuda()
-        self.node_stats=LivePercentile(n_features)
-        
-        self.edge_stats=LivePercentile(l_features)
-        self.l_features=l_features
-        self.sw_loss=SWLoss(50, embedding_dist).to("cuda")
-        
-        
+class GCNNodeEncoder(torch.nn.Module):
+    def __init__(self, node_latent_dim,
+                 n_features,
+                 embedding_dist,
+                 device="cuda"):
+        torch.nn.Module.__init__(self)
+        self.node_latent_dim=node_latent_dim
+        self.embedding_dist=embedding_dist
+        self.device=device
+        self.node_embed = GCN(in_channels=n_features, hidden_channels=n_features, out_channels=self.node_latent_dim, num_layers=2, norm=None).to(self.device)
+        self.linear=torch.nn.Linear(self.node_latent_dim, self.node_latent_dim).to(self.device)
+        self.sw_loss=SWLoss(50, self.embedding_dist).to(self.device)
+            
     def forward(self, x, edge_index, edge_attr=None):
-        normalized_x=self.preprocess_features(x, self.node_stats)
-        
-        node_embeddings=self.node_embed(x=normalized_x, edge_index=edge_index)
-        return self.linear(node_embeddings)
+        node_embeddings=self.node_embed(x=x, edge_index=edge_index)
+        return self.linear(node_embeddings), self.sw_loss(node_embeddings)
     
-    def preprocess_features(self, features, live_stats):
-        if live_stats.ndim==0:
-            return None
-        features=features.cpu()
-        
-        percentiles=live_stats.quantiles([0.25,0.50,0.75])
-
-        if percentiles is None:
-            percentiles=np.percentile(features.numpy(), [25,50,75], axis=0)
-        
-        scaled_features= (features-percentiles[1])/(percentiles[2]-percentiles[0])
-        scaled_features=torch.nan_to_num(scaled_features, nan=0., posinf=0., neginf=0.)
-        return scaled_features.to("cuda").float()
+    
 
 class Diffusion:
     def __init__(self, noise_steps=20, beta_start=1e-4, beta_end=0.02, img_size=256, device="cuda"):
@@ -565,13 +551,14 @@ def loss_fn(model, x, marginal_prob_std, eps=1e-5):
 class HomoGNN(torch.nn.Module, TorchSaveMixin):
     def __init__(self, device='cuda', l_features=35,
                  n_features=15, model_name="HomoGNN",
+                 detection_period=256,
                  **kwargs):
         torch.nn.Module.__init__(self)    
         self.device=device
         model_name=f"{model_name}"
         self.n_features=n_features
         self.l_features=l_features
-
+        self.detection_period=detection_period
         
         #initialize graph
         self.G=Data()
@@ -791,19 +778,206 @@ class HomoGNN(torch.nn.Module, TorchSaveMixin):
                 self.processed+=data.size(0)
  
         # if only deletion, no need to return anything    
-        if not updated:
+        if not updated or self.processed%self.detection_period==0:
             return None
         return self.G.x, self.G.edge_index, self.G.edge_attr
     
     def state_dict(self):
         state = super().state_dict()
-        for i in self.additional_params:                        
+        for i in self.custom_params:                        
             state[i] = getattr(self, i)
             
         return state
     
     def load_state_dict(self, state_dict):
-        for i in self.additional_params:
+        for i in self.custom_params:
             setattr(self, i, state_dict[i])
             del state_dict[i]
+            
+
+
+
+class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin):
+    def __init__(self, device="cuda", preprocessors=[], **kwargs):
+        torch.nn.Module.__init__(self)
+        PipelineComponent.__init__(self, **kwargs)    
+        self.device=device
+        self.preprocessors=preprocessors
+    
+    def preprocess(self, X):
+        if len(self.preprocessors) > 0:
+            for p in self.preprocessors:
+                X = getattr(self, p)(X)
+        return X
+    
+    def to_device(self, X):
+        return X.to(self.device)
+    
+    def to_float_tensor(self, X):
+        return torch.from_numpy(X).float()
+    
+    def teardown(self):
+        context=self.get_context()
+        self.save(suffix=context.get('protocol','')) 
+    
+    def setup(self):
+        super().setup()
+        
+        n_features=15
+        l_features=15
+        
+        self.parent.context["n_features"]=n_features
+        self.parent.context["l_features"]=l_features
+        
+        #initialize graph
+        self.G=Data()
+        
+        #initialize node features 
+        self.G.x=torch.empty((0,n_features)).to(self.device)
+        self.G.idx=torch.empty(0).long().to(self.device)
+        self.G.updated=torch.empty(0).to(self.device)
+        
+        #initialize edge features
+        self.G.edge_index=torch.empty((2,0)).to(self.device)
+        self.G.edge_attr=torch.empty((0,l_features)).to(self.device)    
+        
+        # self.mac_device_map={"d2:19:d4:e9:94:86":"Router",
+        #                      "22:c9:ca:f6:da:60":"Smartphone 1",
+        #                     "a2:bd:fa:b5:89:92":"Smart Clock 1",
+        #                     "5e:ea:b2:63:fc:aa":"Google Nest Mini 1",
+        #                     "7e:d1:9d:c4:d1:73":"Smart TV",
+        #                     "52:a8:55:3e:34:46":"Smart Bulb 1",
+        #                     "52:8e:44:e1:da:9a":"IP Camera 1",
+        #                     "0a:08:59:8a:2f:1b":"Smart Plug 1",
+        #                     "ea:d8:43:b8:6e:9a":"Raspberry Pi",
+        #                     "ff:ff:ff:ff:ff:ff":"Broadcast",
+        #                     "00:00:00:00:00:00":"Localhost",
+        #                     "be:7b:f6:f2:1b:5f":"Attacker"}
+    
+    def update_nodes(self, srcID, src_feature, dstID, dst_feature):
+        self.G.updated=torch.zeros_like(self.G.updated).to(self.device)
+        
+        unique_nodes=torch.unique(torch.cat([srcID, dstID]))
+                        
+        #find set difference unique_nodes-self.G.node_idx
+        uniques, counts = torch.cat((unique_nodes, self.G.idx, self.G.idx)).unique(return_counts=True)
+        difference = uniques[counts == 1]
+
+        expand_size=len(difference)
+            
+        if expand_size>0:
+            self.G.x=torch.vstack([self.G.x, torch.zeros((expand_size, src_feature.shape[1])).to(self.device)])
+            self.G.idx=torch.hstack([self.G.idx, difference.to(self.device)]).long()
+            self.G.updated=torch.hstack([self.G.updated, torch.ones(expand_size).to(self.device)])     
+        
+        #update 
+        for i in range(len(srcID)):
+            self.G.x[self.G.idx==srcID[i]]=src_feature[i]
+            self.G.x[self.G.idx==dstID[i]]=dst_feature[i]
+        
+        self.G.updated=torch.isin(self.G.idx, unique_nodes)
+
+    def update_edges(self, srcID, dstID, edge_feature):
+        #convert ID to index 
+        src_idx = torch.nonzero(self.G.idx == srcID[:, None], as_tuple=False)[:, 1]
+        dst_idx = torch.nonzero(self.G.idx == dstID[:, None], as_tuple=False)[:, 1]
+        
+    
+        edge_indices=find_edge_indices(self.G.edge_index, src_idx, dst_idx)
+        existing_edge_idx= edge_indices != -1 
+        
+        #update found edges if there are any
+        if existing_edge_idx.any():
+            self.G.edge_attr[edge_indices[existing_edge_idx]]=edge_feature[existing_edge_idx]
+        
+        num_new_edges=torch.count_nonzero(~existing_edge_idx)
+        if num_new_edges>0:
+            new_edges=torch.vstack([src_idx[~existing_edge_idx],dst_idx[~existing_edge_idx]])
+            self.G.edge_index=torch.hstack([self.G.edge_index, new_edges]).long()
+            self.G.edge_attr=torch.vstack([self.G.edge_attr, edge_feature[~existing_edge_idx]])
+    
+    def get_graph_representation(self):
+        G = to_networkx(self.G, node_attrs=["idx","updated"],
+                     to_undirected=False, to_multi=False)
+        return G
+        
+    
+    def split_data(self, x):
+        srcIDs=x[:, 1].long()
+        dstIDs=x[:, 2].long()
+        
+        context=self.get_context()
+        src_features=x[:, 4:19].float()
+        dst_features=x[:, 19:34].float()
+        edge_features=x[:, 34:34+context['l_features']].float()
+        
+        return srcIDs, dstIDs, src_features, dst_features, edge_features
+    
+    def sample_edges(self, p):
+        n=self.G.x.size(0)
+        probabilities = torch.rand(n, n)
+        
+        # Get indices where probabilities are less than p and apply the mask
+        indices = torch.argwhere(probabilities < p).T 
+        
+        return indices, edge_exists(self.edge_idx, indices)
+        
+    def process(self, x):
+        x=self.preprocess(x)
+        
+        diff = x[1:, 0] - x[:-1, 0]
+        
+        split_indices = torch.nonzero(diff, as_tuple=True)[0] + 1
+        split_indices=split_indices.tolist()
+        split_indices=[0]+split_indices+[x.size(0)]
+        split_indices=np.array(split_indices[1:])-np.array(split_indices[:-1])
+        updated=False
+        
+        for data in torch.split(x, split_indices.tolist(), dim=0):
+            #update chunk
+            if data[0,0]==1:
+                srcIDs, dstIDs, src_features, dst_features, edge_features=self.split_data(data)
+                
+                #find index of last update
+                _, indices=uniqueXT(data[:,1:3], return_index=True, occur_last=True, dim=0)
+                self.subset=self.update_nodes(srcIDs[indices], src_features[indices], dstIDs[indices], dst_features[indices])
+                self.update_edges(srcIDs[indices], dstIDs[indices], edge_features[indices])
+                updated=True
+                
+                
+            # delete links
+            else:
+                srcIDs, dstIDs, _, _, _=self.split_data(data)
+
+                # convert to idx
+                src_idx = torch.nonzero(self.G.idx == srcIDs[:, None], as_tuple=False)[:, 1]
+                dst_idx = torch.nonzero(self.G.idx == dstIDs[:, None], as_tuple=False)[:, 1]
+                
+                edge_indices=find_edge_indices(self.G.edge_index, src_idx, dst_idx)
+                
+                edge_mask = torch.ones(self.G.edge_index.size(1), dtype=torch.bool)
+                edge_mask[edge_indices] = False
+                
+                self.G.edge_index=self.G.edge_index[:,edge_mask]
+                
+                self.G.edge_attr=self.G.edge_attr[edge_mask]
+
+
+                # remove isolated nodes
+                edge_index, _, mask = remove_isolated_nodes(self.G.edge_index,
+                                                                num_nodes=self.G.x.size(0))
+                #update edge index 
+                self.G.edge_index=edge_index
+                self.G.x=self.G.x[mask]
+                self.G.idx=self.G.idx[mask]
+
+        
+        
+        self.parent.context['G']=self.get_graph_representation()
+        # if only deletion, no need to return anything    
+        if not updated:
+            return None
+        
+        return self.G.x, self.G.edge_index, self.G.edge_attr
+
             

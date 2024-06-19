@@ -114,13 +114,13 @@ class GOAD(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
 
     def state_dict(self):
         state = super().state_dict()
-        for i in self.additional_params:
+        for i in self.custom_params:
             state[i] = getattr(self, i)
         return state
     
     def load_state_dict(self, state_dict):
 
-        for i in self.additional_params:
+        for i in self.custom_params:
             setattr(self, i, state_dict[i])
             del state_dict[i]
 

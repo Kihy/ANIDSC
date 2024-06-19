@@ -8,10 +8,169 @@ import scipy
 from pytdigest import TDigest
 from abc import ABC, abstractmethod
 import pandas as pd
-
+import networkx as nx
+from matplotlib.cm import ScalarMappable
+from matplotlib.colors import Normalize, TwoSlopeNorm
+import os
+from adjustText import adjust_text
+import textwrap
 from datetime import datetime, timedelta, time
 import pytz
+import matplotlib.pyplot as plt
+import matplotlib
 
+
+
+
+def plot_graph(
+    dataset_name,
+    fe_name,
+    file_name,
+    model_name,
+    processed,
+    protocols=None,
+    mac_to_device_map={},
+    relative_as=False,
+):
+
+    idx_to_mac_map = get_node_map(dataset_name, fe_name, file_name)
+    if idx_to_mac_map is not None:
+        idx_to_mac_map = {v: k for k, v in idx_to_mac_map.items()}
+    else:
+        idx_to_mac_map = {}
+
+    if protocols is None:
+        paths = list(
+            Path(
+                f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}"
+            ).glob("*.dot")
+        )
+    else:
+        paths = [
+            Path(
+                f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}/{p}.dot"
+            )
+            for p in protocols
+        ]
+
+    fig, ax = plt.subplots(ncols=len(paths), figsize=(5 * len(paths), 3), squeeze=False)
+
+    for i, p in enumerate(paths):
+        G = nx.drawing.nx_agraph.read_dot(p)
+        draw_graph(G, fig, ax[0][i], relative_as, p.stem, mac_to_device_map, idx_to_mac_map)
+        
+
+    fig.tight_layout()
+    fig_name = f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}/graph.png"
+    fig.savefig(fig_name)
+    print(fig_name)
+
+
+def fig_to_array(fig):
+    """convert fig to plot used in tensorboard
+
+    Args:
+        fig (_type_): matplotlib figure
+
+    Returns:
+        _type_: _description_
+    """
+    # Convert a Matplotlib figure to a PNG image and return it
+    fig.canvas.draw()
+    data = np.frombuffer(fig.canvas.tostring_rgb(), dtype=np.uint8)
+    data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
+    return data.transpose(2, 0, 1)  # Convert to [C, H, W] format
+
+def draw_graph(G, threshold, node_as, fig, ax, relative_as, title, mac_to_device_map, idx_to_mac_map):
+    # convert attributes
+    for node, attrs in G.nodes(data=True):
+        for attr in attrs:
+            if isinstance(G.nodes[node][attr], str):
+                G.nodes[node][attr] = eval(G.nodes[node][attr])
+
+    # pos = nx.spiral_layout(G, resolution=0.8, equidistant=True)
+    pos=nx.circular_layout(G)
+    
+    ax.margins(x=0.2, y=0.2)
+    ax.set_title(title)
+
+    if relative_as:
+        node_as-=threshold 
+
+        node_sm = ScalarMappable(
+            norm=TwoSlopeNorm(
+                vcenter=0, vmin=np.min(node_as), vmax=np.max(node_as)
+            ),
+            cmap=matplotlib.colormaps["coolwarm"],
+        )
+    else:
+
+        node_sm = ScalarMappable(
+            norm=Normalize(vmin=0, vmax=np.max(node_as)),
+            cmap=plt.cm.Blues,
+        )
+
+    nx.draw_networkx_nodes(
+        G,
+        pos,
+        node_color=[node_sm.to_rgba(i) for i in node_as],
+        node_size=500,
+        ax=ax,
+    )
+
+    nx.draw_networkx_edges(
+        G,
+        pos,
+        node_size=500,
+        # arrowstyle="-|>",
+        arrowsize=20,
+        ax=ax,
+    )
+
+    # Draw the labels with conditional formatting
+
+    labels = nx.get_node_attributes(G, "idx")
+    texts = []
+    for node, label in labels.items():
+        node_label = mac_to_device_map.get(
+            idx_to_mac_map.get(label, label), idx_to_mac_map.get(label, label)
+        )
+
+        node_label="\n".join(textwrap.wrap(str(node_label), width=8))
+        fc = "red" if G.nodes[node]["updated"] else "white"
+        text = ax.text(
+            pos[node][0],
+            pos[node][1],
+            s=node_label,
+            fontsize=8,
+            ha="center",
+            va="center",
+            bbox={"ec": "k", "fc": fc, "alpha": 0.7},
+            wrap=True
+        )
+        texts.append(text)
+
+    # ax.spines['top'].set_visible(False)
+    # ax.spines['right'].set_visible(False)
+    # ax.spines['left'].set_visible(False)
+    # ax.spines['bottom'].set_visible(False)
+    ax.set_yticks([])
+    ax.set_xticks([])
+    
+    # Adjust the text to avoid overlap
+    # adjust_text(
+    #     texts,
+    #     only_move={"points": "xy", "texts": "xy"},
+    #     autoalign="xy",
+    #     ax=ax,
+    # )
+
+    node_cbar = fig.colorbar(node_sm, location="right", ax=ax)
+    node_cbar.ax.set_ylabel("Node Anomaly Score", rotation=90)
+    
+    if not relative_as:
+        node_cbar.ax.axhline(threshold, c='r')
+        
     
 class LivePercentile:
     def __init__(self, ndim=None):
@@ -61,7 +220,7 @@ class LivePercentile:
         for d in range(self.ndim):
             percentiles[:,d]=self.dims[d].inverse_cdf(p)
         
-        return torch.tensor(percentiles).float()
+        return percentiles
     
     def to_centroids(self):
         return [i.get_centroids() for i in self.dims]
@@ -243,13 +402,13 @@ def save_dataset_info(data_info):
     with open("../datasets/data_info.json", "w") as f:
         json.dump(data_info, f, indent=4, cls=JSONEncoder)
         
-def get_node_map(dataset_name, fe_name,file_name):
+def get_node_map(dataset_name, fe_name, file_name):
     try:
         with open(f"../datasets/{dataset_name}/{fe_name}/state/{file_name}.pkl", "rb") as pf:
             state=pickle.load(pf)
             
         return state["node_map"]
-    except FileNotFoundError as e:
+    except Exception as e:
         print(e)
-        return None
+        return {}
 

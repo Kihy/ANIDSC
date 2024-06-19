@@ -31,9 +31,6 @@ if __name__ == "__main__":
         "Cam_1",
     ]  # ,
     
-    
-
-
     attacks = [
         "Port_Scanning",
         "Service_Detection",
@@ -101,7 +98,7 @@ if __name__ == "__main__":
                 "conf":{
                     "model_name":f"MultiLayerOCDModel-{patience}-{confidence}-{gnn_kwargs['model_name']}-{name}",
                     "base_model_cls": "OnlineCDModel",
-                    "protocols":["TCP", "DNS", "SSH", "FTP", "HTTP", "UDP", "HTTPS"],
+                    "protocols":["UDP", "TCP","ARP", "ICMP"],
                     "save_type":"ensemble",
                     "base_model_config": {
                         "model_name": f"OnlineCDModel",

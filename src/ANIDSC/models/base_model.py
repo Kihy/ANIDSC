@@ -8,6 +8,7 @@ from .. import models
 from ..utils import *
 import matplotlib.pyplot as plt
 import networkx as nx
+import json
 
 def load_model(dataset_id, model_cls, model_config, indent="", verbose=False):
     save_type = model_config["save_type"]
@@ -112,54 +113,77 @@ class MixtureSaveMixin:
         torch.save(checkpoint, str(ckpt_path))
         print(f"saved at {ckpt_path}")
 
+def custom_default(obj):
+    if isinstance(obj, np.ndarray):
+        return obj.tolist()  # Convert ndarray to list
+    # elif isinstance(obj, frozenset):
+    #     return list(obj)
+    else:
+        return obj.to_dict()
 
-class DictSaveMixin:
-    def save(self, dataset_name, suffix=""):
+class JSONSaveMixin:
+    def save(self, folder, suffix=""):
+        context=self.get_context()
         save_path = Path(
-            f"../models/{dataset_name}/{self.model_name}{f'-{suffix}' if suffix !='' else ''}.pkl"
+            f"{context['dataset_name']}/{context['fe_name']}/{folder}/{context['file_name']}/{self.name}{f'-{suffix}' if suffix !='' else ''}.json"
         )
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(save_path, "wb") as f:
-            pickle.dump(self.to_dict(), f)
+        with open(save_path, "w") as f:
+            json.dump(self, f, default=custom_default)
 
         print(f"saved at {save_path}")
-
-
-class PickleSaveMixin:
-    def save(self, dataset_name, suffix=""):
+        
+    def load(self, folder, suffix=""):
+        context=self.get_context()
         save_path = Path(
-            f"../models/{dataset_name}/{self.model_name}{f'-{suffix}' if suffix !='' else ''}.pkl"
+            f"{context['dataset_name']}/{context['fe_name']}/{folder}/{context['file_name']}/{self.name}{f'-{suffix}' if suffix !='' else ''}.json"
         )
-        save_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(save_path, 'r') as json_file:
+            loaded_dict = json.load(json_file)
 
-        with open(save_path, "wb") as f:
-            pickle.dump(self, f)
+        # Convert the dictionary back to an instance of MyClass
+        new_object=type(self).from_dict(loaded_dict)
+        
+        self.__dict__.update(new_object.__dict__)
 
-        print(f"saved at {save_path}")
 
 
 class TorchSaveMixin:
-    def save(self, dataset_name, suffix=""):
+    def save(self, suffix=""):
+        context=self.get_context()
         checkpoint = {
             "model_state_dict": self.state_dict(),
         }
         if hasattr(self, "optimizer"):
             checkpoint["optimizer_state_dict"] = (self.optimizer.state_dict(),)
         ckpt_path = Path(
-            f"../models/{dataset_name}/{self.model_name}{f'-{suffix}' if suffix !='' else ''}.pth"
+            f"{context['dataset_name']}/{context['fe_name']}/models/{context['file_name']}/{self.name}{f'-{suffix}' if suffix !='' else ''}.pth"
         )
         ckpt_path.parent.mkdir(parents=True, exist_ok=True)
         torch.save(checkpoint, str(ckpt_path))
-        print(f"saved at {ckpt_path}")
+        print(f"model saved at {ckpt_path}")
 
-    @abstractmethod
+    def load(self, suffix=""):
+        context=self.get_context()
+        checkpoint = torch.load(f"{context['dataset_name']}/{context['fe_name']}/models/{context['file_name']}/{self.name}{f'-{suffix}' if suffix !='' else ''}.pth"
+        )
+
+        self.load_state_dict(checkpoint["model_state_dict"])
+        if "optimizer_state_dict" in checkpoint.keys():
+            self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"][0])
+
     def state_dict(self):
-        pass
-
-    @abstractmethod
+        state = super().state_dict()
+        for i in self.custom_params:
+            state[i] = getattr(self, i)
+        return state
+    
     def load_state_dict(self, state_dict):
-        pass
+        for i in self.custom_params:
+            setattr(self, i, state_dict[i])
+            del state_dict[i]
+        super().load_state_dict(state_dict)
 
 
 class BaseModel(ABC):
@@ -279,6 +303,9 @@ class MultiLayerOCDModel(EnsembleSaveMixin):
             self.model_pool.append(new_model)
 
     def process(self, x):
+        if isinstance(x, np.ndarray):
+            x=torch.from_numpy(x)
+            
         all_results = []
         for model in self.model_pool:
             idx = torch.where(x[:, 3].long() == model.proto_id)
@@ -310,11 +337,12 @@ class MultiLayerOCDModel(EnsembleSaveMixin):
         #     node_map = {v: k for k, v in node_map.items()}
         
         m=self.model_pool[self.protocol_inv[protocol]]
+        G = m.graph_state.get_graph_state()
         path = Path(
             f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{self.model_name}/{self.processed}/{m.protocol}.dot"
         )
         path.parent.mkdir(parents=True, exist_ok=True)
-        G = m.graph_state.get_graph_state()
+
         
         nx.drawing.nx_agraph.write_dot(G, path)
                 
@@ -385,6 +413,7 @@ class OnlineCDModel(EnsembleSaveMixin):
                 return None
         
         start_idx=self.model_idx
+        
         while True:
             score, threshold = self.model_pool[self.model_idx].predict_scores(x)
             
@@ -486,7 +515,7 @@ class BaseOnlineODModel(BaseModel):
 
         self.converged = False
         self.scaler = LivePercentile(ndim=self.n_features)
-        self.additional_params = ["preprocessors", "loss_queue", "scaler", "converged"]
+        self.custom_params = ["preprocessors", "loss_queue", "scaler", "converged"]
         self.num_batch=0
         
     @abstractmethod
