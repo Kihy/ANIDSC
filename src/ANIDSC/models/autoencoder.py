@@ -1,6 +1,8 @@
-import torch 
+import torch
+
+from ..base_files.save_mixin import TorchSaveMixin 
 from ..base_files import BaseOnlineODModel
-from ..models.base_model import TorchSaveMixin
+
 from ..models import gnnids
 
 class VAE(BaseOnlineODModel, torch.nn.Module):
@@ -104,7 +106,6 @@ class AE(BaseOnlineODModel, TorchSaveMixin, torch.nn.Module):
         score, threshold=self.predict_step(X_scaled)
         self.loss_queue.extend(score)
         
-        
         self.train_step(X_scaled)
         
         return {
@@ -117,16 +118,15 @@ class AE(BaseOnlineODModel, TorchSaveMixin, torch.nn.Module):
         context=self.get_context()
         if self.node_encoder is not None:
             self.node_encoder=getattr(gnnids, self.node_encoder["encoder_name"])(self.node_encoder["node_latent_dim"],
-                 context["n_features"],
+                 context["fe_features"],
                  self.node_encoder["embedding_dist"],
                  self.device)
             
-            self.parent.context['n_features']=self.node_encoder.node_latent_dim
-            context['n_features']=self.node_encoder.node_latent_dim
+            self.parent.context['output_features']=self.node_encoder.node_latent_dim
+            context["output_features"]=self.node_encoder.node_latent_dim
             
-        
         self.encoder = torch.nn.Sequential(
-            torch.nn.Linear(context["n_features"], 8),
+            torch.nn.Linear(context["output_features"], 8),
             torch.nn.ReLU(),
             torch.nn.Linear(8, 2)
         ).to(self.device)
@@ -134,7 +134,7 @@ class AE(BaseOnlineODModel, TorchSaveMixin, torch.nn.Module):
         self.decoder = torch.nn.Sequential(
             torch.nn.Linear(2, 8),
             torch.nn.ReLU(),
-            torch.nn.Linear(8, context["n_features"]),
+            torch.nn.Linear(8, context["output_features"]),
         ).to(self.device)
         
         self.criterion=torch.nn.MSELoss(reduction='none').to(self.device)
@@ -145,6 +145,8 @@ class AE(BaseOnlineODModel, TorchSaveMixin, torch.nn.Module):
 
     
     
-    def predict_step(self, X):
+    def predict_step(self, X, preprocess=False):
+        if preprocess:
+            X=self.preprocess(X)
         _, loss = self.forward(X, include_dist=False)
         return loss.detach().cpu().numpy(), self.get_threshold()

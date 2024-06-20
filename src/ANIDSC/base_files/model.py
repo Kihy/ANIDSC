@@ -8,8 +8,8 @@ import torch
 import copy
 
 class BaseOnlineODModel(PipelineComponent):
-    def __init__(self, queue_len=10000, preprocessors=[], profile=False, load_existing=False):
-        super().__init__()
+    def __init__(self, queue_len=10000, preprocessors=[], profile=False, load_existing=False, **kwargs):
+        super().__init__(component_type='models', **kwargs)
         self.preprocessors=preprocessors
         self.loss_queue = deque(maxlen=queue_len)
         
@@ -52,7 +52,9 @@ class BaseOnlineODModel(PipelineComponent):
     def process(self, X):
         pass 
     
-    def train_step(self, X):
+    def train_step(self, X, preprocess=False):
+        if preprocess:
+            X=self.preprocess(X)
         self.optimizer.zero_grad()
         _, loss=self.forward(X, include_dist=True)
         loss.backward()
@@ -94,8 +96,8 @@ class ConceptDriftWrapper(PipelineComponent):
     """A component that splits the input data into different outputs and attaches each output to separate pipelines."""
 
     def __init__(self, model:BaseOnlineODModel,
-                 patience:int, confidence:float):
-        super().__init__()
+                 patience:int, confidence:float, **kwargs):
+        super().__init__(component_type="models",**kwargs)
         self.model = model
         self.model_pool=[]
         self.patience=patience
@@ -124,16 +126,17 @@ class ConceptDriftWrapper(PipelineComponent):
     def setup(self):
         self.model_pool.append(self.create_model())
         self.parent.context["concept_drift_detection"]=True
+        self.parent.context['model_name']=f"CDD({self.model.name})"
  
     def process(self, data):
         start_idx=self.model_idx
         
         while True:
-            score, threshold = self.model_pool[self.model_idx].predict_step(data)
+            score, threshold = self.model_pool[self.model_idx].predict_step(data, preprocess=True)
             
             # found one in model pool
             if np.median(score)<threshold:
-                self.model_pool[self.model_idx].train_step(data)
+                self.model_pool[self.model_idx].train_step(data, preprocess=True)
                 if (score!=0).all():
                     self.model_pool[self.model_idx].loss_queue.extend(score)
                 self.model_pool[self.model_idx].last_batch_num=self.num_batch
@@ -183,9 +186,9 @@ class ConceptDriftWrapper(PipelineComponent):
                 # train model on existing features
             
                 for old_x in self.potential_x_queue:
-                    new_model.train_step(old_x)
+                    new_model.train_step(old_x, preprocess=True)
                 
-                score, threshold = new_model.predict_scores(data)
+                score, threshold = new_model.predict_step(data, preprocess=True)
                 new_model.loss_queue.extend(score)
                                 
                 self.model_idx = len(self.model_pool)
@@ -229,27 +232,27 @@ class ConceptDriftWrapper(PipelineComponent):
         self.potential_queue.clear()
         self.potential_x_queue.clear()
 
-    def teardown(self):
-        for i, model in enumerate(self.model_pool):
-            model.suffix.append(str(i))
-            model.teardown()
+    # def teardown(self):
+    #     for i, model in enumerate(self.model_pool):
+    #         model.suffix.append(str(i))
+    #         model.teardown()
 
 
 class MultilayerSplitter(SplitterComponent):
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)
+        super().__init__(component_type="models", **kwargs)
+        self.name=f"{self.__class__.__name__}({self.pipeline})"
+        
         
     def setup(self):
         context=self.get_context()
-        if isinstance(self.pipeline,PipelineComponent):
-            self.pipelines={}
-            for proto in context['protocols'].keys():
-                self.pipelines[proto]=copy.deepcopy(self.pipeline)
-                self.pipelines[proto].context['protocol']=proto
-        else:
-            self.pipelines=self.pipeline
-        super().setup()
-        self.parent.context['model_name']="Multilayer"
+        for proto in context['protocols'].keys():
+            self.pipelines[proto]=copy.deepcopy(self.pipeline)    
+            self.pipelines[proto].context['protocol']=proto
+            self.pipelines[proto].parent=self 
+            self.pipelines[proto].setup()
+        
+        self.parent.context['model_name']=self.name
         
     def split_function(self, data):
         all_results = {}

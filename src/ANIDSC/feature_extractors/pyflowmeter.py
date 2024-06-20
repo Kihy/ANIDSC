@@ -4,7 +4,6 @@ import itertools
 from scapy.all import *
 from collections import OrderedDict
 from itertools import product
-from .base_feature_extractor import BaseTrafficFeatureExtractor
 from tqdm import tqdm
 from collections import defaultdict
 

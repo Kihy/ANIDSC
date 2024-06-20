@@ -3,3 +3,4 @@ from .feature_extractor import BaseTrafficFeatureExtractor, FeatureBuffer
 from .model import BaseOnlineODModel, MultilayerSplitter,ConceptDriftWrapper
 from .evaluator import BaseEvaluator,CollateEvaluator
 from .normalizer import BaseOnlineNormalizer
+from .save_mixin import PickleSaveMixin, JSONSaveMixin, TorchSaveMixin

@@ -1,13 +1,15 @@
 from abc import ABC, abstractmethod
 from typing import Callable, Dict, Any, Union
+from ..base_files.save_mixin import PickleSaveMixin
 
-class PipelineComponent(ABC):
+class PipelineComponent(ABC, PickleSaveMixin):
     """A component in the pipeline that can be chained with |"""
 
-    def __init__(self, call_back: Callable[[Any], Any] = None):
+    def __init__(self, component_type:str="", call_back: Callable[[Any], Any] = None):
         self.call_back = call_back
         # context = {}
         self.name = self.__class__.__name__
+        self.component_type=component_type
         self.parent = None  # Reference to parent component
 
     def get_context(self):
@@ -27,9 +29,11 @@ class PipelineComponent(ABC):
     def process(self, data):
         pass
 
-    @abstractmethod
+ 
     def teardown(self):
-        pass
+        if self.component_type!="":
+            context=self.get_context()
+            self.save_pickle(self.component_type, suffix=context.get('protocol',''))
 
     def __or__(self, other):
         return Pipeline([self, other])
@@ -51,7 +55,6 @@ class Pipeline(PipelineComponent):
             component.parent=self
             component.setup()
             
-        
     def process(self, data):
         for component in self.components:
             data = component.process(data)
@@ -68,10 +71,13 @@ class Pipeline(PipelineComponent):
 
     def __or__(self, other: PipelineComponent):
         # other.set_context(context)
-        return Pipeline(self.components + [other])
+        if isinstance(other, Pipeline):
+            return Pipeline(self.components + other.components)
+        else:
+            return Pipeline(self.components + [other])
 
     def __str__(self):
-        return " -> ".join([str(component) for component in self.components])
+        return "-".join([str(component) for component in self.components])
 
 
 class PipelineSource(ABC):
@@ -107,18 +113,14 @@ class Processor(PipelineComponent):
 class SplitterComponent(PipelineComponent):
     """A component that splits the input data into different outputs and attaches each output to separate pipelines."""
 
-    def __init__(self, pipelines: Union[Dict[str, PipelineComponent], PipelineComponent]):
-        super().__init__()
-        self.pipeline = pipelines
+    def __init__(self, pipeline: PipelineComponent, **kwargs):
+        super().__init__(**kwargs)
+        self.pipeline = pipeline
+        self.pipelines={}
         self.context={}
 
     def set_context(self, context: Dict[str, Any]):
         self.context=context
-    
-    def setup(self):
-        for pipeline in self.pipelines.values():
-            pipeline.parent=self
-            pipeline.setup()
 
     @abstractmethod
     def split_function(self, data):
@@ -131,9 +133,8 @@ class SplitterComponent(PipelineComponent):
             results[key] = self.pipelines[key].process(data)
         return results
 
-    def teardown(self):
-        for pipeline in self.pipelines.values():
-            pipeline.teardown()
+    # def teardown(self):
+    #     self.save_pickle()
 
     def __str__(self):
         return f"SplitterComponent({self.pipeline})"

@@ -1,6 +1,4 @@
 import numpy as np
-from scipy import stats
-
 
 def detection_rate(result_dict):
     return np.mean(result_dict["score"]> result_dict["threshold"])

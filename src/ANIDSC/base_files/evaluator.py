@@ -47,6 +47,8 @@ class CollateEvaluator(PipelineComponent):
         # records time
         
         for protocol, result_dict in results.items():
+            if result_dict is None:
+                continue
             if self.log_to_tensorboard:
                 #skip protocol information
                 for name, value in result_dict.items():
@@ -125,7 +127,7 @@ class BaseEvaluator(PipelineComponent):
         self.prev_timestamp=current_time
         
         result_dict={"time":duration}
-        if self.get_context()['concept_drift_detection']:
+        if self.get_context().get('concept_drift_detection',False):
             result_dict['model_idx']= results['model_idx']
             result_dict['num_model']=results['num_model']
         
@@ -150,9 +152,9 @@ class BaseEvaluator(PipelineComponent):
                                 value,
                                 results['batch_num'],
                             )
-        
-        if self.draw_graph_rep_interval and results['batch_num']%self.draw_graph_rep_interval==0:
-            context=self.get_context()
+                
+        context=self.get_context()
+        if context.get('G',False) and self.draw_graph_rep_interval and results['batch_num']%self.draw_graph_rep_interval==0:
             G=context['G']
             fig, ax = plt.subplots()
 

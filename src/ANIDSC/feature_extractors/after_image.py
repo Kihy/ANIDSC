@@ -7,11 +7,9 @@ from socket import getservbyport
 from itertools import product
 from typing import List, Dict, Any
 from numpy.typing import NDArray
-from pathlib import Path
-import pickle
-from ..models.base_model import JSONSaveMixin
+from ..base_files import PickleSaveMixin
 
-class AfterImage(BaseTrafficFeatureExtractor, JSONSaveMixin):
+class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
     def __init__(self, decay_factors:List[float]=[5, 3, 1, 0.1, 0.01], **kwargs):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
@@ -19,35 +17,19 @@ class AfterImage(BaseTrafficFeatureExtractor, JSONSaveMixin):
             limit (int, optional): maximum number of records. Defaults to 1e6.
             decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
         """
-        
         self.decay_factors = decay_factors
         self.clean_up_round=5000
 
         super().__init__(**kwargs)
     
-    def to_dict(self):
-        return {
-            'decay_factors': self.decay_factors,  # No conversion needed if it's a list
-            'clean_up_round': self.clean_up_round,  # Include this attribute
-            'state':self.state.to_dict()
-        }
-
-    @classmethod
-    def from_dict(cls, dict_obj):
-        obj = cls()  # Call the constructor with the dictionary values
-        for key, value in dict_obj.items():
-            setattr(obj, key, value)
-        
-        obj.state=IncStatDB.from_dict(dict_obj['state'])
-        
-        return obj
+    def setup(self):
+        super().setup()
+        self.parent.context['skip']=0
     
     def init_state(self):
         """sets up after image"""
-        if self.load_state:
-            self.load(folder="feature_extractors")
-        else:
-            self.state = IncStatDB(
+        
+        self.state = IncStatDB(
                     decay_factors=self.decay_factors,
                     limit=float("inf"),
                 )
@@ -307,9 +289,7 @@ class AfterImageGraph(AfterImage):
     
     def setup(self):
         super().setup()
-        
         self.parent.context['protocols']=self.protocol_map
-        self.parent.context['n_features']=69
         self.parent.context['skip']=4
 
     def peek(self, traffic_vectors:List[Dict[str, Any]]):
@@ -547,20 +527,20 @@ class IncStat1D:
         )  # each row corresponds to weight, linear sum, sum of squares
         self.weight_thresh = 1e-3
 
-    def to_dict(self):
-        return {
-            'last_timestamp': self.last_timestamp,
-            'incremental_statistics': self.incremental_statistics.tolist(),  # Convert numpy array to list
-            'weight_thresh': self.weight_thresh
-        }
+    # def to_dict(self):
+    #     return {
+    #         'last_timestamp': self.last_timestamp,
+    #         'incremental_statistics': self.incremental_statistics.tolist(),  # Convert numpy array to list
+    #         'weight_thresh': self.weight_thresh
+    #     }
     
-    @classmethod
-    def from_dict(cls, dict_obj):
-        obj = cls.__new__(cls)  # Create a new instance without calling __init__
-        obj.last_timestamp = dict_obj['last_timestamp']
-        obj.incremental_statistics = np.array(dict_obj['incremental_statistics'])  # Convert list back to numpy array
-        obj.weight_thresh = dict_obj['weight_thresh']
-        return obj
+    # @classmethod
+    # def from_dict(cls, dict_obj):
+    #     obj = cls.__new__(cls)  # Create a new instance without calling __init__
+    #     obj.last_timestamp = dict_obj['last_timestamp']
+    #     obj.incremental_statistics = np.array(dict_obj['incremental_statistics'])  # Convert list back to numpy array
+    #     obj.weight_thresh = dict_obj['weight_thresh']
+    #     return obj
     
     def __repr__(self):
         return pformat(vars(self))
@@ -685,21 +665,21 @@ class IncStat2D:
         self.eps = 2e-3
         self.last_timestamp = t
         
-    def to_dict(self):
-        return {
-            'sum_of_residual': self.sum_of_residual.tolist(),  # Convert numpy array to list
-            'eps': self.eps,
-            'last_timestamp': self.last_timestamp
-        }
+    # def to_dict(self):
+    #     return {
+    #         'sum_of_residual': self.sum_of_residual.tolist(),  # Convert numpy array to list
+    #         'eps': self.eps,
+    #         'last_timestamp': self.last_timestamp
+    #     }
 
-    @classmethod
-    def from_dict(cls, dict_obj):
-        len_factor = len(dict_obj['sum_of_residual'])
-        t = dict_obj['last_timestamp']
-        obj = cls(len_factor, t)  # Call the constructor with len_factor and t
-        obj.sum_of_residual = np.array(dict_obj['sum_of_residual'])  # Convert list back to numpy array
-        obj.eps = dict_obj['eps']
-        return obj
+    # @classmethod
+    # def from_dict(cls, dict_obj):
+    #     len_factor = len(dict_obj['sum_of_residual'])
+    #     t = dict_obj['last_timestamp']
+    #     obj = cls(len_factor, t)  # Call the constructor with len_factor and t
+    #     obj.sum_of_residual = np.array(dict_obj['sum_of_residual'])  # Convert list back to numpy array
+    #     obj.eps = dict_obj['eps']
+    #     return obj
 
     def update_cov(self, inc_stats1, inc_stats2, decay_factors, t:float, v:int):
         """updates the covariance of the two streams.
@@ -793,30 +773,30 @@ class IncStatDB:
         self.last_timestamp=last_timestamp
         self.mac_to_idx_map=mac_to_idx_map
         
-    def to_dict(self):
-        return {
-            'stat1d': {k: v.to_dict() for k, v in self.stat1d.items()},
-            'stat2d': {k: v.to_dict() for k, v in self.stat2d.items()},
-            'limit': self.limit,
-            'num_entries': self.num_entries,
-            'decay_factors': self.decay_factors.tolist(),  # Convert numpy array to list
-            'num_updated': self.num_updated,
-            'last_timestamp': self.last_timestamp,
-            'mac_to_idx_map': self.mac_to_idx_map
-        }
+    # def to_dict(self):
+    #     return {
+    #         'stat1d': {k: v.to_dict() for k, v in self.stat1d.items()},
+    #         'stat2d': {k: v.to_dict() for k, v in self.stat2d.items()},
+    #         'limit': self.limit,
+    #         'num_entries': self.num_entries,
+    #         'decay_factors': self.decay_factors.tolist(),  # Convert numpy array to list
+    #         'num_updated': self.num_updated,
+    #         'last_timestamp': self.last_timestamp,
+    #         'mac_to_idx_map': self.mac_to_idx_map
+    #     }
         
-    @classmethod
-    def from_dict(cls, dict_obj):
-        decay_factors = dict_obj['decay_factors']
-        last_timestamp = dict_obj['last_timestamp']
-        limit = dict_obj['limit']
-        mac_to_idx_map = dict_obj['mac_to_idx_map']
-        obj = cls(decay_factors, last_timestamp, limit, mac_to_idx_map)  # Call the constructor with the dictionary values
-        obj.stat1d = {k: IncStat1D.from_dict(v) for k, v in dict_obj['stat1d'].items()}
-        obj.stat2d = {k: IncStat2D.from_dict(v) for k, v in dict_obj['stat2d'].items()}
-        obj.num_entries = dict_obj['num_entries']
-        obj.num_updated = dict_obj['num_updated']
-        return obj
+    # @classmethod
+    # def from_dict(cls, dict_obj):
+    #     decay_factors = dict_obj['decay_factors']
+    #     last_timestamp = dict_obj['last_timestamp']
+    #     limit = dict_obj['limit']
+    #     mac_to_idx_map = dict_obj['mac_to_idx_map']
+    #     obj = cls(decay_factors, last_timestamp, limit, mac_to_idx_map)  # Call the constructor with the dictionary values
+    #     obj.stat1d = {k: IncStat1D.from_dict(v) for k, v in dict_obj['stat1d'].items()}
+    #     obj.stat2d = {k: IncStat2D.from_dict(v) for k, v in dict_obj['stat2d'].items()}
+    #     obj.num_entries = dict_obj['num_entries']
+    #     obj.num_updated = dict_obj['num_updated']
+    #     return obj
 
     def update_get_stats_1D(self, ID:str, t:float, v:int):
         """Updates 1d incstat with ID given time and value.

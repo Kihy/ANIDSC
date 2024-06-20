@@ -3,7 +3,6 @@ from .pipeline import PipelineComponent
 from pathlib import Path
 import numpy as np 
 from scapy.all import Packet
-import pickle
 from typing import Dict, Any, List, Union
 
 
@@ -80,20 +79,18 @@ class FeatureBuffer(PipelineComponent):
         
         
 class BaseTrafficFeatureExtractor(PipelineComponent):
-    def __init__(self, load_state=False, offset_time:Union[int, str]="auto"):
-        super().__init__()
+    def __init__(self, offset_time:Union[int, str]="auto", **kwargs):
+        super().__init__(component_type="feature_extractors",**kwargs)
         self.skipped=0
         self.processed=0
         self.offset_time=offset_time
-        self.load_state=load_state
-    
-    
+  
     def setup(self):
-        
         self.parent.context["feature_names"]=self.get_headers()
         self.parent.context["meta_names"]=self.get_meta_headers()
         self.parent.context["fe_name"]=self.name
-        self.parent.context["n_features"]=len(self.get_headers())
+        self.parent.context["fe_features"]=len(self.get_headers())
+        self.parent.context["output_features"]=len(self.get_headers())
         self.init_state()
         
     @abstractmethod
@@ -170,5 +167,5 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         print(
             f"skipped: {self.skipped} processed: {self.processed+self.skipped} written: {self.processed}"
         )
-        self.save(folder="feature_extractors")
+        super().teardown()
     

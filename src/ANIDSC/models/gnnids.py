@@ -1,24 +1,20 @@
 import torch
 import numpy as np
 
-from ANIDSC.base_files.pipeline import PipelineComponent
-from .base_model import BaseOnlineODModel, TorchSaveMixin,EnsembleSaveMixin
-from torch_geometric.data import Data, HeteroData
+from ..base_files.pipeline import PipelineComponent
+from torch_geometric.data import Data
 from collections import defaultdict
 import torch.nn.functional as F
 from torch_geometric.nn.conv import GATv2Conv, GCNConv
 from torch_geometric.nn.models import GAT,GAE,MLP, GCN
 from torch_geometric.utils import k_hop_subgraph,to_networkx, remove_isolated_nodes
-import networkx as nx
-from collections import defaultdict
-import matplotlib.pyplot as plt
 import pickle 
-from ..utils import *
-
-from matplotlib.cm import ScalarMappable
-from matplotlib.colors import Normalize,TwoSlopeNorm,LogNorm
 
 from scipy import integrate
+
+from ..base_files.save_mixin import TorchSaveMixin
+from ..normalizer.t_digest import LivePercentile
+from ..utils import uniqueXT
 
 torch.set_printoptions(precision=4)
 
@@ -548,261 +544,15 @@ def loss_fn(model, x, marginal_prob_std, eps=1e-5):
     loss = torch.sum((score * std[:, None] + z)**2, dim=(1))
     return loss
 
-class HomoGNN(torch.nn.Module, TorchSaveMixin):
-    def __init__(self, device='cuda', l_features=35,
-                 n_features=15, model_name="HomoGNN",
-                 detection_period=256,
-                 **kwargs):
-        torch.nn.Module.__init__(self)    
-        self.device=device
-        model_name=f"{model_name}"
-        self.n_features=n_features
-        self.l_features=l_features
-        self.detection_period=detection_period
-        
-        #initialize graph
-        self.G=Data()
-        
-        #initialize node features 
-        self.G.x=torch.empty((0,n_features)).to(self.device)
-        self.G.node_as=torch.empty(0).to(self.device)
-        self.G.idx=torch.empty(0).long().to(self.device)
-        self.G.updated=torch.empty(0).to(self.device)
-        
-        #initialize edge features
-        self.G.edge_index=torch.empty((2,0)).to(self.device)
-
-        self.G.edge_attr=torch.empty((0,l_features)).to(self.device)    
-
-            
-        self.processed=0
-        
-        
-        self.mac_device_map={"d2:19:d4:e9:94:86":"Router",
-                             "22:c9:ca:f6:da:60":"Smartphone 1",
-                            "a2:bd:fa:b5:89:92":"Smart Clock 1",
-                            "5e:ea:b2:63:fc:aa":"Google Nest Mini 1",
-                            "7e:d1:9d:c4:d1:73":"Smart TV",
-                            "52:a8:55:3e:34:46":"Smart Bulb 1",
-                            "52:8e:44:e1:da:9a":"IP Camera 1",
-                            "0a:08:59:8a:2f:1b":"Smart Plug 1",
-                            "ea:d8:43:b8:6e:9a":"Raspberry Pi",
-                            "ff:ff:ff:ff:ff:ff":"Broadcast",
-                            "00:00:00:00:00:00":"Localhost",
-                            "be:7b:f6:f2:1b:5f":"Attacker"}
-        
-        
-    
-    def to_device(self, x):
-        return x.float().to(self.device)
-    
-    def update_threshold(self, threshold):
-        self.G.threshold=torch.tensor(threshold).to(self.device)
-        
-    def update_node_score(self, score):
-        self.G.node_as=torch.tensor(score).to(self.device)
-        
-    def update_nodes(self, srcID, src_feature, dstID, dst_feature):
-        self.G.updated=torch.zeros_like(self.G.updated).to(self.device)
-        
-        unique_nodes=torch.unique(torch.cat([srcID, dstID]))
-                        
-        #find set difference unique_nodes-self.G.node_idx
-        uniques, counts = torch.cat((unique_nodes, self.G.idx, self.G.idx)).unique(return_counts=True)
-        difference = uniques[counts == 1]
-
-        expand_size=len(difference)
-            
-        if expand_size>0:
-            self.G.x=torch.vstack([self.G.x, torch.zeros((expand_size, self.n_features)).to(self.device)])
-            self.G.node_as=torch.hstack([self.G.node_as, torch.zeros(expand_size).to(self.device)])
-            self.G.idx=torch.hstack([self.G.idx, difference.to(self.device)]).long()
-            self.G.updated=torch.hstack([self.G.updated, torch.ones(expand_size).to(self.device)])     
-        
-        #update 
-        for i in range(len(srcID)):
-            self.G.x[self.G.idx==srcID[i]]=src_feature[i]
-            self.G.x[self.G.idx==dstID[i]]=dst_feature[i]
-        
-        self.G.updated=torch.isin(self.G.idx, unique_nodes)
-        
-            
-
-    def update_edges(self, srcID, dstID, protocol, edge_feature):
-        #convert ID to index 
-        src_idx = torch.nonzero(self.G.idx == srcID[:, None], as_tuple=False)[:, 1]
-        dst_idx = torch.nonzero(self.G.idx == dstID[:, None], as_tuple=False)[:, 1]
-        
-    
-        edge_indices=find_edge_indices(self.G.edge_index, src_idx, dst_idx)
-        existing_edge_idx= edge_indices != -1 
-        
-        
-        #update found edges if there are any
-        if existing_edge_idx.any():
-            self.G.edge_attr[edge_indices[existing_edge_idx]]=edge_feature[existing_edge_idx]
-        
-        num_new_edges=torch.count_nonzero(~existing_edge_idx)
-        if num_new_edges>0:
-            new_edges=torch.vstack([src_idx[~existing_edge_idx],dst_idx[~existing_edge_idx]])
-            self.G.edge_index=torch.hstack([self.G.edge_index, new_edges]).long()
-            self.G.edge_attr=torch.vstack([self.G.edge_attr, edge_feature[~existing_edge_idx]])
-    
-    def get_graph_state(self):
-        G = to_networkx(self.G, node_attrs=["node_as","idx","updated"],
-                        graph_attrs=["threshold"],
-                     to_undirected=False, to_multi=False)
-        return G
-        
-    def visualize_graph(self, fig, ax, node_map):
-        if self.G.x.numel() ==0:
-            ax.text(0,0,"empty Graph")
-            return
-        
-        G = self.get_graph_state()
-        
-        #indices to label map 
-        idx_node_map={i:n for i, n in enumerate(self.G.idx.long().cpu().numpy())}
-        node_idx_map={v:k for k,v in idx_node_map.items()}
-
-        subset=[node_idx_map[i] for i in self.subset]
-        
-        node_as=np.array(list(nx.get_node_attributes(G, "node_as").values()))
-        # node_as-=G.graph["node_thresh"]
-        
-
-        node_sm = ScalarMappable(norm=Normalize(vmin=np.min(node_as),  vmax=np.max(node_as)), cmap=plt.cm.winter)
-        
-        # Visualize the graph using NetworkX
-        pos = nx.shell_layout(G)  # Layout algorithm for positioning nodes 
-
-        #draw nodes
-        nx.draw_networkx_nodes(G, pos, node_size=800,
-                node_color=[node_sm.to_rgba(i) for i in node_as],
-                ax=ax)
-
-        rad_dict=defaultdict(int)
-        for i, edge in enumerate(G.edges()):
-            rad=rad_dict[frozenset([edge[0],edge[1]])]
-
-            nx.draw_networkx_edges(G, pos, node_size=800, edgelist=[(edge[0],edge[1])], connectionstyle=f'arc3, rad = {rad}',
-                                    arrowstyle='->',  arrowsize=20,
-                                   ax=ax)
-            rad_dict[frozenset([edge[0],edge[1]])]+=0.2
-            
-        # identity mapping if no node map
-        if node_map is None:
-            node_map={i:i for i in range(self.G.idx.max()+1)}
-        #draw labels for subset
-        nx.draw_networkx_labels(G, pos, {i: self.mac_device_map.get(node_map.get(n,n), node_map.get(n,n)) for i, n in nx.get_node_attributes(G,"idx").items()
-                                         if i in subset}, font_size=10,font_weight="bold", ax=ax)
-        
-        #draw labels for non subset
-        nx.draw_networkx_labels(G, pos, {i: self.mac_device_map.get(node_map.get(n,n), node_map.get(n,n)) for i, n in nx.get_node_attributes(G,"idx").items()
-                                         if i not in subset}, font_size=10, ax=ax)
-        
-        node_cbar=fig.colorbar(node_sm, ax=ax, location="right")
-        node_cbar.ax.set_ylabel('node anomaly score', rotation=90)
-    
-    def split_data(self, x):
-        srcIDs=x[:, 1].long()
-        dstIDs=x[:, 2].long()
-        protocols=x[:, 3].long()
-        
-        src_features=x[:, 4:19].float()
-        dst_features=x[:, 19:34].float()
-        edge_features=x[:, 34:].float()
-        
-        
-        
-        return srcIDs, dstIDs, protocols, src_features, dst_features, edge_features
-    
-    def sample_edges(self, p):
-        n=self.G.x.size(0)
-        probabilities = torch.rand(n, n)
-        
-        # Get indices where probabilities are less than p and apply the mask
-        indices = torch.argwhere(probabilities < p).T 
-        
-        return indices, edge_exists(self.edge_idx, indices)
-        
-    def update_graph(self, x):
-        x=x.to(self.device)
-        
-        diff = x[1:, 0] - x[:-1, 0]
-        
-        split_indices = torch.nonzero(diff, as_tuple=True)[0] + 1
-        split_indices=split_indices.tolist()
-        split_indices=[0]+split_indices+[x.size(0)]
-        split_indices=np.array(split_indices[1:])-np.array(split_indices[:-1])
-        updated=False
-        
-        for data in torch.split(x, split_indices.tolist(), dim=0):
-            #update chunk
-            if data[0,0]==1:
-                srcIDs, dstIDs, protocols, src_features, dst_features, edge_features=self.split_data(data)
-                
-                #find index of last update
-                _, indices=uniqueXT(data[:,1:3], return_index=True, occur_last=True, dim=0)
-                self.subset=self.update_nodes(srcIDs[indices], src_features[indices], dstIDs[indices], dst_features[indices])
-                self.update_edges(srcIDs[indices], dstIDs[indices], protocols[indices], edge_features[indices])
-                updated=True
-                self.processed+=data.size(0)
-                
-            # delete links
-            else:
-                srcIDs, dstIDs, protocols, _, _, _=self.split_data(data)
-
-                # convert to idx
-                src_idx = torch.nonzero(self.G.idx == srcIDs[:, None], as_tuple=False)[:, 1]
-                dst_idx = torch.nonzero(self.G.idx == dstIDs[:, None], as_tuple=False)[:, 1]
-                
-                edge_indices=find_edge_indices(self.G.edge_index, src_idx, dst_idx)
-                
-                edge_mask = torch.ones(self.G.edge_index.size(1), dtype=torch.bool)
-                edge_mask[edge_indices] = False
-                
-                self.G.edge_index=self.G.edge_index[:,edge_mask]
-                
-                self.G.edge_attr=self.G.edge_attr[edge_mask]
-
-
-                # remove isolated nodes
-                edge_index, _, mask = remove_isolated_nodes(self.G.edge_index,
-                                                                num_nodes=self.G.x.size(0))
-                #update edge index 
-                self.G.edge_index=edge_index
-                self.G.x=self.G.x[mask]
-                self.G.node_as=self.G.node_as[mask]
-                self.G.idx=self.G.idx[mask]
-                self.processed+=data.size(0)
- 
-        # if only deletion, no need to return anything    
-        if not updated or self.processed%self.detection_period==0:
-            return None
-        return self.G.x, self.G.edge_index, self.G.edge_attr
-    
-    def state_dict(self):
-        state = super().state_dict()
-        for i in self.custom_params:                        
-            state[i] = getattr(self, i)
-            
-        return state
-    
-    def load_state_dict(self, state_dict):
-        for i in self.custom_params:
-            setattr(self, i, state_dict[i])
-            del state_dict[i]
-            
-
-
 
 class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin):
-    def __init__(self, device="cuda", preprocessors=[], **kwargs):
+    def __init__(self, device="cuda", preprocessors=[], load_existing=False, **kwargs):
         torch.nn.Module.__init__(self)
         PipelineComponent.__init__(self, **kwargs)    
         self.device=device
         self.preprocessors=preprocessors
+        self.load_existing=load_existing
+        self.custom_params=['G']
     
     def preprocess(self, X):
         if len(self.preprocessors) > 0:
@@ -826,20 +576,26 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         n_features=15
         l_features=15
         
-        self.parent.context["n_features"]=n_features
+        self.parent.context["fe_features"]=n_features
         self.parent.context["l_features"]=l_features
+        self.parent.context["output_features"]=n_features
         
-        #initialize graph
-        self.G=Data()
         
-        #initialize node features 
-        self.G.x=torch.empty((0,n_features)).to(self.device)
-        self.G.idx=torch.empty(0).long().to(self.device)
-        self.G.updated=torch.empty(0).to(self.device)
-        
-        #initialize edge features
-        self.G.edge_index=torch.empty((2,0)).to(self.device)
-        self.G.edge_attr=torch.empty((0,l_features)).to(self.device)    
+        if self.load_existing:
+            context=self.get_context()
+            self.load(suffix=context.get('protocol',''))
+        else:
+            #initialize graph
+            self.G=Data()
+            
+            #initialize node features 
+            self.G.x=torch.empty((0,n_features)).to(self.device)
+            self.G.idx=torch.empty(0).long().to(self.device)
+            self.G.updated=torch.empty(0).to(self.device)
+            
+            #initialize edge features
+            self.G.edge_index=torch.empty((2,0)).to(self.device)
+            self.G.edge_attr=torch.empty((0,l_features)).to(self.device)    
         
         # self.mac_device_map={"d2:19:d4:e9:94:86":"Router",
         #                      "22:c9:ca:f6:da:60":"Smartphone 1",
