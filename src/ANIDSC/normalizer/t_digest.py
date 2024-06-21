@@ -1,3 +1,4 @@
+from typing import List
 from ..base_files.save_mixin import JSONSaveMixin
 from ..base_files import BaseOnlineNormalizer
 from pytdigest import TDigest
@@ -6,14 +7,15 @@ import numpy as np
 
 
 class LivePercentile(BaseOnlineNormalizer):
-    def __init__(self, p=[0.25, 0.5, 0.75], load_state=False, **kwargs):
-        """
-        Constructs a LiveStream object
-        """
+    def __init__(self, p:List[float]=[0.25, 0.5, 0.75],  **kwargs):
+        """normalizes input with percentile calculations with tdigest
+
+        Args:
+            p (List[float], optional): list of percentiles for extraction, in the order lower percentile, median, upper percentile. Defaults to [0.25, 0.5, 0.75].
+        """        
         BaseOnlineNormalizer.__init__(self, **kwargs)
         self.p = p
-        self.patience = 0
-        self.load_state=load_state
+        self.count = 0
         self.dims=[]
         
     def setup(self):
@@ -34,7 +36,7 @@ class LivePercentile(BaseOnlineNormalizer):
         for i, n in enumerate(X.T):
             self.dims[i].update(n)
 
-        self.patience += 1
+        self.count += 1
 
     def process(self, X):
         percentiles = self.quantiles()
@@ -56,12 +58,12 @@ class LivePercentile(BaseOnlineNormalizer):
 
     def reset(self):
         self.dims = [TDigest() for _ in range(self.ndim-self.skip)]
-        self.patience = 0
+        self.count = 0
 
     def quantiles(self):
         """Returns a list of tuples of the quantile and its location"""
 
-        if self.ndim == 0 or self.patience < self.warmup:
+        if self.ndim == 0 or self.count < self.warmup:
             return None
         percentiles = np.zeros((len(self.p), self.ndim-self.skip))
 
@@ -79,7 +81,7 @@ class LivePercentile(BaseOnlineNormalizer):
     def __getstate__(self):
         return {
             'p': self.p,
-            'patience': self.patience,
+            'count': self.count,
             'load_state': self.load_state,
             'dims': self.to_centroids()
         }

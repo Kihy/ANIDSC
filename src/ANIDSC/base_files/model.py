@@ -1,4 +1,5 @@
 
+from typing import Any, Dict, List
 from .pipeline import PipelineComponent, SplitterComponent
 from collections import deque
 from ..utils import LivePercentile, calc_quantile
@@ -6,11 +7,20 @@ from abc import abstractmethod
 import numpy as np 
 import torch
 import copy
+from numpy.typing import NDArray
 
 class BaseOnlineODModel(PipelineComponent):
-    def __init__(self, queue_len=10000, preprocessors=[], profile=False, load_existing=False, **kwargs):
+    def __init__(self, queue_len=10000, preprocessors:List[str]=[], profile:bool=False, load_existing:bool=False, **kwargs):
+        """base interface for online outlier detection model
+
+        Args:
+            queue_len (int, optional): length of loss queue. Defaults to 10000.
+            preprocessors (list, optional): list of preprocessors as strings. Defaults to [].
+            profile (bool, optional): whether to profile the model, only available for pytorch models. Defaults to False.
+            load_existing (bool, optional): whether to loading existing model. Defaults to False.
+        """        
         super().__init__(component_type='models', **kwargs)
-        self.preprocessors=preprocessors
+        self.preprocessors=[getattr(self, p) for p in preprocessors]
         self.loss_queue = deque(maxlen=queue_len)
         
         self.num_batch=0
@@ -50,9 +60,23 @@ class BaseOnlineODModel(PipelineComponent):
         
     @abstractmethod
     def process(self, X):
+        """processes input data
+
+        Args:
+            X: input data to the model
+        """        
         pass 
     
-    def train_step(self, X, preprocess=False):
+    def train_step(self, X, preprocess:bool=False)->NDArray:
+        """train the model on batch X
+
+        Args:
+            X (_type_): input data to the model
+            preprocess (bool, optional): whether to preprocess the data. Defaults to False.
+
+        Returns:
+            _type_: _description_
+        """        
         if preprocess:
             X=self.preprocess(X)
         self.optimizer.zero_grad()
@@ -66,9 +90,19 @@ class BaseOnlineODModel(PipelineComponent):
     
     @abstractmethod
     def predict_step(self, X):
+        """perform prediction on input X
+
+        Args:
+            X (_type_): input data for prediction
+        """        
         pass 
 
-    def get_threshold(self):
+    def get_threshold(self)->float:
+        """gets the current threshold value based on previous recorded loss value. By default it is 95th percentile
+
+        Returns:
+            float: threshold value
+        """        
         if len(self.loss_queue)>100:
             threshold=calc_quantile(self.loss_queue, 0.95)
         else:
@@ -76,15 +110,39 @@ class BaseOnlineODModel(PipelineComponent):
         return threshold
 
     def preprocess(self, X):
+        """preprocesses the input with preprocessor
+
+        Args:
+            X (_type_): input data
+
+        Returns:
+            _type_: preprocessed X
+        """        
         if len(self.preprocessors) > 0:
             for p in self.preprocessors:
-                X = getattr(self, p)(X)
+                X = p(X)
         return X
     
-    def to_device(self, X):
+    def to_device(self, X: torch.Tensor)->torch.Tensor:
+        """preprocessor that converts X to particular device
+
+        Args:
+            X (torch.Tensor): the input data    
+
+        Returns:
+            torch.Tensor: output tensor
+        """        
         return X.to(self.device)
     
-    def to_float_tensor(self, X):
+    def to_float_tensor(self, X:NDArray)->torch.Tensor:
+        """converts input data to pytorch tensor
+
+        Args:
+            X (NDArray): input data
+
+        Returns:
+            torch.Tensor: output
+        """        
         return torch.from_numpy(X).float()
     
     def teardown(self):
@@ -93,10 +151,15 @@ class BaseOnlineODModel(PipelineComponent):
     
 
 class ConceptDriftWrapper(PipelineComponent):
-    """A component that splits the input data into different outputs and attaches each output to separate pipelines."""
-
     def __init__(self, model:BaseOnlineODModel,
                  patience:int, confidence:float, **kwargs):
+        """A wrapper around baseline model to allow concept drift detection
+
+        Args:
+            model (BaseOnlineODModel): the base model 
+            patience (int): patience for concept drift detection
+            confidence (float): threshold to differentiate benign and malicious drift
+        """        
         super().__init__(component_type="models",**kwargs)
         self.model = model
         self.model_pool=[]
@@ -114,10 +177,20 @@ class ConceptDriftWrapper(PipelineComponent):
         self.time_since_last_drift=0
         self.num_batch=0
 
-    def set_context(self, context):
+    def set_context(self, context:Dict[str, Any]):
+        """sets the current context
+
+        Args:
+            context (Dict[str, Any]): context to set
+        """        
         self.context=context
     
-    def create_model(self):
+    def create_model(self)->BaseOnlineODModel:
+        """creates a new model based on base model
+
+        Returns:
+            BaseOnlineODModel: the new model
+        """        
         new_model=copy.deepcopy(self.model) 
         new_model.parent=self
         new_model.setup()
@@ -128,7 +201,15 @@ class ConceptDriftWrapper(PipelineComponent):
         self.parent.context["concept_drift_detection"]=True
         self.parent.context['model_name']=f"CDD({self.model.name})"
  
-    def process(self, data):
+    def process(self, data)->Dict[str, Any]:
+        """process data for concept drift detection
+
+        Args:
+            data (_type_): input data
+
+        Returns:
+            Dict[str, Any]: results of input
+        """        
         start_idx=self.model_idx
         
         while True:
@@ -216,7 +297,14 @@ class ConceptDriftWrapper(PipelineComponent):
     def __str__(self):
         return f"ConceptDriftWrapper({self.model})"
     
-    def update_queue(self, score, threshold, x):
+    def update_queue(self, score:List[float], threshold:float, x:Any):
+        """updates the queues to check for concept drift
+
+        Args:
+            score (List[float]): list of scores from a batch
+            threshold (float): threshold value 
+            x (Any): input data
+        """        
         if np.median(score)>threshold:
             self.potential_queue.append(np.median(score))
             self.potential_x_queue.append(x)
@@ -229,17 +317,16 @@ class ConceptDriftWrapper(PipelineComponent):
             self.clear_potential_queue()
             
     def clear_potential_queue(self):
+        """clears the potential queue
+        """        
         self.potential_queue.clear()
         self.potential_x_queue.clear()
-
-    # def teardown(self):
-    #     for i, model in enumerate(self.model_pool):
-    #         model.suffix.append(str(i))
-    #         model.teardown()
 
 
 class MultilayerSplitter(SplitterComponent):
     def __init__(self, **kwargs):
+        """splits the input into different layers based on protocol. each layer is attached to a new pipeline
+        """        
         super().__init__(component_type="models", **kwargs)
         self.name=f"{self.__class__.__name__}({self.pipeline})"
         
@@ -254,7 +341,15 @@ class MultilayerSplitter(SplitterComponent):
         
         self.parent.context['model_name']=self.name
         
-    def split_function(self, data):
+    def split_function(self, data)->Dict[str, Any]:
+        """splits the input data
+
+        Args:
+            data (_type_): the input data
+
+        Returns:
+            Dict[str, Any]: dictionary of splits
+        """        
         all_results = {}
         context=self.get_context()
         for proto_name, proto_id in context['protocols'].items():

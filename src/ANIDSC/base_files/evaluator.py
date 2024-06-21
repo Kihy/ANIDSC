@@ -1,3 +1,4 @@
+from typing import Any, Dict, List
 from .pipeline import PipelineComponent
 from .. import metrics 
 from pathlib import Path
@@ -7,7 +8,13 @@ import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
 
 class CollateEvaluator(PipelineComponent):
-    def __init__(self, log_to_tensorboard=True, save_results=True):
+    def __init__(self, log_to_tensorboard:bool=True, save_results:bool=True):
+        """Evaluator to aggregate results from multiple base evaluators
+
+        Args:
+            log_to_tensorboard (bool, optional): whether to log results in tensorboard. Defaults to True.
+            save_results (bool, optional): whether to save results in CSV file. Defaults to True.
+        """        
         super().__init__()
         self.log_to_tensorboard=log_to_tensorboard
         self.save_results=save_results
@@ -43,7 +50,12 @@ class CollateEvaluator(PipelineComponent):
         self.output_file.close()
         print("results file saved at", self.output_file.name)
     
-    def process(self, results):
+    def process(self, results:Dict[str, Dict[str, Any]]):
+        """process the results dictionary
+
+        Args:
+            results (Dict[str, Dict[str, Any]]): layer: results pairs for each layer
+        """        
         # records time
         
         for protocol, result_dict in results.items():
@@ -73,8 +85,15 @@ class CollateEvaluator(PipelineComponent):
                     ",".join(list(map(str, result_dict.values()))) + "\n"
                 )
             
-class BaseEvaluator(PipelineComponent):
-    def __init__(self, metric_list, log_to_tensorboard=True, save_results=True, draw_graph_rep_interval=False):
+class BaseEvaluator(PipelineComponent): 
+    def __init__(self, metric_list:List[str], log_to_tensorboard:bool=True, save_results:bool=True, draw_graph_rep_interval:bool=False):
+        """base evaluator that evaluates the output of a single model
+        Args:
+            metric_list (List[str]): list of metric names in string format
+            log_to_tensorboard (bool, optional): whether to write to tensorboard. if there is a collate evaluatr, it is better to delegate it to collate evaluator. Defaults to True.
+            save_results (bool, optional): whether to save results in CSV file. if there is a collate evaluatr, it is better to delegate it to collate evaluator. Defaults to True.
+            draw_graph_rep_interval (bool, optional): whether to draw the graph representation. only available if pipeline contains graph representation. Defaults to False.
+        """        
         super().__init__()
         self.metrics=[getattr(metrics, m) for m in metric_list]
         self.metric_list=metric_list
@@ -120,7 +139,15 @@ class BaseEvaluator(PipelineComponent):
             self.output_file.close()
             print("results file saved at", self.output_file.name)
     
-    def process(self, results):
+    def process(self, results:Dict[str, Any])->Dict[str, Any]:
+        """processes results and log them accordingly
+
+        Args:
+            results (Dict[str, Any]): gets metric values in metric_list based on results
+
+        Returns:
+            Dict[str, Any]: dictionary of metric, value pair
+        """        
         # records time
         current_time=time.time()
         duration=current_time -self.prev_timestamp

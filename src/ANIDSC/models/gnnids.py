@@ -1,3 +1,5 @@
+from typing import Any, Dict, List, Tuple
+from ..base_files.model import BaseOnlineODModel
 import torch
 import numpy as np
 
@@ -21,12 +23,26 @@ torch.set_printoptions(precision=4)
 
 
 class SWLoss(torch.nn.Module):
-    def __init__(self,slices, shape):
+    def __init__(self,slices:int, shape:str):
+        """sliced wasserstein loss for latent space embedding
+
+        Args:
+            slices (int): number of slices
+            shape (str): name of distribution
+        """        
         super().__init__()
         self.slices=slices
         self.shape=shape
         
-    def forward(self, encoded):
+    def forward(self, encoded:torch.Tensor)->torch.Tensor:
+        """calculates sw loss based on input
+
+        Args:
+            encoded (torch.Tensor): encoded loss
+
+        Returns:
+            torch.Tensor: loss value
+        """        
         # Define a PyTorch Variable for theta_ls
         theta = generate_theta(self.slices, encoded.size(1)).to("cuda")
 
@@ -244,14 +260,23 @@ class LinearNodeEncoder(torch.nn.Module, TorchSaveMixin):
         return scaled_features.to("cuda").float()
 
 class GCNNodeEncoder(torch.nn.Module):
-    def __init__(self, node_latent_dim,
-                 n_features,
-                 embedding_dist,
-                 device="cuda"):
+    def __init__(self, node_latent_dim:int,
+                 embedding_dist:str,
+                 device:str="cuda"):
+        """GCN node encoder
+
+        Args:
+            node_latent_dim (int): dimension of output latent space
+            n_features (int): dimension of input 
+            embedding_dist (str): distribution of embedding 
+            device (str, optional): name of device. Defaults to "cuda".
+        """        
         torch.nn.Module.__init__(self)
         self.node_latent_dim=node_latent_dim
         self.embedding_dist=embedding_dist
         self.device=device
+
+    def setup(self, n_features):
         self.node_embed = GCN(in_channels=n_features, hidden_channels=n_features, out_channels=self.node_latent_dim, num_layers=2, norm=None).to(self.device)
         self.linear=torch.nn.Linear(self.node_latent_dim, self.node_latent_dim).to(self.device)
         self.sw_loss=SWLoss(50, self.embedding_dist).to(self.device)
@@ -545,8 +570,64 @@ def loss_fn(model, x, marginal_prob_std, eps=1e-5):
     return loss
 
 
+class NodeEncoderWrapper(BaseOnlineODModel):
+    def __init__(self, node_encoder, model,**kwargs):
+        super().__init__(**kwargs)
+        self.node_encoder=node_encoder
+        self.model=model
+
+    def setup(self):
+        context=self.get_context()
+        self.node_encoder.setup(context["n_features"])
+        self.model.setup()
+        self.parent.context['output_features']=self.node_encoder.node_latent_dim
+        
+        self.optimizer=torch.optim.Adam(params=self.parameters())
+
+    def forward(self, X, include_dist=True): 
+        latent_nodes, dist_loss=self.node_encoder(*X)
+        recon_nodes, recon_loss=self.model(latent_nodes)
+        if include_dist:
+            loss=recon_loss.mean() + dist_loss 
+        else:
+            loss=recon_loss.mean(dim=1)
+        return recon_nodes, loss  
+    
+    def predict_step(self, X):
+        recon_nodes, recon_loss=self.forward(X, False)
+        return recon_loss.detach().cpu().numpy(), self.get_threshold()
+
+    def process(self,X)->Dict[str, Any]:
+        """process the input. First preprocess, then predict, then extend loss queue and finally train
+
+        Args:
+            X (_type_): _description_
+
+        Returns:
+            Dict[str, Any]: output dictionary
+        """        
+        
+        score, threshold=self.predict_step(X)
+        self.loss_queue.extend(score)
+        self.train_step(X)
+        
+        return {
+            "threshold": threshold,
+            "score": score,
+            "batch_num":self.num_batch
+        }
+    
+
+
 class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin):
-    def __init__(self, device="cuda", preprocessors=[], load_existing=False, **kwargs):
+    def __init__(self, device:str="cuda", preprocessors:List[str]=[], load_existing:bool=False, **kwargs):
+        """Homogeneous graph representation of network 
+
+        Args:
+            device (str, optional): name of device. Defaults to "cuda".
+            preprocessors (List[str], optional): list of preprocessors. Defaults to [].
+            load_existing (bool, optional): whether to load existing graph representation. Defaults to False.
+        """        
         torch.nn.Module.__init__(self)
         PipelineComponent.__init__(self, **kwargs)    
         self.device=device
@@ -611,6 +692,14 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         #                     "be:7b:f6:f2:1b:5f":"Attacker"}
     
     def update_nodes(self, srcID, src_feature, dstID, dst_feature):
+        """updates source and destination nodes
+
+        Args:
+            srcID (int): id of source
+            src_feature (array): src feature 
+            dstID (int): destionation id
+            dst_feature (array): destination features
+        """        
         self.G.updated=torch.zeros_like(self.G.updated).to(self.device)
         
         unique_nodes=torch.unique(torch.cat([srcID, dstID]))
@@ -634,6 +723,13 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         self.G.updated=torch.isin(self.G.idx, unique_nodes)
 
     def update_edges(self, srcID, dstID, edge_feature):
+        """updates edges between source and destination 
+
+        Args:
+            srcID (int): source ID
+            dstID (int): destination ID
+            edge_feature (array): edge feature
+        """        
         #convert ID to index 
         src_idx = torch.nonzero(self.G.idx == srcID[:, None], as_tuple=False)[:, 1]
         dst_idx = torch.nonzero(self.G.idx == dstID[:, None], as_tuple=False)[:, 1]
@@ -659,6 +755,14 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         
     
     def split_data(self, x):
+        """splits input data into different parts
+
+        Args:
+            x (_type_): input data
+
+        Returns:
+            _type_: graph IDs and features
+        """        
         srcIDs=x[:, 1].long()
         dstIDs=x[:, 2].long()
         
@@ -678,7 +782,15 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         
         return indices, edge_exists(self.edge_idx, indices)
         
-    def process(self, x):
+    def process(self, x)->Tuple[torch.Tensor,torch.Tensor,torch.Tensor]:
+        """updates data with x and output graph representation after update
+
+        Args:
+            x (_type_): input data features
+
+        Returns:
+            Tuple[torch.Tensor,torch.Tensor,torch.Tensor]: tuple of node features, edge indices, edge features
+        """        
         x=self.preprocess(x)
         
         diff = x[1:, 0] - x[:-1, 0]

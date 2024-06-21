@@ -1,5 +1,6 @@
+from typing import Any, Dict, Tuple
 import torch
-
+from numpy.typing import NDArray
 from ..base_files.save_mixin import TorchSaveMixin 
 from ..base_files import BaseOnlineODModel
 
@@ -81,27 +82,44 @@ class VAE(BaseOnlineODModel, torch.nn.Module):
 
         return loss.detach().cpu().numpy(), self.get_threshold()
 
+
 class AE(BaseOnlineODModel, TorchSaveMixin, torch.nn.Module):
-    def __init__(self, device="cuda", node_encoder=None, **kwargs):
+    def __init__(self, device="cuda", **kwargs):
+        """a base autoencoder
+
+        Args:
+            device (str, optional): device for this model. Defaults to "cuda".
+            node_encoder (Dict[str,Any], optional): the node encoder to encode features. Defaults to None.
+        """        
         BaseOnlineODModel.__init__(self, **kwargs)
         torch.nn.Module.__init__(self)
         self.device=device
-        self.node_encoder=node_encoder 
             
-    def forward(self, X, include_dist=False):
-        if self.node_encoder is not None:
-            X, dist_loss=self.node_encoder(*X)
-        else:
-            dist_loss=0
+    def forward(self, X)->Tuple[torch.Tensor, torch.Tensor]:
+        """ the forward pass of the model
+
+        Args:
+            X (_type_): input data
+            include_dist (bool, optional): whether to include distance loss. Defaults to False.
+
+        Returns:
+            Tuple[torch.Tensor, torch.Tensor]: tuple of output and loss
+        """        
+        
         encoded = self.encoder(X)
         decoded = self.decoder(encoded)
-        if include_dist:
-            loss = self.criterion(X, decoded).mean() + dist_loss
-        else:
-            loss = self.criterion(X, decoded).mean(dim=1)
-        return decoded, loss
+        
+        return decoded, self.criterion(X, decoded)
 
-    def process(self,X):
+    def process(self,X)->Dict[str, Any]:
+        """process the input. First preprocess, then predict, then extend loss queue and finally train
+
+        Args:
+            X (_type_): _description_
+
+        Returns:
+            Dict[str, Any]: output dictionary
+        """        
         X_scaled=self.preprocess(X)
         score, threshold=self.predict_step(X_scaled)
         self.loss_queue.extend(score)
@@ -116,14 +134,7 @@ class AE(BaseOnlineODModel, TorchSaveMixin, torch.nn.Module):
     
     def setup(self):
         context=self.get_context()
-        if self.node_encoder is not None:
-            self.node_encoder=getattr(gnnids, self.node_encoder["encoder_name"])(self.node_encoder["node_latent_dim"],
-                 context["fe_features"],
-                 self.node_encoder["embedding_dist"],
-                 self.device)
-            
-            self.parent.context['output_features']=self.node_encoder.node_latent_dim
-            context["output_features"]=self.node_encoder.node_latent_dim
+        
             
         self.encoder = torch.nn.Sequential(
             torch.nn.Linear(context["output_features"], 8),
@@ -145,7 +156,16 @@ class AE(BaseOnlineODModel, TorchSaveMixin, torch.nn.Module):
 
     
     
-    def predict_step(self, X, preprocess=False):
+    def predict_step(self, X, preprocess:bool=False)->Tuple[NDArray, float]:
+        """predict the input
+
+        Args:
+            X (_type_): input data
+            preprocess (bool, optional): whether to preprocess the data. Defaults to False.
+
+        Returns:
+            Tuple[NDArray, float]: _description_
+        """        
         if preprocess:
             X=self.preprocess(X)
         _, loss = self.forward(X, include_dist=False)

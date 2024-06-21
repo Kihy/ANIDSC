@@ -3,6 +3,7 @@ from ANIDSC.base_files import Processor, FeatureBuffer
 from ANIDSC.feature_extractors import AfterImageGraph, AfterImage
 from ANIDSC.models import AE, GCNNodeEncoder, HomoGraphRepresentation
 from ANIDSC.base_files import BaseEvaluator, MultilayerSplitter, CollateEvaluator, ConceptDriftWrapper
+from ANIDSC.models.gnnids import NodeEncoderWrapper
 from ANIDSC.normalizer import LivePercentile
 
 
@@ -31,13 +32,12 @@ if __name__ == "__main__":
     model = AE(
         preprocessors=[],
         profile=False,
-        node_encoder={
-            "encoder_name": "GCNNodeEncoder",
-            "node_latent_dim": 10,
-            "embedding_dist": "gaussian",
-        },
         load_existing=False
     )
+
+    node_encoder=GCNNodeEncoder(10, "gaussian")
+
+    encoder_model=NodeEncoderWrapper(node_encoder, model)
     
     # standardizer = LivePercentile.load("scalers",dataset_name, fe_name, file_name, "LivePercentile")  # skip first 4 elements that are indices
     standardizer=LivePercentile()
@@ -63,7 +63,7 @@ if __name__ == "__main__":
 
     feature_extraction = feature_extractor | feature_buffer
 
-    cd_model=ConceptDriftWrapper(model, 1000, 50)
+    cd_model=ConceptDriftWrapper(encoder_model, 1000, 50)
 
     protocol_splitter = MultilayerSplitter(
         pipeline=(standardizer | graph_rep | cd_model | evaluator)

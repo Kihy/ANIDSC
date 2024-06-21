@@ -3,12 +3,17 @@ from .pipeline import PipelineComponent
 from pathlib import Path
 import numpy as np 
 from scapy.all import Packet
-from typing import Dict, Any, List, Union
-
+from typing import Dict, Any, List, Tuple, Union
+from numpy.typing import NDArray
 
 class FeatureBuffer(PipelineComponent):
-    #drops remaining features
     def __init__(self, buffer_size:int=1e4, save:bool=True):
+        """feature buffer to buffer results in batches to speed up detection. It drops remaining features that does not make a batch
+
+        Args:
+            buffer_size (int, optional): number of features to buffer. Defaults to 1e4.
+            save (bool, optional): whether to save the buffered features. Defaults to True.
+        """        
         super().__init__()
         self.buffer_size=buffer_size
         self.save=save
@@ -35,7 +40,15 @@ class FeatureBuffer(PipelineComponent):
             self.meta_list=[]
             self.size=0
     
-    def process(self, data):
+    def process(self, data: Tuple[List[Any], List[Any]])->Union[None, NDArray]:
+        """process input data
+
+        Args:
+            data (Tuple[List[Any], List[Any]]): the input data, which must be a tuple of feature values and meta_data
+
+        Returns:
+            Union[None, NDArray]: returns buffered feature if buffer is full, other wise None
+        """        
         feature, meta_data=data
         
         self.feature_list.append(feature)
@@ -45,7 +58,12 @@ class FeatureBuffer(PipelineComponent):
         if self.size >= self.buffer_size:
             return self.save_buffer()
             
-    def save_buffer(self):
+    def save_buffer(self)->NDArray:
+        """saves buffer
+
+        Returns:
+            NDArray: the buffered features as numpy array
+        """        
         if len(self.feature_list)==0:
             return 
         
@@ -80,6 +98,11 @@ class FeatureBuffer(PipelineComponent):
         
 class BaseTrafficFeatureExtractor(PipelineComponent):
     def __init__(self, offset_time:Union[int, str]="auto", **kwargs):
+        """base interface for feature extractor
+
+        Args:
+            offset_time (Union[int, str], optional): time to offset, if set to "auto", automatically calculates offset so that it continues immediately from existing state. Defaults to "auto".
+        """        
         super().__init__(component_type="feature_extractors",**kwargs)
         self.skipped=0
         self.processed=0
@@ -95,6 +118,8 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         
     @abstractmethod
     def init_state(self):
+        """initialize state information
+        """        
         pass
     
     @abstractmethod
@@ -138,10 +163,13 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         """returns the names of the traffic vectors"""
         pass
     
-    def process(self, packet:Packet):
+    def process(self, packet:Packet)->Tuple[List[float],List[Any]]:
         """The main entry point of feature extractor, this function
         should define the process of extracting a single packet
-        """
+
+        Returns:
+            Tuple[List[float],List[Any]]: tuple of extracted features and metadata
+        """        
             
         traffic_vector = self.get_traffic_vector(packet)
             

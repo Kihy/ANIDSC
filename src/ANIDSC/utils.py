@@ -170,73 +170,6 @@ def draw_graph(G, threshold, node_as, fig, ax, relative_as, title, mac_to_device
     
     if not relative_as:
         node_cbar.ax.axhline(threshold, c='r')
-        
-    
-class LivePercentile:
-    def __init__(self, ndim=None):
-        """ Constructs a LiveStream object
-        """
-
-        if isinstance(ndim, int):
-            self.dims=[TDigest() for _ in range(ndim)]
-            self.patience=0
-            self.ndim=ndim
-        elif isinstance(ndim, list):
-            self.dims=self.of_centroids(ndim)
-            self.ndim=len(ndim)
-            self.patience=10
-
-        else:
-            raise ValueError("ndim must be int or list")
-        
-
-    def add(self, item):
-        """ Adds another datum """
-        item=item[:,:self.ndim]
-        
-        if isinstance(item, torch.Tensor):
-            item=item.cpu().numpy()
-        
-        if self.ndim==1:
-            self.dims[0].update(item)
-        else:
-            for i, n in enumerate(item.T):
-                self.dims[i].update(n)
-        
-        self.patience+=1
-
-    def reset(self):
-        
-        self.dims=[TDigest() for _ in range(self.ndim)]
-        self.patience=0
-    
-    def quantiles(self, p):
-        """ Returns a list of tuples of the quantile and its location """
-        
-        if self.ndim==0 or self.patience<1:
-            return None 
-        percentiles=np.zeros((len(p),self.ndim))
-        
-        for d in range(self.ndim):
-            percentiles[:,d]=self.dims[d].inverse_cdf(p)
-        
-        return percentiles
-    
-    def to_centroids(self):
-        return [i.get_centroids() for i in self.dims]
-    
-    def of_centroids(self, dim_list):
-
-        return [TDigest.of_centroids(i) for i in dim_list]
-    
-    def __getstate__(self):
-        state=self.__dict__.copy()
-        state["dims"]=self.to_centroids()
-        return state 
-    
-    def __setstate__(self, state):
-        self.__dict__.update(state)
-        self.dims=self.of_centroids(self.dims)
 
 
 def calc_quantile(x, p):
@@ -300,72 +233,6 @@ def uniqueXT(x, sorted=True, return_index=False, return_inverse=False, return_co
         return torch.unique(x, sorted=sorted, return_inverse=return_inverse,
             return_counts=return_counts, dim=dim)
 
-
-class LazyInitializer:
-    """allows subclass to be lazily initialized. Allowable attributes are stored in allowed and children must implement entry() function
-
-    """    
-    def __init__(self, allowed:list[str])->None:
-        """initialize 
-
-        Args:
-            allowed (list[str]): list of allowed variables
-        """        
-        self.allowed=allowed
-    
-    def set_attr(self, **kwargs):
-        """sets attributes in kwargs
-
-        Raises:
-            ValueError: if key in kwargs is not in allowed
-        """        
-        for k, v in kwargs.items():
-            if k in list(self.allowed):
-                setattr(self, k, v)
-            else:
-                raise ValueError(f"{k} not allowed")
-            setattr(self, k, v)
-            self.allowed.remove(k)
-            
-    def start(self, **kwargs): 
-        self.set_attr(**kwargs)
-        
-        if len(self.allowed)>0:
-            raise ValueError("Must assign the following variables",",".join(self.allowed))
-
-        self.entry_func()
-        
-    @abstractmethod
-    def entry_func(self):
-        pass
-           
-    def __rrshift__(self, other):
-        return self.start(**other)
-
-
-
-class JSONEncoder(json.JSONEncoder):
-    def default(self, obj):
-        if isinstance(obj, Path):
-            return str(obj)
-        if isinstance(obj, TextIOWrapper):
-            return obj.name
-        if isinstance(obj, np.float32):
-            return float(obj)
-        return super().default(obj)
-
-
-def to_tensor(x):
-    return torch.tensor(x)
-
-def load_dataset_info():
-    with open("../datasets/data_info.json", "r") as f:
-        data_info = json.load(f)
-    return data_info
-
-
-
-
 def find_concept_drift_times(dataset_name, fe_name, file_name, timezone, schedule):
     times = pd.read_csv(
         f"../datasets/{dataset_name}/{fe_name}/{file_name}.csv",
@@ -397,18 +264,4 @@ def find_concept_drift_times(dataset_name, fe_name, file_name, timezone, schedul
         if idle != prev_idle:
             drift_idx.append(idx)
     print(drift_idx)
-
-def save_dataset_info(data_info):
-    with open("../datasets/data_info.json", "w") as f:
-        json.dump(data_info, f, indent=4, cls=JSONEncoder)
-        
-def get_node_map(dataset_name, fe_name, file_name):
-    try:
-        with open(f"../datasets/{dataset_name}/{fe_name}/state/{file_name}.pkl", "rb") as pf:
-            state=pickle.load(pf)
-            
-        return state["node_map"]
-    except Exception as e:
-        print(e)
-        return {}
 

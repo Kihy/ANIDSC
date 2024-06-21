@@ -14,7 +14,6 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
         Args:
-            limit (int, optional): maximum number of records. Defaults to 1e6.
             decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
         """
         self.decay_factors = decay_factors
@@ -27,7 +26,7 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
         self.parent.context['skip']=0
     
     def init_state(self):
-        """sets up after image"""
+        """sets up IncStatDB"""
         
         self.state = IncStatDB(
                     decay_factors=self.decay_factors,
@@ -359,65 +358,16 @@ class AfterImageGraph(AfterImage):
         else:
             return np.expand_dims(feature,axis=0)
 
-    def get_traffic_vector(self, packet:Packet):
-        """extracts the traffic vectors from packet
+    def get_traffic_vector(self, packet:Packet)->Dict[str, Any]:
+        """adds protocol name to traffic vector from after image
 
         Args:
             packet (scapy packet): input packet
 
         Returns:
-            array: list of IPtype, srcMAC, dstMAC, srcIP, srcproto, dstIP, dstproto, time, packet size
+            Dict[str, Any]: dictionary of traffic vector
         """
-        packet = packet[0]
-
-        # only process IP packets and non broadcast/localhost or packet.dst in ["ff:ff:ff:ff:ff:ff","00:00:00:00:00:00"]
-        if not (packet.haslayer(IP) or packet.haslayer(IPv6) or packet.haslayer(ARP)):
-            return None
-
-        timestamp = packet.time
-        framelen = len(packet)
-        if packet.haslayer(IP):  # IPv4
-            srcIP = packet[IP].src
-            dstIP = packet[IP].dst
-        elif packet.haslayer(IPv6):  # ipv6
-            srcIP = packet[IPv6].src
-            dstIP = packet[IPv6].dst
-
-        else:
-            srcIP = ""
-            dstIP = ""
-
-        if packet.haslayer(TCP):
-            srcproto = str(packet[TCP].sport)
-            dstproto = str(packet[TCP].dport)
-        elif packet.haslayer(UDP):
-            srcproto = str(packet[UDP].sport)
-            dstproto = str(packet[UDP].dport)
-        else:
-            srcproto = ""
-            dstproto = ""
-
-        if packet.haslayer(ARP):
-            srcMAC = packet[ARP].hwsrc
-            dstMAC = packet[ARP].hwdst
-        else:
-            srcMAC = packet.src
-            dstMAC = packet.dst
-
-        if srcproto == "":  # it's a L2/L1 level protocol
-            if packet.haslayer(ARP):  # is ARP
-                srcproto = "arp"
-                dstproto = "arp"
-                srcIP = packet[ARP].psrc  # src IP (ARP)
-                dstIP = packet[ARP].pdst  # dst IP (ARP)
-
-            elif packet.haslayer(ICMP):  # is ICMP
-                srcproto = "icmp"
-                dstproto = "icmp"
-
-            elif srcIP + srcproto + dstIP + dstproto == "":  # some other protocol
-                srcIP = packet.src  # src MAC
-                dstIP = packet.dst  # dst MAC
+        traffic_vector=super().get_traffic_vector(packet)
 
         if TCP in packet:
             protocol=self.get_protocol_name(packet.sport, packet.dport, "tcp")
@@ -430,19 +380,21 @@ class AfterImageGraph(AfterImage):
         else:
             protocol="Other"
         
-        traffic_vector = {"srcMAC":srcMAC,
-                          "dstMAC":dstMAC,
-                            "srcIP":srcIP,
-                            "srcport":srcproto,
-                            "dstIP":dstIP,
-                            "dstport":dstproto,
-                            "protocol": protocol,
-                            "timestamp":float(timestamp),
-                            "packet_size":int(framelen)}
+        traffic_vector["protocol"]= protocol
 
         return traffic_vector
 
-    def get_protocol_name(self, src_port_num: int, dst_port_num:int , proto:str):
+    def get_protocol_name(self, src_port_num: int, dst_port_num:int , proto:str)->str:
+        """gets the protocol name associated with port number
+
+        Args:
+            src_port_num (int): source port number 
+            dst_port_num (int): destination port number
+            proto (str): protocol, either 'udp' or 'tcp'
+
+        Returns:
+            str: protocol string for the port
+        """        
         try:
             protocol=getservbyport(src_port_num,proto)
         except OSError:
@@ -452,11 +404,11 @@ class AfterImageGraph(AfterImage):
                 protocol=proto             
         return protocol.upper()
     
-    def get_headers(self):
+    def get_headers(self)->List[str]:
         """returns the feature names
 
         Returns:
-            list: list of feature names
+            List[str]: list of feature names
         """
 
         stat_1d = ["weight", "mean", "std"]
@@ -472,11 +424,11 @@ class AfterImageGraph(AfterImage):
                 headers.append(f"{name}_{time}_{stat}")
         return headers
     
-    def get_meta_headers(self):
+    def get_meta_headers(self)->List[str]:
         """return the feature names of traffic vectors
 
         Returns:
-            list: names of traffic vectors
+            List[str]: names of traffic vectors
         """
         return [
             "idx",

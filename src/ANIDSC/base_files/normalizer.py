@@ -2,7 +2,14 @@ from .pipeline import PipelineComponent
 import copy 
 
 class BaseOnlineNormalizer(PipelineComponent):
-    def __init__(self, warmup=10, ndim=0, skip=0, **kwargs):
+    def __init__(self, warmup:int=10, ndim:int=0, skip:int=0, **kwargs):
+        """base normalizer to normalize datastream online
+
+        Args:
+            warmup (int, optional): warm up period before the normlizer outputs value. Defaults to 10.
+            ndim (int, optional): number of input dimensions. Defaults to 0.
+            skip (int, optional): number of input dimensions to skip scaling. Defaults to 0.
+        """        
         super().__init__(component_type="scalers",**kwargs)
         self.warmup=warmup
         self.ndim=ndim 
