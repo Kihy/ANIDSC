@@ -16,7 +16,7 @@ from utils import *
 import pickle
 from ..feature_extractors import *
 from ..pipelines.base_pipeline import BasePipeline
-from ..metrics.od_metrics import *
+from ..evaluations.od_metrics import *
 
 def plot_contour(
     pos_history,

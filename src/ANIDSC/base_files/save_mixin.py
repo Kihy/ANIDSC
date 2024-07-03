@@ -114,19 +114,21 @@ class TorchSaveMixin:
         torch.save(checkpoint, str(ckpt_path))
         print(f"model saved at {ckpt_path}")
 
-    def load(self, suffix:str=""):
+    def load(self, load_name, suffix:str=""):
         """loads the parameters of torch model
 
         Args:
             suffix (str, optional): optional suffix. Defaults to "".
         """        
         context=self.get_context()
-        checkpoint = torch.load(f"{context['dataset_name']}/{context['fe_name']}/models/{context['file_name']}/{self.name}{f'-{suffix}' if suffix !='' else ''}.pth"
-        )
+        ckpt_path=f"{context['dataset_name']}/{context['fe_name']}/models/{load_name}/{self.name}{f'-{suffix}' if suffix !='' else ''}.pth"
+        checkpoint = torch.load(ckpt_path)
 
         self.load_state_dict(checkpoint["model_state_dict"])
         if "optimizer_state_dict" in checkpoint.keys():
             self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"][0])
+            
+        print(f'Model loaded from {ckpt_path}')
 
     def state_dict(self)->Dict[str, Any]:
         """state dict of model

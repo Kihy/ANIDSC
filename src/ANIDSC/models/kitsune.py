@@ -2,9 +2,11 @@ import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster, to_tree
 from scipy.stats import norm
 
+from ANIDSC.base_files.model import BaseOnlineODModel
+
 
 np.seterr(all="ignore")
-from .base_model import *
+
 
 # This class represents a KitNET machine learner.
 # KitNET is a lightweight online anomaly detection algorithm based on an ensemble of autoencoders.
@@ -12,7 +14,7 @@ from .base_model import *
 # For licensing information, see the end of this document
 
 
-class KitNET(BaseOnlineODModel, JSONSaveMixin):
+class KitNET(BaseOnlineODModel):
     # n: the number of features in your input dataset (i.e., x \in R^n)
     # m: the maximum size of any autoencoder in the ensemble layer
     # AD_grace_period: the number of instances the network will learn from before producing anomaly scores
@@ -22,44 +24,22 @@ class KitNET(BaseOnlineODModel, JSONSaveMixin):
     # feature_map: One may optionally provide a feature map instead of learning one. The map must be a list,
     #           where the i-th entry contains a list of the feature indices to be assingned to the i-th autoencoder in the ensemble.
     #           For example, [[2,5,3],[4,0,1],[6,7]]
-    def __init__(
-        self,
-        n_features=100,
-        max_autoencoder_size=10,
-        FM_grace_period=100,
-        AD_grace_period=10000,
-        learning_rate=0.1,
-        hidden_ratio=0.75,
-        feature_map=None,
-        input_precision=None,
-        quantize=None,
-        preprocessors=[],
-        **kwargs
-    ):
-        BaseOnlineODModel.__init__(self,
-                                   preprocessors=preprocessors,n_features=n_features,**kwargs)
-        # Parameters:
-        self.AD_grace_period = AD_grace_period
-        if FM_grace_period is None:
-            self.FM_grace_period = AD_grace_period
-        else:
-            self.FM_grace_period = FM_grace_period
-        self.input_precision = input_precision
-        if max_autoencoder_size <= 0:
-            self.m = 1
-        else:
-            self.m = max_autoencoder_size
-        self.lr = learning_rate
-        self.hr = hidden_ratio
+    def __init__(self, **kwargs):
+        BaseOnlineODModel.__init__(self, **kwargs)
+        # Parameters:        
+        self.FM_grace_period = 40
+        self.input_precision = None
+        self.m = 10
+        self.lr = 0.1
+        self.hr = 0.75
 
         # Variables
-        self.n_trained = 0  # the number of training instances so far
-        self.n_executed = 0  # the number of executed instances so far
-        self.v = feature_map
+        self.v = None
         self.ensembleLayer = []
         self.outputLayer = None
-        self.quantize = quantize
-  
+        self.quantize = None
+    
+    def init_model(self, context):
         if self.v is None:
             pass
             # print("Feature-Mapper: train-mode, Anomaly-Detector: off-mode")
@@ -67,54 +47,38 @@ class KitNET(BaseOnlineODModel, JSONSaveMixin):
             self.__createAD__()
             # print("Feature-Mapper: execute-mode, Anomaly-Detector: train-mode")
         # incremental feature cluatering for the feature mapping process
-        self.FM = corClust(self.n_features)
+        self.FM = corClust(context["output_features"])
+    
+    def forward(self, X, inference=False):
+        pass
         
+    def train_step(self, X, preprocess=False):
+        if preprocess:
+            X=self.preprocess(X)
+        loss=[self.train_single(i) for i in X]
+        self.num_trained+=1
+        return np.array(loss) 
+    
+    def predict_step(self, X,preprocess=False):
+        if self.v is None:
+            return None, None
         
-
-    # If FM_grace_period+AM_grace_period has passed, then this function executes KitNET on x. Otherwise, this function learns from x.
-    # x: a numpy array of length n
-    # Note: KitNET automatically performs 0-1 normalization on all attributes.
-    def process(self, X):
-        threshold=self.get_threshold()
-        # if all -1 it means the packet was ignored
-        X=self.preprocess(X)
-        scores=[]
-        for i in X:
-            score=self.train_single(i)
-            self.update_scaler(i)
-            self.loss_queue.append(score)
-            scores.append(score)
-        scores=np.array(scores)
-        return {
-            "threshold": threshold,
-            "score": scores,
-            "batch_num":self.num_batch
-        }
-    # alias for execute for it is compatible with tf models, processes in batches
-    def predict_scores(self, X):
-        X=self.preprocess(X)
-        return np.array([self.execute(i) for i in X]), self.get_threshold()
-
-    def to_device(self,X):
-      
-        return X.detach().cpu().numpy()
-
-    def train_step(self, X):
-        X=self.preprocess(X)
-        return np.array([self.train_single(i) for i in X]).mean()
-            
+        if preprocess:
+            X=self.preprocess(X)
+        
+        loss=[self.execute_single(i) for i in X]
+        self.num_evaluated+=1
+        return np.array(loss), self.get_threshold()
 
     # force train KitNET on x
     # returns the anomaly score of x during training (do not use for alerting)
     def train_single(self, X):
-        self.n_trained += 1
-
         # If the FM is in train-mode, and the user has not supplied a feature mapping
-        if self.n_trained <= self.FM_grace_period and self.v is None:
+        if self.num_trained <= self.FM_grace_period and self.v is None:
             # update the incremetnal correlation matrix
             self.FM.update(X)
             if (
-                self.n_trained == self.FM_grace_period
+                self.num_trained == self.FM_grace_period
             ):  # If the feature mapping should be instantiated
                 self.v = self.FM.cluster(self.m)
                 self.__createAD__()
@@ -132,19 +96,32 @@ class KitNET(BaseOnlineODModel, JSONSaveMixin):
             return self.outputLayer.train(S_l1)
             
     # force execute KitNET on x
-    def execute(self, x):
+    def execute_single(self, x):
+        
+        # Ensemble Layer
+        S_l1 = np.zeros(len(self.ensembleLayer))
+        for a in range(len(self.ensembleLayer)):
+            # make sub inst
+            xi = x[self.v[a]]
+            S_l1[a] = self.ensembleLayer[a].execute(xi)
+        # OutputLayer
+        return self.outputLayer.execute(S_l1)
+
+    def get_total_params(self):
         if self.v is None:
-            return self.train_single(x)
+            return 0
         else:
-            self.n_executed += 1
-            # Ensemble Layer
-            S_l1 = np.zeros(len(self.ensembleLayer))
-            for a in range(len(self.ensembleLayer)):
-                # make sub inst
-                xi = x[self.v[a]]
-                S_l1[a] = self.ensembleLayer[a].execute(xi)
-            # OutputLayer
-            return self.outputLayer.execute(S_l1)
+            total_params=0
+            for i in range(len(self.ensembleLayer)):
+                params=self.ensembleLayer[i].get_params()
+                total_params+=params["W"].size
+                total_params+=params["hbias"].size
+                total_params+=params["vbias"].size
+            params = self.outputLayer.get_params()
+            total_params+=params["W"].size
+            total_params+=params["hbias"].size
+            total_params+=params["vbias"].size
+            return total_params
 
     def __createAD__(self):
         # construct ensemble layer

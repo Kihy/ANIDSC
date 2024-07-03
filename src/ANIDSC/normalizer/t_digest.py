@@ -1,5 +1,4 @@
 from typing import List
-from ..base_files.save_mixin import JSONSaveMixin
 from ..base_files import BaseOnlineNormalizer
 from pytdigest import TDigest
 import numpy as np
@@ -21,10 +20,8 @@ class LivePercentile(BaseOnlineNormalizer):
     def setup(self):
         super().setup()
         
-        if self.load_state:
-            self.load(folder="scalers")
-        else:
-            self.dims=[TDigest() for _ in range(self.ndim-self.skip)]
+        
+        self.dims=[TDigest() for _ in range(self.ndim-self.skip)]
     
     def teardown(self):
         super().teardown()
@@ -79,12 +76,10 @@ class LivePercentile(BaseOnlineNormalizer):
         return [TDigest.of_centroids(np.array(i)) for i in dim_list]
 
     def __getstate__(self):
-        return {
-            'p': self.p,
-            'count': self.count,
-            'load_state': self.load_state,
-            'dims': self.to_centroids()
-        }
+        state_dict=self.__dict__.copy()
+        state_dict['dims']=self.to_centroids()
+        
+        return state_dict
         
     def __setstate__(self, state):
         state["dims"]=self.of_centroids(state['dims'])

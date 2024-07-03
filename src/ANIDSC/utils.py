@@ -22,48 +22,48 @@ import matplotlib
 
 
 
-def plot_graph(
-    dataset_name,
-    fe_name,
-    file_name,
-    model_name,
-    processed,
-    protocols=None,
-    mac_to_device_map={},
-    relative_as=False,
-):
+# def plot_graph(
+#     dataset_name,
+#     fe_name,
+#     file_name,
+#     model_name,
+#     processed,
+#     protocols=None,
+#     mac_to_device_map={},
+#     relative_as=False,
+# ):
 
-    idx_to_mac_map = get_node_map(dataset_name, fe_name, file_name)
-    if idx_to_mac_map is not None:
-        idx_to_mac_map = {v: k for k, v in idx_to_mac_map.items()}
-    else:
-        idx_to_mac_map = {}
+#     idx_to_mac_map = get_node_map(dataset_name, fe_name, file_name)
+#     if idx_to_mac_map is not None:
+#         idx_to_mac_map = {v: k for k, v in idx_to_mac_map.items()}
+#     else:
+#         idx_to_mac_map = {}
 
-    if protocols is None:
-        paths = list(
-            Path(
-                f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}"
-            ).glob("*.dot")
-        )
-    else:
-        paths = [
-            Path(
-                f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}/{p}.dot"
-            )
-            for p in protocols
-        ]
+#     if protocols is None:
+#         paths = list(
+#             Path(
+#                 f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}"
+#             ).glob("*.dot")
+#         )
+#     else:
+#         paths = [
+#             Path(
+#                 f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}/{p}.dot"
+#             )
+#             for p in protocols
+#         ]
 
-    fig, ax = plt.subplots(ncols=len(paths), figsize=(5 * len(paths), 3), squeeze=False)
+#     fig, ax = plt.subplots(ncols=len(paths), figsize=(5 * len(paths), 3), squeeze=False)
 
-    for i, p in enumerate(paths):
-        G = nx.drawing.nx_agraph.read_dot(p)
-        draw_graph(G, fig, ax[0][i], relative_as, p.stem, mac_to_device_map, idx_to_mac_map)
+#     for i, p in enumerate(paths):
+#         G = nx.drawing.nx_agraph.read_dot(p)
+#         draw_graph(G, fig, ax[0][i], relative_as, p.stem, mac_to_device_map, idx_to_mac_map)
         
 
-    fig.tight_layout()
-    fig_name = f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}/graph.png"
-    fig.savefig(fig_name)
-    print(fig_name)
+#     fig.tight_layout()
+#     fig_name = f"../datasets/{dataset_name}/{fe_name}/graph_data/{file_name}/{model_name}/{processed}/graph.png"
+#     fig.savefig(fig_name)
+#     print(fig_name)
 
 
 def fig_to_array(fig):

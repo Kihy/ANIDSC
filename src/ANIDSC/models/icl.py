@@ -1,132 +1,73 @@
 import torch.nn.functional as F
 import torch
 import numpy as np
-from .base_model import *
 from deepod.core.networks.base_networks import MLPnet
-from pathlib import Path
+
+from ANIDSC.base_files.model import BaseOnlineODModel
 
 
-class ICL(BaseOnlineODModel,torch.nn.Module, TorchSaveMixin):
+class ICL(BaseOnlineODModel,torch.nn.Module):
     """
     Anomaly Detection for Tabular Data with Internal Contrastive Learning
      (ICLR'22)
     """
     
-    def __init__(self, epochs=100, batch_size=64, lr=1e-3, n_ensemble='auto',
-                 rep_dim=128, hidden_dims='100,50', act='LeakyReLU', bias=False,
-                 kernel_size='auto', temperature=0.01, max_negatives=1000,n_features=100,
-                 epoch_steps=-1, prt_steps=10, device='cuda', preprocessors=[],
-                 verbose=2, random_state=42, **kwargs):
-        self.device=device
-        BaseOnlineODModel.__init__(self,
-            epochs=epochs, batch_size=batch_size,n_features=n_features,
-            lr=lr, n_ensemble=n_ensemble,preprocessors=preprocessors,
-            epoch_steps=epoch_steps, prt_steps=prt_steps, device=device,
-            verbose=verbose, random_state=random_state, **kwargs
-        )
+    def __init__(self, **kwargs):
+        
+        BaseOnlineODModel.__init__(self, **kwargs)
         torch.nn.Module.__init__(self)
 
-        self.hidden_dims = hidden_dims
-        self.rep_dim = rep_dim
-        self.act = act
-        self.bias = bias
+        self.hidden_dims = '16,4'
+        self.rep_dim = 32
 
-        self.kernel_size = kernel_size
-        self.tau = temperature
-        self.max_negatives = max_negatives
+        
+        self.tau = 0.01
+        self.max_negatives = 1000
 
         
 
-        if self.kernel_size == 'auto':
-            if self.n_features <= 40:
-                self.kernel_size = 2
-            elif 40 < self.n_features <= 160:
-                self.kernel_size = 10
+    def init_model(self, context):
+        if context['output_features'] <= 40:
+            self.kernel_size = 2
+        elif 40 < context['output_features'] <= 160:
+            self.kernel_size = 10
 
-            elif 160 < self.n_features <= 240:
-                self.kernel_size = self.n_features - 150
-            elif 240 < self.n_features <= 480:
-                self.kernel_size = self.n_features - 200
-            else:
-                self.kernel_size = self.n_features - 400
+        elif 160 < context['output_features'] <= 240:
+            self.kernel_size = context['output_features'] - 150
+        elif 240 < context['output_features'] <= 480:
+            self.kernel_size = context['output_features'] - 200
+        else:
+            self.kernel_size = context['output_features'] - 400
 
-        if self.n_features < 3:
+        if context['output_features'] < 3:
             raise ValueError('ICL model cannot handle the data that have less than three features.')
 
         self.net = ICLNet(
-            n_features=self.n_features,
+            n_features=context['output_features'],
             kernel_size=self.kernel_size,
             hidden_dims=self.hidden_dims,
             rep_dim=self.rep_dim,
-            activation=self.act,
-            bias=self.bias
+            activation='LeakyReLU',
+            bias=False
         ).to(self.device)
 
         self.criterion = torch.nn.CrossEntropyLoss(reduction='none')
         
         self.optimizer=torch.optim.Adam(self.net.parameters(),
-                                            lr=self.lr,
+                                            lr=1e-3,
                                             weight_decay=1e-5)
     
-    def to_device(self, X):
-        return X.to(self.device)
-    
-    def forward(self, X):
-        X = self.preprocess(X)
+    def forward(self, X, inference=False):
+        
         positives, query = self.net(X)
         logit = self.cal_logit(query, positives)
         logit = logit.permute(0, 2, 1)
         
         correct_class = torch.zeros((logit.shape[0], logit.shape[2]),
                                     dtype=torch.long).to(self.device)
-        return logit, correct_class
-
-    def get_loss(self, X):
-        logit, correct_class=self.forward(X)
-        loss = self.criterion(logit, correct_class)
-        loss=torch.mean(loss)
-        return loss
-
-    def train_step(self, X):
-        loss=self.get_loss(X)
-        self.net.zero_grad()
-        loss.backward()
-        self.optimizer.step()
-        return loss.detach().cpu().item()
-
-    def process(self,X):
-        scores, threshold=self.predict_scores(X)
         
-        self.update_scaler(X)
-        
-        # update
-        self.train_step(X)
-        
-        self.loss_queue.extend(scores)
-        return {
-            "threshold": threshold,
-            "score": scores,
-            "batch_num":self.num_batch
-        }
-
-
-    def state_dict(self):
-        state = super().state_dict()
-        for i in self.custom_params:
-            state[i] = getattr(self, i)
-        return state
-    
-    def load_state_dict(self, state_dict):
-        for i in self.custom_params:
-            setattr(self, i, state_dict[i])
-            del state_dict[i]
-        
-
-    def predict_scores(self, X):
-        logit, correct_class=self.forward(X)
-        loss = self.criterion(logit, correct_class)
-
-        return loss.mean(dim=1).detach().cpu().numpy(), self.get_threshold()
+        loss=self.criterion(logit, correct_class).mean(dim=1)
+        return X, loss
 
     def cal_logit(self, query, pos):
         n_pos = query.shape[1]

@@ -3,7 +3,7 @@ from ANIDSC.feature_extractors.pyflowmeter import PyFlowMeter
 from ANIDSC.datasets.base_dataset import *
 from torch.utils.data import DataLoader
 from ANIDSC.models.sklearn_models import *
-from ANIDSC.metrics.od_metrics import *
+from ANIDSC.evaluations.od_metrics import *
 from ANIDSC.adversarial_attacks.liuer_mihou import LiuerMihouAttack
 from ANIDSC.models.kitsune import KitNET
 from ANIDSC.models.base_model import *

@@ -11,7 +11,7 @@
             "module": "behave",
             "console": "integratedTerminal",
             "args": [
-                "${file}"
+                "${file}","--no-capture","--stop"
             ]
         },
         {

@@ -3,8 +3,9 @@ from ..base_files import PipelineSource
 from pathlib import Path
 from tqdm import tqdm
 import pandas as pd
-from typing import Dict, List
-
+from typing import Any, Dict, List
+from .. import feature_extractors as fe
+from .. import normalizer
 
 class PacketReader(PipelineSource):
     def __init__(self, dataset_name: str, file_name: str, max_pkts: int = float("inf")):
@@ -45,11 +46,9 @@ class CSVReader(PipelineSource):
         dataset_name: str,
         fe_name: str,
         file_name: str,
-        fe_features: int,
         max_pkts: int = float("inf"),
-        protocols:Dict[str,int]={},
         batch_size=256,
-        skip=0
+        
     ):
         """reads data from CSV file
 
@@ -57,24 +56,31 @@ class CSVReader(PipelineSource):
             dataset_name (str): name of dataset
             fe_name (str): name of feature extractor
             file_name (str): file name
-            fe_features (int): number of features extracted
             max_pkts (int, optional): maximum number of packets to be read. Defaults to float("inf").
-            protocols (Dict[str,int], optional): procotol information from feature extractor. Defaults to {}.
             batch_size (int, optional): batch size . Defaults to 256.
             skip (int, optional): number of feature to skip for normalization. Defaults to 0.
         """        
         self.dataset_name = dataset_name
         self.file_name = file_name
         self.fe_name = fe_name
+        
+        feature_extractor=getattr(fe, fe_name).load_pickle("feature_extractors", dataset_name, fe_name, file_name, fe_name)
+        
         self.context = {
             "dataset_name": dataset_name,
             "file_name": file_name,
             "fe_name": fe_name,
-            "fe_features": fe_features,
-            "output_features":fe_features,
-            "protocols":protocols,
-            "skip":skip
+            "skip":feature_extractor.skip,
+            "fe_features":len(feature_extractor.get_headers()),
+            "output_features":len(feature_extractor.get_headers()),
+            "batch_size":batch_size
         }
+        
+        if hasattr(feature_extractor, 'protocol_map'):
+            self.context["protocols"]=feature_extractor.protocol_map
+            self.context['mac_to_idx_map']=feature_extractor.state.mac_to_idx_map
+        
+        
         self.max_pkts = max_pkts
         self.count = 0
         self.batch_size = batch_size

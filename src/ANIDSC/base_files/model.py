@@ -2,7 +2,7 @@
 from typing import Any, Dict, List
 from .pipeline import PipelineComponent, SplitterComponent
 from collections import deque
-from ..utils import LivePercentile, calc_quantile
+from ..utils import calc_quantile
 from abc import abstractmethod 
 import numpy as np 
 import torch
@@ -10,7 +10,7 @@ import copy
 from numpy.typing import NDArray
 
 class BaseOnlineODModel(PipelineComponent):
-    def __init__(self, queue_len=10000, preprocessors:List[str]=[], profile:bool=False, load_existing:bool=False, **kwargs):
+    def __init__(self, queue_len=10000, preprocessors:List[str]=[], profile:bool=False, load_name:str="", device="cuda", **kwargs):
         """base interface for online outlier detection model
 
         Args:
@@ -23,16 +23,16 @@ class BaseOnlineODModel(PipelineComponent):
         self.preprocessors=[getattr(self, p) for p in preprocessors]
         self.loss_queue = deque(maxlen=queue_len)
         
-        self.num_batch=0
+        self.warmup=1000
+        self.device=device
+        self.num_trained=0
+        self.num_evaluated=0
         self.converged = False
         self.profile=profile
-        self.load_existing=load_existing
+        self.load_name=load_name
         self.suffix=[]
         
-        self.custom_params=["num_batch", "loss_queue"]
-
     def setup(self):
-        
         self.parent.context['model_name']=self.name
         context=self.get_context()
         self.suffix.append(context.get('protocol',None))
@@ -54,18 +54,48 @@ class BaseOnlineODModel(PipelineComponent):
                 with_stack=False,
             )
             self.prof.start()
-    
-        if self.load_existing:
-            self.load()
         
+        if self.load_name != "":
+            self.load(self.load_name)
+        else:
+            self.init_model(context)
+            
+        print(f"{self.__str__()} has {self.get_total_params()} params")
+    
+    def get_total_params(self):
+        return sum(p.numel() for p in self.parameters() if p.requires_grad)
+        
+    
     @abstractmethod
-    def process(self, X):
-        """processes input data
-
-        Args:
-            X: input data to the model
-        """        
+    def init_model(self, context):
         pass 
+    
+    def process(self,X):    
+        X_scaled=self.preprocess(X)
+    
+        score, threshold=self.predict_step(X_scaled)
+        
+        # do not train if malicious or less than warmup
+        if self.num_trained<self.warmup or threshold>np.median(score):
+            if score is not None:
+                self.loss_queue.extend(score)
+            self.train_step(X_scaled)
+        
+        
+        return {
+            "threshold": threshold,
+            "score": score,
+            "batch_num":self.num_evaluated
+        }
+    
+    def predict_step(self, X, preprocess=False):
+        if preprocess:
+            X=self.preprocess(X)
+        _, loss = self.forward(X, inference=True)
+        self.num_evaluated+=1
+        return loss.detach().cpu().numpy(), self.get_threshold()
+    
+   
     
     def train_step(self, X, preprocess:bool=False)->NDArray:
         """train the model on batch X
@@ -80,22 +110,24 @@ class BaseOnlineODModel(PipelineComponent):
         if preprocess:
             X=self.preprocess(X)
         self.optimizer.zero_grad()
-        _, loss=self.forward(X, include_dist=True)
+        _, loss=self.forward(X, inference=False)
+        loss=loss.mean()
         loss.backward()
         self.optimizer.step()
-        self.num_batch+=1
+        self.num_trained+=1
+        
         if self.profile:
             self.prof.step()
         return loss.detach().cpu().item()
     
     @abstractmethod
-    def predict_step(self, X):
-        """perform prediction on input X
+    def forward(self, X):
+        """forward pass of model, returns the output and loss
 
         Args:
-            X (_type_): input data for prediction
+            X (_type_): _description_
         """        
-        pass 
+        pass
 
     def get_threshold(self)->float:
         """gets the current threshold value based on previous recorded loss value. By default it is 95th percentile
@@ -147,7 +179,7 @@ class BaseOnlineODModel(PipelineComponent):
     
     def teardown(self):
         suffix='-'.join([s for s in self.suffix if s is not None])
-        self.save(suffix) 
+        self.save_pickle(self.component_type, suffix) 
     
 
 class ConceptDriftWrapper(PipelineComponent):
@@ -161,6 +193,7 @@ class ConceptDriftWrapper(PipelineComponent):
             confidence (float): threshold to differentiate benign and malicious drift
         """        
         super().__init__(component_type="models",**kwargs)
+        
         self.model = model
         self.model_pool=[]
         self.patience=patience
@@ -175,7 +208,8 @@ class ConceptDriftWrapper(PipelineComponent):
         self.model_idx = 0
         self.max_model_pool_size=20
         self.time_since_last_drift=0
-        self.num_batch=0
+        self.num_trained=0
+        self.name=self.__str__()
 
     def set_context(self, context:Dict[str, Any]):
         """sets the current context
@@ -220,7 +254,7 @@ class ConceptDriftWrapper(PipelineComponent):
                 self.model_pool[self.model_idx].train_step(data, preprocess=True)
                 if (score!=0).all():
                     self.model_pool[self.model_idx].loss_queue.extend(score)
-                self.model_pool[self.model_idx].last_batch_num=self.num_batch
+                self.model_pool[self.model_idx].last_batch_num=self.num_trained
                 break
 
             
@@ -231,7 +265,7 @@ class ConceptDriftWrapper(PipelineComponent):
             if self.model_idx==start_idx:
                 break
         
-        self.num_batch+=1
+        self.num_trained+=1
         
         self.update_queue(score, threshold, data)
         
@@ -288,8 +322,8 @@ class ConceptDriftWrapper(PipelineComponent):
             "drift_level": drift_level,
             "threshold": threshold,
             "score": score,
-            "batch_num": self.num_batch,
-            "model_batch_num":self.model_pool[self.model_idx].num_batch,
+            "batch_num": self.num_trained,
+            "model_batch_num":self.model_pool[self.model_idx].num_trained,
             "model_idx": self.model_idx,
             "num_model": len(self.model_pool),
         }
@@ -328,7 +362,7 @@ class MultilayerSplitter(SplitterComponent):
         """splits the input into different layers based on protocol. each layer is attached to a new pipeline
         """        
         super().__init__(component_type="models", **kwargs)
-        self.name=f"{self.__class__.__name__}({self.pipeline})"
+        self.name=f"MultlayerSplitter({self.pipeline})"
         
         
     def setup(self):
@@ -340,7 +374,10 @@ class MultilayerSplitter(SplitterComponent):
             self.pipelines[proto].setup()
         
         self.parent.context['model_name']=self.name
-        
+    
+    def __str__(self):
+        return self.name
+    
     def split_function(self, data)->Dict[str, Any]:
         """splits the input data
 

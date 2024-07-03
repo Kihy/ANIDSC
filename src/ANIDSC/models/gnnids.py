@@ -275,6 +275,9 @@ class GCNNodeEncoder(torch.nn.Module):
         self.node_latent_dim=node_latent_dim
         self.embedding_dist=embedding_dist
         self.device=device
+        
+    def __str__(self):
+        return self.__class__.__name__
 
     def setup(self, n_features):
         self.node_embed = GCN(in_channels=n_features, hidden_channels=n_features, out_channels=self.node_latent_dim, num_layers=2, norm=None).to(self.device)
@@ -570,18 +573,24 @@ def loss_fn(model, x, marginal_prob_std, eps=1e-5):
     return loss
 
 
-class NodeEncoderWrapper(BaseOnlineODModel):
+class NodeEncoderWrapper(BaseOnlineODModel, torch.nn.Module):
     def __init__(self, node_encoder, model,**kwargs):
-        super().__init__(**kwargs)
+        BaseOnlineODModel.__init__(self,**kwargs)
+        torch.nn.Module.__init__(self)
         self.node_encoder=node_encoder
+        self.node_encoder.parent=self 
         self.model=model
-
+        self.model.parent=self
+        self.context={}
+        
+    def __str__(self):
+        return f"NodeEncoderWrapper({self.node_encoder}-{self.model})"
+    
     def setup(self):
         context=self.get_context()
-        self.node_encoder.setup(context["n_features"])
+        self.node_encoder.setup(context["fe_features"])
+        self.context['output_features']=self.node_encoder.node_latent_dim
         self.model.setup()
-        self.parent.context['output_features']=self.node_encoder.node_latent_dim
-        
         self.optimizer=torch.optim.Adam(params=self.parameters())
 
     def forward(self, X, include_dist=True): 
@@ -593,7 +602,9 @@ class NodeEncoderWrapper(BaseOnlineODModel):
             loss=recon_loss.mean(dim=1)
         return recon_nodes, loss  
     
-    def predict_step(self, X):
+    def predict_step(self, X, preprocess=True):
+        if preprocess:
+            X=self.preprocess(X)
         recon_nodes, recon_loss=self.forward(X, False)
         return recon_loss.detach().cpu().numpy(), self.get_threshold()
 
@@ -614,13 +625,13 @@ class NodeEncoderWrapper(BaseOnlineODModel):
         return {
             "threshold": threshold,
             "score": score,
-            "batch_num":self.num_batch
+            "batch_num":self.num_trained
         }
     
 
 
 class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin):
-    def __init__(self, device:str="cuda", preprocessors:List[str]=[], load_existing:bool=False, **kwargs):
+    def __init__(self, device:str="cuda", preprocessors:List[str]=[], load_name:str="", **kwargs):
         """Homogeneous graph representation of network 
 
         Args:
@@ -632,7 +643,7 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         PipelineComponent.__init__(self, **kwargs)    
         self.device=device
         self.preprocessors=preprocessors
-        self.load_existing=load_existing
+        self.load_name=load_name
         self.custom_params=['G']
     
     def preprocess(self, X):
@@ -662,9 +673,9 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         self.parent.context["output_features"]=n_features
         
         
-        if self.load_existing:
+        if self.load_name != "":
             context=self.get_context()
-            self.load(suffix=context.get('protocol',''))
+            self.load(self.load_name, suffix=context.get('protocol',''))
         else:
             #initialize graph
             self.G=Data()

@@ -18,13 +18,9 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
         """
         self.decay_factors = decay_factors
         self.clean_up_round=5000
-
+        
         super().__init__(**kwargs)
-    
-    def setup(self):
-        super().setup()
-        self.parent.context['skip']=0
-    
+            
     def init_state(self):
         """sets up IncStatDB"""
         
@@ -282,14 +278,15 @@ class AfterImageGraph(AfterImage):
             limit (int, optional): maximum number of records. Defaults to 1e6.
             decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
         """
-        super().__init__(**kwargs)
+        super().__init__(skip=4,**kwargs)
         protocols+=["Other"]
         self.protocol_map={p:i for i,p in enumerate(protocols)}
+        
     
     def setup(self):
         super().setup()
         self.parent.context['protocols']=self.protocol_map
-        self.parent.context['skip']=4
+        
 
     def peek(self, traffic_vectors:List[Dict[str, Any]]):
         """fake update. obtains a copy of existing database,
@@ -369,6 +366,9 @@ class AfterImageGraph(AfterImage):
         """
         traffic_vector=super().get_traffic_vector(packet)
 
+        if traffic_vector is None:
+            return None 
+        
         if TCP in packet:
             protocol=self.get_protocol_name(packet.sport, packet.dport, "tcp")
         elif UDP in packet:
@@ -699,7 +699,8 @@ class IncStat2D:
         )
         
 
-
+    def __repr__(self):
+        return pformat(vars(self))
 
 class IncStatDB:
     def __init__(self, decay_factors:List[float], last_timestamp:float=None, limit:int=1e5, mac_to_idx_map:Dict[str, int]={}):
@@ -724,7 +725,9 @@ class IncStatDB:
         self.num_updated = 0
         self.last_timestamp=last_timestamp
         self.mac_to_idx_map=mac_to_idx_map
-        
+    
+    def __repr__(self):
+        return pformat(vars(self))
     # def to_dict(self):
     #     return {
     #         'stat1d': {k: v.to_dict() for k, v in self.stat1d.items()},

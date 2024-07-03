@@ -1,6 +1,6 @@
 from typing import Any, Dict, List
 from .pipeline import PipelineComponent
-from .. import metrics 
+from .. import evaluations 
 from pathlib import Path
 import time
 from ..utils import draw_graph, fig_to_array
@@ -25,13 +25,13 @@ class CollateEvaluator(PipelineComponent):
         if self.save_results:
             # file to store outputs
             scores_and_thresholds_path = Path(
-                f"{context['dataset_name']}/{context['fe_name']}/results/{context['file_name']}/{context['model_name']}.csv"
+                f"{context['dataset_name']}/{context['fe_name']}/results/{context['file_name']}/{context['pipeline_name']}.csv"
             )
             scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
             self.output_file = open(str(scores_and_thresholds_path), "w")
             
         if self.log_to_tensorboard:
-            log_dir=f"{context['dataset_name']}/runs/{context['pipeline_name']}"
+            log_dir=f"{context['dataset_name']}/{context['fe_name']}/runs/{context['file_name']}/{context['pipeline_name']}"
             self.writer = SummaryWriter(
                 log_dir=log_dir
                 )
@@ -40,7 +40,7 @@ class CollateEvaluator(PipelineComponent):
             # custom layout for score and threshold in each layer
             layout = {
                 "decision": {
-                    protocol: ["Multiline", [f"average_score/{protocol}", f"average_threshold/{protocol}"]]
+                    protocol: ["Multiline", [f"median_score/{protocol}", f"median_threshold/{protocol}"]]
                 for protocol in context['protocols'].keys()},
             }
 
@@ -95,7 +95,7 @@ class BaseEvaluator(PipelineComponent):
             draw_graph_rep_interval (bool, optional): whether to draw the graph representation. only available if pipeline contains graph representation. Defaults to False.
         """        
         super().__init__()
-        self.metrics=[getattr(metrics, m) for m in metric_list]
+        self.metrics=[getattr(evaluations, m) for m in metric_list]
         self.metric_list=metric_list
         self.log_to_tensorboard=log_to_tensorboard
         self.save_results=save_results
@@ -109,14 +109,14 @@ class BaseEvaluator(PipelineComponent):
         if self.save_results:
             # file to store outputs
             scores_and_thresholds_path = Path(
-                f"{context['dataset_name']}/{context['fe_name']}/results/{context['file_name']}/{context['model_name']}.csv"
+                f"{context['dataset_name']}/{context['fe_name']}/results/{context['file_name']}/{context['pipeline_name']}.csv"
             )
             scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
             self.output_file = open(str(scores_and_thresholds_path), "w")
             
     
         if self.log_to_tensorboard:
-            log_dir=f"{context['dataset_name']}/runs/{context['pipeline_name']}"
+            log_dir=f"{context['dataset_name']}/{context['fe_name']}/runs/{context['file_name']}/{context['pipeline_name']}"
             self.writer = SummaryWriter(
                 log_dir=log_dir
                 )
@@ -126,11 +126,13 @@ class BaseEvaluator(PipelineComponent):
             # custom layout for score and threshold in each layer
             layout = {
                 "decision": {
-                    "All": ["Multiline", ["average_score", "average_threshold"]]
+                    "All": ["Multiline", ["median_score", "median_threshold"]]
                 },
             }
 
             self.writer.add_custom_scalars(layout)
+            
+            
 
         self.prev_timestamp = time.time()
         
@@ -138,6 +140,7 @@ class BaseEvaluator(PipelineComponent):
         if self.save_results:
             self.output_file.close()
             print("results file saved at", self.output_file.name)
+            self.write_header=True
     
     def process(self, results:Dict[str, Any])->Dict[str, Any]:
         """processes results and log them accordingly

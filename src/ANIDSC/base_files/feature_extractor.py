@@ -39,6 +39,8 @@ class FeatureBuffer(PipelineComponent):
             self.feature_list=[]
             self.meta_list=[]
             self.size=0
+            
+            self.parent.context["batch_size"]=self.buffer_size
     
     def process(self, data: Tuple[List[Any], List[Any]])->Union[None, NDArray]:
         """process input data
@@ -93,11 +95,13 @@ class FeatureBuffer(PipelineComponent):
         
         print("feature file saved at", self.feature_file.name)
         print("meta file saved at", self.meta_file.name)
-        
+    
+    def __str__(self):
+        return f"FeatureBuffer({self.buffer_size})"
         
         
 class BaseTrafficFeatureExtractor(PipelineComponent):
-    def __init__(self, offset_time:Union[int, str]="auto", **kwargs):
+    def __init__(self, offset_time:Union[int, str]="auto", skip:int=0, **kwargs):
         """base interface for feature extractor
 
         Args:
@@ -107,6 +111,7 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         self.skipped=0
         self.processed=0
         self.offset_time=offset_time
+        self.skip=skip
   
     def setup(self):
         self.parent.context["feature_names"]=self.get_headers()
@@ -114,6 +119,7 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         self.parent.context["fe_name"]=self.name
         self.parent.context["fe_features"]=len(self.get_headers())
         self.parent.context["output_features"]=len(self.get_headers())
+        self.parent.context['skip']=self.skip
         self.init_state()
         
     @abstractmethod
