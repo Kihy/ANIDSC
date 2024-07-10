@@ -44,6 +44,7 @@ class CSVReader(PipelineSource):
     def __init__(
         self,
         dataset_name: str,
+        fe_cls:str,
         fe_name: str,
         file_name: str,
         max_pkts: int = float("inf"),
@@ -64,7 +65,7 @@ class CSVReader(PipelineSource):
         self.file_name = file_name
         self.fe_name = fe_name
         
-        feature_extractor=getattr(fe, fe_name).load_pickle("feature_extractors", dataset_name, fe_name, file_name, fe_name)
+        feature_extractor=getattr(fe, fe_cls).load_pickle("feature_extractors", dataset_name, fe_name, file_name, fe_name)
         
         self.context = {
             "dataset_name": dataset_name,

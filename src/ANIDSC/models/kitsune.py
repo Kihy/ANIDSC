@@ -51,7 +51,8 @@ class KitNET(BaseOnlineODModel):
     
     def forward(self, X, inference=False):
         pass
-        
+    
+    
     def train_step(self, X, preprocess=False):
         if preprocess:
             X=self.preprocess(X)

@@ -16,6 +16,7 @@ class PipelineComponent(ABC, PickleSaveMixin):
         self.name = self.__class__.__name__
         self.component_type=component_type
         self.parent = None  # Reference to parent component
+        self.loaded_from_file=False
 
     def get_context(self)->Dict[str, Any]:
         """finds the current component's context by recursively adding parent's context to self if it does not exist

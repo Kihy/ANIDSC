@@ -10,7 +10,8 @@ import copy
 from numpy.typing import NDArray
 
 class BaseOnlineODModel(PipelineComponent):
-    def __init__(self, queue_len=10000, preprocessors:List[str]=[], profile:bool=False, load_name:str="", device="cuda", **kwargs):
+    def __init__(self, queue_len=10000, preprocessors:List[str]=[], profile:bool=False, device="cuda",
+                 loss_dist="lognorm", **kwargs):
         """base interface for online outlier detection model
 
         Args:
@@ -22,6 +23,7 @@ class BaseOnlineODModel(PipelineComponent):
         super().__init__(component_type='models', **kwargs)
         self.preprocessors=[getattr(self, p) for p in preprocessors]
         self.loss_queue = deque(maxlen=queue_len)
+        self.loss_dist=loss_dist
         
         self.warmup=1000
         self.device=device
@@ -29,7 +31,7 @@ class BaseOnlineODModel(PipelineComponent):
         self.num_evaluated=0
         self.converged = False
         self.profile=profile
-        self.load_name=load_name
+        
         self.suffix=[]
         
     def setup(self):
@@ -55,9 +57,7 @@ class BaseOnlineODModel(PipelineComponent):
             )
             self.prof.start()
         
-        if self.load_name != "":
-            self.load(self.load_name)
-        else:
+        if not self.loaded_from_file:
             self.init_model(context)
             
         print(f"{self.__str__()} has {self.get_total_params()} params")
@@ -80,8 +80,7 @@ class BaseOnlineODModel(PipelineComponent):
             if score is not None:
                 self.loss_queue.extend(score)
             self.train_step(X_scaled)
-        
-        
+
         return {
             "threshold": threshold,
             "score": score,
@@ -96,6 +95,15 @@ class BaseOnlineODModel(PipelineComponent):
         return loss.detach().cpu().numpy(), self.get_threshold()
     
    
+    def get_loss(self, X, preprocess:bool=False):
+        if preprocess:
+            X=self.preprocess(X)
+        _, loss=self.forward(X, inference=False)
+        loss=loss.mean()
+        if self.profile:
+            self.prof.step()
+        return loss
+    
     
     def train_step(self, X, preprocess:bool=False)->NDArray:
         """train the model on batch X
@@ -136,7 +144,7 @@ class BaseOnlineODModel(PipelineComponent):
             float: threshold value
         """        
         if len(self.loss_queue)>100:
-            threshold=calc_quantile(self.loss_queue, 0.95)
+            threshold=calc_quantile(self.loss_queue, 0.95, self.loss_dist)
         else:
             threshold = np.inf
         return threshold
@@ -231,7 +239,8 @@ class ConceptDriftWrapper(PipelineComponent):
         return new_model
     
     def setup(self):
-        self.model_pool.append(self.create_model())
+        if not self.loaded_from_file:
+            self.model_pool.append(self.create_model())
         self.parent.context["concept_drift_detection"]=True
         self.parent.context['model_name']=f"CDD({self.model.name})"
  
@@ -366,15 +375,18 @@ class MultilayerSplitter(SplitterComponent):
         
         
     def setup(self):
-        context=self.get_context()
-        for proto in context['protocols'].keys():
-            self.pipelines[proto]=copy.deepcopy(self.pipeline)    
-            self.pipelines[proto].context['protocol']=proto
-            self.pipelines[proto].parent=self 
-            self.pipelines[proto].setup()
-        
         self.parent.context['model_name']=self.name
-    
+        
+        if not self.loaded_from_file:
+            context=self.get_context()
+            
+            for proto in context['protocols'].keys():
+                self.pipelines[proto]=copy.deepcopy(self.pipeline)    
+                self.pipelines[proto].context['protocol']=proto
+                self.pipelines[proto].parent=self 
+                self.pipelines[proto].setup()
+        
+        
     def __str__(self):
         return self.name
     

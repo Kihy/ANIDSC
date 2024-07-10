@@ -228,7 +228,7 @@ class ModelGenerator:
 
 class ARCUS(BaseOnlineODModel, torch.nn.Module):
     def __init__(self, **kwargs):
-        BaseOnlineODModel.__init__(self, **kwargs)
+        BaseOnlineODModel.__init__(self,loss_dist="norm",**kwargs)
         torch.nn.Module.__init__(self)
         self.model_pool = []
         self._init_epoch = 5
@@ -363,7 +363,7 @@ class ARCUS(BaseOnlineODModel, torch.nn.Module):
         threshold = self.get_threshold()
         x = self.preprocess(x).float()
 
-        if self.num_batch == 0:
+        if self.num_trained == 0:
             self._train_model(self.model_pool[0], x, self._init_epoch)
 
         # reliability calculation

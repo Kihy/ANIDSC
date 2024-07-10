@@ -172,13 +172,19 @@ def draw_graph(G, threshold, node_as, fig, ax, relative_as, title, mac_to_device
         node_cbar.ax.axhline(threshold, c='r')
 
 
-def calc_quantile(x, p):
-    eps=1e-6
-    x=np.log(np.array(x)+eps)
-    mean=np.mean(x) 
-    std=np.std(x)
-
-    quantile=np.exp(mean+np.sqrt(2)*std*scipy.special.erfinv(2*p-1))
+def calc_quantile(x, p, dist="lognorm"):
+    if dist=="lognorm":
+        eps=1e-6
+        x=np.log(np.array(x)+eps)
+        mean=np.mean(x) 
+        std=np.std(x)
+        quantile=np.exp(mean+np.sqrt(2)*std*scipy.special.erfinv(2*p-1))
+    elif dist=="norm":
+        mean=np.mean(x) 
+        std=np.std(x)
+        quantile=mean+np.sqrt(2)*std*scipy.special.erfinv(2*p-1)
+        
+        
     return quantile
 
 def is_stable(x, p=0.95, return_quantile=False):

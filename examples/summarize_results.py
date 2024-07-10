@@ -1,5 +1,6 @@
 from itertools import product
-from ANIDSC.evaluations import AfterImageSummarizer 
+
+from ANIDSC.evaluations import BasicSummarizer 
 
 def get_file_names(dataset):
     if dataset.endswith("CIC_IDS_2017"):
@@ -31,6 +32,11 @@ def get_file_names(dataset):
     
 if __name__ == "__main__":
     dataset="../datasets/UQ_IoT_IDS21"
-    summarizer=AfterImageSummarizer([dataset],get_file_names(dataset))
-    summarizer.plots()
+    summarizer=BasicSummarizer([dataset],"AfterImage", get_file_names(dataset), calc_f1=True)
+    # summarizer.plots()
+    summarizer.gen_summary()
+
+    
+    summarizer=BasicSummarizer([dataset],"FrequencyExtractor", get_file_names(dataset), calc_f1=True)
+    # summarizer.plots()
     summarizer.gen_summary()

@@ -1,3 +1,4 @@
+from collections import defaultdict
 from itertools import product
 import os
 from pathlib import Path
@@ -5,20 +6,28 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
-
+from scipy.stats import hmean
 
 def name_map_func(value):
-    models = ["VAE", "AE", "SLAD", "GOAD", "ICL", "KitNET"]
+    models = ["VAE", "AE", "SLAD", "GOAD", "ICL", "KitNET", "BoxPlot", "ARCUS"]
     for i in models:
         if i in value:
             return i
     return "NA"
 
+def f_beta(tp, fn, fp, beta=1):
+    opbs=(1+beta**2)
+    return opbs*tp/(opbs*tp+beta**2*fn+fp)
 
-class AfterImageSummarizer:
-    def __init__(self, datasets, files, calc_f1=False):
+def weighted_hmean(pr, re, beta=1):
+    opbs=(1+beta**2)
+    return opbs*pr*re/(beta**2*pr+re)
+
+class BasicSummarizer:
+    def __init__(self, datasets, fe_name, files, calc_f1=False):
         self.datasets = datasets
         self.files = files
+        self.fe_name = fe_name
         self.calc_f1 = calc_f1
         self.batch_size = 256
 
@@ -50,7 +59,7 @@ class AfterImageSummarizer:
             linewidth=0,
         )
         g.set(yscale="log")
-        path = Path(f"{dataset}/AfterImage/plots/{file}/{filename[:-4]}_scores.png")
+        path = Path(f"{dataset}/{self.fe_name}/plots/{file}/{filename[:-4]}_scores.png")
         path.parent.mkdir(exist_ok=True, parents=True)
         g.savefig(path)
         print(f"score plot saved to {path}")
@@ -67,7 +76,7 @@ class AfterImageSummarizer:
             linewidth=0,
         )
 
-        path = Path(f"{dataset}/AfterImage/plots/{file}/{filename[:-4]}_dr.png")
+        path = Path(f"{dataset}/{self.fe_name}/plots/{file}/{filename[:-4]}_dr.png")
         path.parent.mkdir(exist_ok=True, parents=True)
         g.savefig(path)
         plt.close()
@@ -75,7 +84,7 @@ class AfterImageSummarizer:
 
     def plots(self):
         for dataset, file in product(self.datasets, self.files):
-            dir = f"{dataset}/AfterImage/results/{file}"
+            dir = f"{dataset}/{self.fe_name}/results/{file}"
             for filename in os.listdir(dir):
                 f = os.path.join(dir, filename)
                 df = pd.read_csv(f)
@@ -90,7 +99,7 @@ class AfterImageSummarizer:
             dataframes = []
 
             for file in self.files:
-                dir = f"{dataset}/AfterImage/results/{file}"
+                dir = f"{dataset}/{self.fe_name}/results/{file}"
 
                 for filename in os.listdir(dir):
                     f = os.path.join(dir, filename)
@@ -106,40 +115,75 @@ class AfterImageSummarizer:
 
             all_df = pd.DataFrame(dataframes)
             all_df["pipeline"] = all_df["pipeline"].apply(name_map_func)
-
-            path = Path(f"{dataset}/AfterImage/plots")
+            all_df['dr']=all_df['pos_count']/all_df['batch_size']
+            all_df['acc']=all_df['dr'].where(all_df['file'].str.startswith("malicious"), other=1-all_df['dr'])
+                    
+            
+            path = Path(f"{dataset}/{self.fe_name}/plots")
             path.mkdir(exist_ok=True, parents=True)
 
             if self.calc_f1:
-                pipelines=[]
-                f1_scores=[]
-                for pipeline, group in all_df.groupby('pipeline'):
-                    pos_benign=group[group['file'].str.startswith('benign')]['pos_count'].sum()
-                    total_benign=group[group['file'].str.startswith('benign')]['batch_size'].sum()
+                data = defaultdict(list)
+                for pipeline, group in all_df.groupby("pipeline"):
                     
-                    pos_malicious=group[group['file'].str.startswith('malicious')]['pos_count'].sum()
-                    total_malicious=group[group['file'].str.startswith('malicious')]['batch_size'].sum()
                     
-                    Rd_Xm=pos_malicious/total_malicious
-                    Rd_Xb=pos_benign/total_benign
-                    
-                    f1=(2*Rd_Xm)/(1+Rd_Xm+Rd_Xb)
-                    
-                    pipelines.append(pipeline)
-                    f1_scores.append(f1)
-                g = sns.catplot(kind="bar", x=pipelines, y=f1_scores)
-                g.savefig(f"{path}/f1_summary.png")
-                print(f"F1 plot saved to {path}")
+                    pos_benign = group[group["file"].str.startswith("benign")][
+                        "pos_count"
+                    ].sum()
+                    total_benign = group[group["file"].str.startswith("benign")][
+                        "batch_size"
+                    ].sum()
 
-            
+                    pos_malicious = group[group["file"].str.startswith("malicious")][
+                        "pos_count"
+                    ].sum()
+                    total_malicious = group[group["file"].str.startswith("malicious")][
+                        "batch_size"
+                    ].sum()
+
+                    data['pos_mal'].append(pos_malicious)
+                    data['total_mal'].append(total_malicious)
+                    data['pos_ben'].append(pos_benign)
+                    data["total_ben"].append(total_benign)
+                    
+                    f1 = f_beta(pos_malicious, total_malicious-pos_malicious, pos_benign, beta=1)
+
+                    data['pipelines'].append(pipeline)
+                    data['f1_scores'].append(f1)
+                    
+                    mean_mal=np.mean(group[group["file"].str.startswith("malicious")]['acc'])
+                    mean_ben=np.mean(group[group["file"].str.startswith("benign")]['acc'])
+                    data['mean_mal'].append(mean_mal)
+                    data['mean_ben'].append(mean_ben)
+                    data['hmean_1_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=1))
+                    data['hmean_0.5_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=0.5))
+                    data['hmean_2_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=2))
+                summary_df= pd.DataFrame(data)
+
+                g = sns.catplot(kind="bar", data=summary_df, x="pipelines", y="f1_scores")
+                g.savefig(f"{path}/f1_summary.png")
+                plt.close()
+                print(f"F1 plot saved to {path}/f1_summary.png")
+                summary_df.to_csv(f"{dataset}/{self.fe_name}/results/summary.csv", index=False)
+                print(
+                f"resulting csv saved to {dataset}/{self.fe_name}/results/summary.csv"
+                )
+
             g = sns.catplot(
                 data=all_df, kind="bar", x="pipeline", y="detection_rate", col="file"
             )
             g.savefig(f"{path}/dr_summary.png")
-            print(f"DR plot saved to {path}")
+            plt.close()
+            print(f"DR plot saved to {path}/dr_summary.png")
 
-            g = sns.catplot(data=all_df, kind="bar", x="pipeline", y="time", col="file")
+            g = sns.catplot(data=all_df, kind="bar", x="pipeline", y="time")
             g.savefig(f"{path}/time_summary.png")
-            print(f"time plot saved to {path}")
+            plt.close()
+            print(f"time plot saved to {path}/time_summary.png")
+
+            all_df.to_csv(f"{dataset}/{self.fe_name}/results/overview.csv", index=False)
+            print(
+                f"resulting csv saved to {dataset}/{self.fe_name}/results/overview.csv"
+            )
 
         return all_df

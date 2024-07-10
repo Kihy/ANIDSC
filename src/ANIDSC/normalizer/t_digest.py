@@ -20,8 +20,8 @@ class LivePercentile(BaseOnlineNormalizer):
     def setup(self):
         super().setup()
         
-        
-        self.dims=[TDigest() for _ in range(self.ndim-self.skip)]
+        if not self.loaded_from_file:
+            self.dims=[TDigest() for _ in range(self.ndim-self.skip)]
     
     def teardown(self):
         super().teardown()
@@ -51,7 +51,7 @@ class LivePercentile(BaseOnlineNormalizer):
 
         self.add(scale)
 
-        return np.hstack((no_scale, scale))
+        return np.hstack((no_scale, scaled_features))
 
     def reset(self):
         self.dims = [TDigest() for _ in range(self.ndim-self.skip)]

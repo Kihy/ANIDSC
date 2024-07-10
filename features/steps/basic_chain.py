@@ -15,7 +15,7 @@ import glob
 import pickle
 
 
-@given('a PacketReader initialized with dataset "{dataset}" and file "{file}"')
+@given('a PacketReader initialized with dataset "{dataset}" and {file}')
 def step_given_packet_reader(context, dataset, file):
     context.data_source = PacketReader(dataset, file)
     context.dataset = dataset
@@ -46,7 +46,7 @@ def step_given_basic_boxplot_model(context):
         ["detection_rate", "median_score", "median_threshold"],
         log_to_tensorboard=True,
         save_results=True,
-        draw_graph_rep_interval=10,
+        draw_graph_rep_interval=0,
     )
     if hasattr(context, "pipeline"):
         context.pipeline = context.pipeline | model | evaluator
@@ -66,10 +66,11 @@ def step_given_output_folder_is_empty(context):
 
 
 @given(
-    'a csv file initialized with dataset "{dataset}", file "{file}", and feature extractor "{fe_name}"'
+    'a csv file initialized with dataset "{dataset}", file "{file}", and feature extractor AfterImage'
 )
-def step_given_csv_file(context, dataset, file, fe_name):
-    context.data_source = CSVReader(dataset, fe_name, file)
+def step_given_csv_file(context, dataset, file):
+    fe_name="AfterImage"
+    context.data_source = CSVReader(dataset, fe_name, fe_name, file)
     context.dataset = dataset
     context.file = file
     context.fe_name = fe_name

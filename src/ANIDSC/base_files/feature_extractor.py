@@ -120,7 +120,9 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         self.parent.context["fe_features"]=len(self.get_headers())
         self.parent.context["output_features"]=len(self.get_headers())
         self.parent.context['skip']=self.skip
-        self.init_state()
+        
+        if not self.loaded_from_file:
+            self.init_state()
         
     @abstractmethod
     def init_state(self):

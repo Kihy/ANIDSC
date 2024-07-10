@@ -12,7 +12,7 @@ class FrequencyState:
     def update(self, traffic_vector):
         self.sliding_window.append(traffic_vector['timestamp'])
         self.last_timestamp=traffic_vector['timestamp']
-        while (self.sliding_window[0]-self.sliding_window[-1])>self.time_window:
+        while (self.sliding_window[-1]-self.sliding_window[0])>self.time_window:
             self.sliding_window.popleft()
         return np.array([[len(self.sliding_window)]])
 

@@ -49,6 +49,7 @@ class PickleSaveMixin:
             obj = pickle.load(file)
         if not isinstance(obj, cls):
             raise TypeError(f"Loaded object is not of type {cls.__name__}")
+        obj.loaded_from_file=True
         print(f"Object loaded from {file_path}")
         return obj
 

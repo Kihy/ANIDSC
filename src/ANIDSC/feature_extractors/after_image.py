@@ -16,10 +16,11 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
         Args:
             decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
         """
+        super().__init__(**kwargs)
         self.decay_factors = decay_factors
         self.clean_up_round=5000
         
-        super().__init__(**kwargs)
+        
             
     def init_state(self):
         """sets up IncStatDB"""
@@ -281,7 +282,10 @@ class AfterImageGraph(AfterImage):
         super().__init__(skip=4,**kwargs)
         protocols+=["Other"]
         self.protocol_map={p:i for i,p in enumerate(protocols)}
-        
+        self.name=self.__str__()
+    
+    def __str__(self):
+        return f"AfterImageGraph({','.join(self.protocol_map.keys())})"
     
     def setup(self):
         super().setup()
