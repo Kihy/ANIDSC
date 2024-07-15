@@ -1,4 +1,6 @@
 from typing import Any, Dict, List
+
+import numpy as np
 from .pipeline import PipelineComponent
 from .. import evaluations 
 from pathlib import Path
@@ -18,17 +20,20 @@ class CollateEvaluator(PipelineComponent):
         super().__init__()
         self.log_to_tensorboard=log_to_tensorboard
         self.save_results=save_results
-        self.write_header=True 
+        
         
     def setup(self):
         context=self.get_context()
         if self.save_results:
             # file to store outputs
-            scores_and_thresholds_path = Path(
+            layerwise_path = Path(
                 f"{context['dataset_name']}/{context['fe_name']}/results/{context['file_name']}/{context['pipeline_name']}.csv"
             )
-            scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
-            self.output_file = open(str(scores_and_thresholds_path), "w")
+            layerwise_path.parent.mkdir(parents=True, exist_ok=True)
+            self.output_file = open(str(layerwise_path), "w")
+            self.write_output_header=True 
+            
+            
             
         if self.log_to_tensorboard:
             log_dir=f"{context['dataset_name']}/{context['fe_name']}/runs/{context['file_name']}/{context['pipeline_name']}"
@@ -56,20 +61,22 @@ class CollateEvaluator(PipelineComponent):
         Args:
             results (Dict[str, Dict[str, Any]]): layer: results pairs for each layer
         """        
-        # records time
+        # all results
+        pos_idx=[]
         
+        #layerwise results
         for protocol, result_dict in results.items():
             if result_dict is None:
                 continue
+            
             if self.log_to_tensorboard:
-                #skip protocol information
                 for name, value in result_dict.items():
                     if name=="batch_num":
                         continue 
                     elif name=="graph_rep":
                         self.writer.add_image(
                            protocol, value, global_step=result_dict['batch_num'])
-                    else:       
+                    elif isinstance(value, (int, float)):       
                         self.writer.add_scalar(
                                         f"{name}/{protocol}",
                                         value,
@@ -78,13 +85,41 @@ class CollateEvaluator(PipelineComponent):
                     
             if self.save_results:
                 result_dict["protocol"]=protocol
-                if self.write_header:
+                
+                # remove pos_idx
+                pos_idx.append(result_dict["pos_idx"])
+                del result_dict['pos_idx']
+                
+                if self.write_output_header:
                     self.output_file.write(",".join(result_dict.keys()) + "\n")
-                    self.write_header=False
+                    self.write_output_header=False
                 self.output_file.write(
                     ",".join(list(map(str, result_dict.values()))) + "\n"
                 )
-            
+                
+        unique_values = np.unique(np.hstack(pos_idx))
+        pos_counts=len(unique_values)
+        detection_rate=pos_counts/result_dict["batch_size"]
+        
+        # modify result dict 
+        result_dict["protocol"]="Overall"
+        result_dict["detection_rate"]=detection_rate
+        result_dict["pos_count"]=pos_counts 
+        
+        # List of keys to calculate the average for
+        keys_to_average = ['time', 'model_idx', 'num_model', 'median_score', 'pos_count', 'batch_size']
+
+        # Calculate the averages
+        for key in keys_to_average:
+            result_dict[key]= sum(d[key] for d in results.values()) / len(results) 
+        
+        self.output_file.write(
+                    ",".join(list(map(str, result_dict.values()))) + "\n"
+                )
+
+        
+        
+        
 class BaseEvaluator(PipelineComponent): 
     def __init__(self, metric_list:List[str], log_to_tensorboard:bool=True, save_results:bool=True, draw_graph_rep_interval:bool=False):
         """base evaluator that evaluates the output of a single model
@@ -161,27 +196,30 @@ class BaseEvaluator(PipelineComponent):
             result_dict['model_idx']= results['model_idx']
             result_dict['num_model']=results['num_model']
         
+        header=[]
+        values=[]
         for metric_name, metric in zip(self.metric_list, self.metrics):
             result_dict[metric_name]=metric(results)
+            if isinstance(result_dict[metric_name], (int, float)):
+                if self.log_to_tensorboard:
+                
+                    self.writer.add_scalar(
+                                    metric_name,
+                                    result_dict[metric_name],
+                                    results['batch_num'],
+                                )
+        
+                if self.save_results:
+                    if self.write_header:
+                        header.append(metric_name)
+                    values.append(str(result_dict[metric_name]))
         
         if self.save_results:
             if self.write_header:
-                self.output_file.write(
-                ",".join(list(map(str, result_dict.keys()))) + "\n"
-            )
-                self.write_header=False 
-                
-            self.output_file.write(
-                ",".join(list(map(str, result_dict.values()))) + "\n"
-            )
+                self.output_file.write(",".join(header) + "\n")
+                self.write_header=False
+            self.output_file.write(",".join(values) + "\n")
         
-        if self.log_to_tensorboard:
-            for name, value in result_dict.items():
-                self.writer.add_scalar(
-                                name,
-                                value,
-                                results['batch_num'],
-                            )
                 
         context=self.get_context()
         if context.get('G',False) and self.draw_graph_rep_interval and results['batch_num']%self.draw_graph_rep_interval==0:

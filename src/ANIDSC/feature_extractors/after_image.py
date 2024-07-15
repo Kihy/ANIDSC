@@ -405,7 +405,11 @@ class AfterImageGraph(AfterImage):
             try:
                 protocol=getservbyport(dst_port_num,proto)
             except OSError:
-                protocol=proto             
+                protocol=proto
+        
+        if protocol not in self.protocol_map.keys():
+            protocol=proto
+            
         return protocol.upper()
     
     def get_headers(self)->List[str]:

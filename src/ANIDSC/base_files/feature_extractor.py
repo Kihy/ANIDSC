@@ -22,12 +22,16 @@ class FeatureBuffer(PipelineComponent):
         if self.save:
             context=self.get_context()
             # setup files
+            if "adversarial_attack" in context.keys():
+                adv_folder=f"{context['adversarial_attack']}/"
+            else:
+                adv_folder=''
             feature_file = Path(
-                f"{context['dataset_name']}/{context['fe_name']}/features/{context['file_name']}.csv"
+                f"{context['dataset_name']}/{context['fe_name']}/features/{adv_folder}{context['file_name']}.csv"
             )
             feature_file.parent.mkdir(parents=True, exist_ok=True)
             meta_file = Path(
-                f"{context['dataset_name']}/{context['fe_name']}/metadata/{context['file_name']}.csv"
+                f"{context['dataset_name']}/{context['fe_name']}/metadata/{adv_folder}{context['file_name']}.csv"
             )
             meta_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -171,7 +175,7 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         """returns the names of the traffic vectors"""
         pass
     
-    def process(self, packet:Packet)->Tuple[List[float],List[Any]]:
+    def process(self, packet:Packet, peek=False)->Tuple[List[float],List[Any]]:
         """The main entry point of feature extractor, this function
         should define the process of extracting a single packet
 
@@ -193,10 +197,14 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         
         traffic_vector["timestamp"] -= self.offset_time
 
-        feature = self.update(traffic_vector)
-        
-        self.processed += feature.shape[0]
-        
+        if peek:
+            feature=self.peek(traffic_vector)
+            
+        else:
+            feature = self.update(traffic_vector)
+            
+            self.processed += feature.shape[0]
+            
         return feature, traffic_vector
     
     def teardown(self):

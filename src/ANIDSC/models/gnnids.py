@@ -589,7 +589,8 @@ class NodeEncoderWrapper(BaseOnlineODModel, torch.nn.Module):
         self.model = model
         self.model.parent = self
         self.context = {}
-
+        self.loss_queue=self.model.loss_queue
+        
     def __str__(self):
         return f"NodeEncoderWrapper({self.node_encoder}-{self.model})"
 

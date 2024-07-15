@@ -32,11 +32,17 @@ def get_file_names(dataset):
     
 if __name__ == "__main__":
     dataset="../datasets/UQ_IoT_IDS21"
-    summarizer=BasicSummarizer([dataset],"AfterImage", get_file_names(dataset), calc_f1=True)
+    # summarizer=BasicSummarizer([dataset],"AfterImage", get_file_names(dataset), calc_f1=True)
+    # # summarizer.plots()
+    # summarizer.gen_summary()
+
+    
+    # summarizer=BasicSummarizer([dataset],"FrequencyExtractor", get_file_names(dataset), calc_f1=True)
+    # # summarizer.plots()
+    # summarizer.gen_summary()
+    
+        
+    summarizer=BasicSummarizer([dataset],"AfterImageGraph(TCP,UDP,ARP,ICMP,Other)", get_file_names(dataset), calc_f1=True, col="protocol")
     # summarizer.plots()
     summarizer.gen_summary()
 
-    
-    summarizer=BasicSummarizer([dataset],"FrequencyExtractor", get_file_names(dataset), calc_f1=True)
-    # summarizer.plots()
-    summarizer.gen_summary()

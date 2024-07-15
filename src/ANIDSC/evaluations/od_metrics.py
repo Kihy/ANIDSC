@@ -10,6 +10,11 @@ def pos_count(result_dict):
         return 0
     return np.sum(result_dict["score"]> result_dict["threshold"])
 
+def pos_idx(result_dict):
+    if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
+        return []
+    return np.where(result_dict["score"]> result_dict["threshold"])[0]
+        
 def batch_size(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
         return 0

@@ -15,6 +15,15 @@ from ANIDSC.normalizer import LivePercentile
 import warnings
 
 
+METRICS=[
+            "detection_rate",
+            "median_score",
+            "median_threshold",
+            "pos_count",
+            "pos_idx",
+            "batch_size",
+        ]
+
 def get_pipeline(
     model_name,
     from_pcap=True,
@@ -22,26 +31,22 @@ def get_pipeline(
     node_encoder_type="LinearNodeEncoder",
     dist_type="gaussian",
 ):
-    if model_name == "KitNET":
-        preprocessors = []
-    else:
-        preprocessors = ["to_float_tensor", "to_device"]
+    
 
     standardizer = LivePercentile()
     evaluator = BaseEvaluator(
-        [
-            "detection_rate",
-            "median_score",
-            "median_threshold",
-            "pos_count",
-            "batch_size",
-        ],
+        METRICS,
         log_to_tensorboard=(pipeline_type == "vanilla"),
         save_results=(pipeline_type == "vanilla"),
         draw_graph_rep_interval=0,
     )
 
     if pipeline_type == "vanilla":
+        if model_name == "KitNET":
+            preprocessors = []
+        else:
+            preprocessors = ["to_float_tensor", "to_device"]
+        
         model = getattr(models, model_name)(preprocessors=preprocessors, profile=False)
 
         if from_pcap:
@@ -55,14 +60,18 @@ def get_pipeline(
 
     elif pipeline_type == "graph_cdd":
         # graph cdd model
-        model = getattr(models, model_name)(preprocessors=[])
+        if model_name =="KitNET":
+            model = getattr(models, model_name)(preprocessors=["to_numpy"])
+        else:
+            model = getattr(models, model_name)(preprocessors=[])
+            
         node_encoder = getattr(models, node_encoder_type)(15, dist_type)
         encoder_model = NodeEncoderWrapper(node_encoder, model)
         cd_model = ConceptDriftWrapper(encoder_model, 1000, 50)
 
         standardizer = LivePercentile()
 
-        graph_rep = HomoGraphRepresentation(preprocessors=preprocessors)
+        graph_rep = HomoGraphRepresentation(preprocessors=["to_float_tensor", "to_device"])
 
         collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
         protocol_splitter = MultilayerSplitter(
@@ -72,12 +81,8 @@ def get_pipeline(
         if from_pcap:
             feature_extractor = AfterImageGraph(["TCP", "UDP", "ARP", "ICMP"])
             feature_buffer = FeatureBuffer(buffer_size=256)
-            pipeline = (
-                feature_extractor
-                | feature_buffer
-                | protocol_splitter
-                | collate_evaluator
-            )
+            pipeline = feature_extractor | feature_buffer | protocol_splitter | collate_evaluator
+            
         else:
             pipeline = protocol_splitter | collate_evaluator
 
@@ -95,13 +100,7 @@ def load_pipeline(
     dist_type="gaussian",
 ):
     evaluator = BaseEvaluator(
-        [
-            "detection_rate",
-            "median_score",
-            "median_threshold",
-            "pos_count",
-            "batch_size",
-        ],
+        METRICS,
         log_to_tensorboard=(pipeline_type == "vanilla"),
         save_results=(pipeline_type == "vanilla"),
         draw_graph_rep_interval=0,
@@ -504,11 +503,13 @@ if __name__ == "__main__":
     pipeline_type = "graph_cdd"
     node_encoder_type = "LinearNodeEncoder"
     dist_type = "gaussian"
-    # # feature extraction
+    
+    
+    # feature extraction
     uq_feature_extraction(pipeline_type=pipeline_type)
 
     # # evaluate models
-    model_names = ["AE", "GOAD", "VAE", "ICL", "SLAD", "KitNET"]
+    model_names = ["AE", "GOAD", "VAE", "ICL", "SLAD", "KitNET"] # 
 
     with warnings.catch_warnings():
         warnings.filterwarnings("error", category=RuntimeWarning)
