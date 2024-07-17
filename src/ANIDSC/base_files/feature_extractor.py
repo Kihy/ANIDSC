@@ -7,7 +7,7 @@ from typing import Dict, Any, List, Tuple, Union
 from numpy.typing import NDArray
 
 class FeatureBuffer(PipelineComponent):
-    def __init__(self, buffer_size:int=1e4, save:bool=True):
+    def __init__(self, buffer_size:int=1e4, save_features:bool=True):
         """feature buffer to buffer results in batches to speed up detection. It drops remaining features that does not make a batch
 
         Args:
@@ -16,22 +16,18 @@ class FeatureBuffer(PipelineComponent):
         """        
         super().__init__()
         self.buffer_size=buffer_size
-        self.save=save
+        self.save_features=save_features
         
     def setup(self):
-        if self.save:
+        if self.save_features:
             context=self.get_context()
             # setup files
-            if "adversarial_attack" in context.keys():
-                adv_folder=f"{context['adversarial_attack']}/"
-            else:
-                adv_folder=''
             feature_file = Path(
-                f"{context['dataset_name']}/{context['fe_name']}/features/{adv_folder}{context['file_name']}.csv"
+                f"{context['dataset_name']}/{context['fe_name']}/features/{context['file_name']}.csv"
             )
             feature_file.parent.mkdir(parents=True, exist_ok=True)
             meta_file = Path(
-                f"{context['dataset_name']}/{context['fe_name']}/metadata/{adv_folder}{context['file_name']}.csv"
+                f"{context['dataset_name']}/{context['fe_name']}/metadata/{context['file_name']}.csv"
             )
             meta_file.parent.mkdir(parents=True, exist_ok=True)
 
@@ -199,7 +195,6 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
 
         if peek:
             feature=self.peek(traffic_vector)
-            
         else:
             feature = self.update(traffic_vector)
             

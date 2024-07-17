@@ -186,8 +186,9 @@ class BaseOnlineODModel(PipelineComponent):
         return torch.from_numpy(X).float()
 
     def teardown(self):
-        suffix = "-".join([s for s in self.suffix if s is not None])
-        self.save_pickle(self.component_type, suffix)
+        if self.save:
+            suffix = "-".join([s for s in self.suffix if s is not None])
+            self.save_pickle(self.component_type, suffix)
 
 
 class ConceptDriftWrapper(PipelineComponent):

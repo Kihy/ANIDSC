@@ -20,7 +20,6 @@ METRICS=[
             "median_score",
             "median_threshold",
             "pos_count",
-            "pos_idx",
             "batch_size",
         ]
 
@@ -86,6 +85,32 @@ def get_pipeline(
         else:
             pipeline = protocol_splitter | collate_evaluator
 
+    elif pipeline_type=="graph":
+        # graph cdd model
+        if model_name =="KitNET":
+            model = getattr(models, model_name)(preprocessors=["to_numpy"])
+        else:
+            model = getattr(models, model_name)(preprocessors=[])
+            
+        node_encoder = getattr(models, node_encoder_type)(15, dist_type)
+        encoder_model = NodeEncoderWrapper(node_encoder, model)
+        standardizer = LivePercentile()
+        graph_rep = HomoGraphRepresentation(preprocessors=["to_float_tensor", "to_device"])
+
+        collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
+        protocol_splitter = MultilayerSplitter(
+            pipeline=(standardizer | graph_rep | encoder_model | evaluator)
+        )
+
+        if from_pcap:
+            feature_extractor = AfterImageGraph(["TCP", "UDP", "ARP", "ICMP"])
+            feature_buffer = FeatureBuffer(buffer_size=256)
+            pipeline = feature_extractor | feature_buffer | protocol_splitter | collate_evaluator
+            
+        else:
+            pipeline = protocol_splitter | collate_evaluator
+
+
     return pipeline
 
 
@@ -134,6 +159,31 @@ def load_pipeline(
             fe_name,
             benign_file,
             f"MultlayerSplitter(LivePercentile-HomoGraphRepresentation-ConceptDriftWrapper(NodeEncoderWrapper({node_encoder_type}({dist_type})-{model_name}))-BaseEvaluator)",
+        )
+
+        if from_pcap:
+            feature_buffer = FeatureBuffer(buffer_size=256)
+            feature_extractor = AfterImageGraph.load_pickle(
+                "feature_extractors", dataset_name, fe_name, benign_file, fe_name
+            )
+
+            pipeline = (
+                feature_extractor
+                | feature_buffer
+                | protocol_splitter
+                | collate_evaluator
+            )
+        else:
+            pipeline = protocol_splitter | collate_evaluator
+    elif pipeline_type=="graph":
+        
+        collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
+        protocol_splitter = MultilayerSplitter.load_pickle(
+            "models",
+            dataset_name,
+            fe_name,
+            benign_file,
+            f"MultlayerSplitter(LivePercentile-HomoGraphRepresentation-NodeEncoderWrapper({node_encoder_type}({dist_type})-{model_name})-BaseEvaluator)",
         )
 
         if from_pcap:
@@ -243,8 +293,10 @@ def uq_benign(
 
     if pipeline_type == "vanilla":
         fe_name = "AfterImage"
-    elif pipeline_type == "graph_cdd":
+    elif pipeline_type in ["graph_cdd","graph"]:
         fe_name = "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
+    else:
+        raise ValueError("unknown pipeline type")
 
     if from_pcap:
         # data sources
@@ -252,10 +304,12 @@ def uq_benign(
     else:
         if pipeline_type == "vanilla":
             offline_reader = CSVReader(dataset_name, "AfterImage", fe_name, file_name)
-        elif pipeline_type == "graph_cdd":
+        elif pipeline_type in ["graph_cdd","graph"]:
             offline_reader = CSVReader(
                 dataset_name, "AfterImageGraph", fe_name, file_name
             )
+        else:
+            raise ValueError("unknown pipeline type")
 
     offline_reader >> pipeline
     offline_reader.start()
@@ -500,13 +554,13 @@ if __name__ == "__main__":
     # uq_benign_boxplot()
     # uq_malicious_boxplot()
 
-    pipeline_type = "graph_cdd"
+    pipeline_type = "graph"
     node_encoder_type = "LinearNodeEncoder"
     dist_type = "gaussian"
     
     
     # feature extraction
-    uq_feature_extraction(pipeline_type=pipeline_type)
+    # uq_feature_extraction(pipeline_type=pipeline_type)
 
     # # evaluate models
     model_names = ["AE", "GOAD", "VAE", "ICL", "SLAD", "KitNET"] # 

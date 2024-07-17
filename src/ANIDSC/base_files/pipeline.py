@@ -12,11 +12,11 @@ class PipelineComponent(ABC, PickleSaveMixin):
             call_back (Callable[[Any], Any], optional): A callable function after process each batch of input. Defaults to None.
         """        
         self.call_back = call_back
-        # context = {}
         self.name = self.__class__.__name__
         self.component_type=component_type
         self.parent = None  # Reference to parent component
         self.loaded_from_file=False
+        self.save=True
 
     def get_context(self)->Dict[str, Any]:
         """finds the current component's context by recursively adding parent's context to self if it does not exist
@@ -38,12 +38,11 @@ class PipelineComponent(ABC, PickleSaveMixin):
     @abstractmethod
     def process(self, data):
         pass
-
  
     def teardown(self):
         """saves the pipeline
         """        
-        if self.component_type!="":
+        if self.save and self.component_type!="":
             context=self.get_context()
             self.save_pickle(self.component_type, suffix=context.get('protocol',''))
 
@@ -77,7 +76,12 @@ class Pipeline(PipelineComponent):
         for component in self.components:
             component.parent=self
             component.setup()
-            
+    
+    def set_save(self, save:bool):
+        for component in self.components:
+            component.save=save
+        
+    
     def process(self, data):
         """sequentially process data over each component
 

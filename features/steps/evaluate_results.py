@@ -1,11 +1,11 @@
 from behave import given, when, then
 
-from ANIDSC.evaluations.summarizer import AfterImageSummarizer
+from ANIDSC.evaluations.summarizer import BasicSummarizer
 
 @given('a Summarizer initialized with dataset "{dataset}" and files')
 def step_given_summarizer(context, dataset):
     files = [row['file'] for row in context.table]
-    summarizer=AfterImageSummarizer([dataset],files, calc_f1=True)
+    summarizer=BasicSummarizer([dataset],files, calc_f1=True)
     context.summarizer=summarizer 
 
 @when('we plot the results')

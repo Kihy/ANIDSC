@@ -61,8 +61,6 @@ class CollateEvaluator(PipelineComponent):
         Args:
             results (Dict[str, Dict[str, Any]]): layer: results pairs for each layer
         """        
-        # all results
-        pos_idx=[]
         
         #layerwise results
         for protocol, result_dict in results.items():
@@ -86,39 +84,12 @@ class CollateEvaluator(PipelineComponent):
             if self.save_results:
                 result_dict["protocol"]=protocol
                 
-                # remove pos_idx
-                pos_idx.append(result_dict["pos_idx"])
-                del result_dict['pos_idx']
-                
                 if self.write_output_header:
                     self.output_file.write(",".join(result_dict.keys()) + "\n")
                     self.write_output_header=False
                 self.output_file.write(
                     ",".join(list(map(str, result_dict.values()))) + "\n"
-                )
-                
-        unique_values = np.unique(np.hstack(pos_idx))
-        pos_counts=len(unique_values)
-        detection_rate=pos_counts/result_dict["batch_size"]
-        
-        # modify result dict 
-        result_dict["protocol"]="Overall"
-        result_dict["detection_rate"]=detection_rate
-        result_dict["pos_count"]=pos_counts 
-        
-        # List of keys to calculate the average for
-        keys_to_average = ['time', 'model_idx', 'num_model', 'median_score', 'pos_count', 'batch_size']
-
-        # Calculate the averages
-        for key in keys_to_average:
-            result_dict[key]= sum(d[key] for d in results.values()) / len(results) 
-        
-        self.output_file.write(
-                    ",".join(list(map(str, result_dict.values()))) + "\n"
-                )
-
-        
-        
+                )     
         
 class BaseEvaluator(PipelineComponent): 
     def __init__(self, metric_list:List[str], log_to_tensorboard:bool=True, save_results:bool=True, draw_graph_rep_interval:bool=False):
@@ -141,6 +112,7 @@ class BaseEvaluator(PipelineComponent):
         super().setup()
         context=self.get_context()
         self.parent.context["metric_list"]=self.metric_list
+        
         if self.save_results:
             # file to store outputs
             scores_and_thresholds_path = Path(
@@ -149,14 +121,12 @@ class BaseEvaluator(PipelineComponent):
             scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
             self.output_file = open(str(scores_and_thresholds_path), "w")
             
-    
         if self.log_to_tensorboard:
             log_dir=f"{context['dataset_name']}/{context['fe_name']}/runs/{context['file_name']}/{context['pipeline_name']}"
             self.writer = SummaryWriter(
                 log_dir=log_dir
                 )
             print("tensorboard logging to", log_dir)
-            
             
             # custom layout for score and threshold in each layer
             layout = {
@@ -167,8 +137,6 @@ class BaseEvaluator(PipelineComponent):
 
             self.writer.add_custom_scalars(layout)
             
-            
-
         self.prev_timestamp = time.time()
         
     def teardown(self):
@@ -200,9 +168,8 @@ class BaseEvaluator(PipelineComponent):
         values=[]
         for metric_name, metric in zip(self.metric_list, self.metrics):
             result_dict[metric_name]=metric(results)
-            if isinstance(result_dict[metric_name], (int, float)):
+            if isinstance(result_dict[metric_name], (int, float, np.generic)):
                 if self.log_to_tensorboard:
-                
                     self.writer.add_scalar(
                                     metric_name,
                                     result_dict[metric_name],

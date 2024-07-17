@@ -19,8 +19,6 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
         super().__init__(**kwargs)
         self.decay_factors = decay_factors
         self.clean_up_round=5000
-        
-        
             
     def init_state(self):
         """sets up IncStatDB"""
@@ -40,73 +38,67 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
         Returns:
             2d array: the corresponding features
         """
+        if isinstance(traffic_vectors, dict):
+            traffic_vectors=[traffic_vectors]
+        
         fake_db = IncStatDB(self.decay_factors)
-        for (
-            IPtype,
-            srcMAC,
-            dstMAC,
-            srcIP,
-            srcProtocol,
-            dstIP,
-            dstProtocol,
-            timestamp,
-            datagramSize,
-        ) in traffic_vectors:
-
-            fake_db.stat1d[f"{srcMAC}_{srcIP}"] = copy.deepcopy(
-                self.inc_stat_db.stat1d.get(f"{srcMAC}_{srcIP}")
-            )  # srcMAC-IP
-            fake_db.stat1d[f"{srcIP}_{dstIP}"] = copy.deepcopy(
-                self.inc_stat_db.stat1d.get(f"{srcIP}_{dstIP}")
-            )  # jitter
+        for traffic_vector in traffic_vectors:
+            
+            # srcMAC-IP
+            fake_db.stat1d[f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}"] = copy.deepcopy(
+                self.state.stat1d.get(f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}")
+            )  
+            
+            # jitter
+            fake_db.stat1d[f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}"] = copy.deepcopy(
+                self.state.stat1d.get(f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}")
+            )  
 
             # channel
-            fake_db.stat1d[f"{srcIP}"] = copy.deepcopy(
-                self.inc_stat_db.stat1d.get(f"{srcIP}")
+            fake_db.stat1d[f"{traffic_vector['srcIP']}"] = copy.deepcopy(
+                self.state.stat1d.get(f"{traffic_vector['srcIP']}")
             )
-            fake_db.stat1d[f"{dstIP}"] = copy.deepcopy(
-                self.inc_stat_db.stat1d.get(f"{dstIP}")
+            fake_db.stat1d[f"{traffic_vector['dstIP']}"] = copy.deepcopy(
+                self.state.stat1d.get(f"{traffic_vector['dstIP']}")
             )
-            fake_db.stat2d[(f"{dstIP}", f"{srcIP}")] = copy.deepcopy(
-                self.inc_stat_db.stat2d.get((f"{dstIP}", f"{srcIP}"))
+            fake_db.stat2d[f"{traffic_vector['srcIP']}->{traffic_vector['dstIP']}"] = copy.deepcopy(
+                self.state.stat2d.get(f"{traffic_vector['srcIP']}->{traffic_vector['dstIP']}")
             )
 
             # socket
-            if srcProtocol == "arp":
-                fake_db.stat1d[f"{srcMAC}"] = copy.deepcopy(
-                    self.inc_stat_db.stat1d.get(f"{srcMAC}")
+            if traffic_vector['srcport'] =="ARP":
+                fake_db.stat1d[f"{traffic_vector['srcMAC']}"] = copy.deepcopy(
+                    self.state.stat1d.get(f"{traffic_vector['srcMAC']}")
                 )
-                fake_db.stat1d[f"{dstMAC}"] = copy.deepcopy(
-                    self.inc_stat_db.stat1d.get(f"{dstMAC}")
+                fake_db.stat1d[f"{traffic_vector['dstMAC']}"] = copy.deepcopy(
+                    self.state.stat1d.get(f"{traffic_vector['dstMAC']}")
                 )
-                fake_db.stat2d[(f"{srcMAC}", f"{dstMAC}")] = copy.deepcopy(
-                    self.inc_stat_db.stat2d.get((f"{dstMAC}", f"{srcMAC}"))
+                fake_db.stat2d[f"{traffic_vector['srcMAC']}->{traffic_vector['dstMAC']}"] = copy.deepcopy(
+                    self.state.stat2d.get(f"{traffic_vector['srcMAC']}->{traffic_vector['dstMAC']}")
                 )
             else:
-                fake_db.stat1d[f"{srcIP}_{srcProtocol}"] = copy.deepcopy(
-                    self.inc_stat_db.stat1d.get(f"{srcIP}_{srcProtocol}")
+                fake_db.stat1d[f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}"] = copy.deepcopy(
+                    self.state.stat1d.get(f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}")
                 )
-                fake_db.stat1d[f"{dstIP}_{dstProtocol}"] = copy.deepcopy(
-                    self.inc_stat_db.stat1d.get(f"{dstIP}_{dstProtocol}")
+                fake_db.stat1d[f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}"] = copy.deepcopy(
+                    self.state.stat1d.get(f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}")
                 )
-                fake_db.stat2d[
-                    (f"{srcIP}_{srcProtocol}", f"{dstIP}_{dstProtocol}")
-                ] = copy.deepcopy(
-                    self.inc_stat_db.stat2d.get(
-                        (f"{srcIP}_{srcProtocol}", f"{dstIP}_{dstProtocol}")
-                    )
+                fake_db.stat2d[f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}->{traffic_vector['dstIP']}_{traffic_vector['dstport']}"] = copy.deepcopy(
+                    self.state.stat2d.get(f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}->{traffic_vector['dstIP']}_{traffic_vector['dstport']}")
                 )
 
-        fake_db.num_updated = self.inc_stat_db.num_updated
-        fake_db.num_entries = self.inc_stat_db.num_entries
+        fake_db.num_updated = self.state.num_updated
+        fake_db.num_entries = self.state.num_entries
+        fake_db.last_timestamp=self.state.last_timestamp
+        fake_db.mac_to_idx_map=self.state.mac_to_idx_map
         
         vectors = []
         for tv in traffic_vectors:
-            vectors.append(self.state.update_get_stats(*tv, fake_db))
-        return vectors
+            vectors.append(self.update(tv, fake_db))
+        return np.vstack(vectors)
 
 
-    def update(self, traffic_vector:Dict[str, Any]):
+    def update(self, traffic_vector:Dict[str, Any], state=None):
         """updates the internal state with traffic vector
 
         Args:
@@ -116,17 +108,20 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
         Returns:
             array: the extracted features
         """
-        src_mac_ip = self.state.update_get_stats_1D(
+        if state is None:
+            state=self.state
+        
+        src_mac_ip = state.update_get_stats_1D(
             f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}", traffic_vector['timestamp'], traffic_vector["packet_size"]
         )  
         
          # jitter between channels
-        jitter = self.state.update_get_stats_1D(
+        jitter = state.update_get_stats_1D(
             f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}", traffic_vector['timestamp'], None
         )  
         
         # channel: sent between this packet’s source and destination IPs
-        channel = self.state.update_get_stats_2D(
+        channel = state.update_get_stats_2D(
             f"{traffic_vector['srcIP']}",f"{traffic_vector['dstIP']}", traffic_vector['timestamp'], traffic_vector["packet_size"]
         )  
         
@@ -134,26 +129,26 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
         # Socket: sent between this packet’s source and destination TCP/UDP Socket
         # arp has no IP
         if traffic_vector['srcport'] =="ARP":
-            socket = self.state.update_get_stats_2D(
+            socket = state.update_get_stats_2D(
                 f"{traffic_vector['srcMAC']}", f"{traffic_vector['dstMAC']}", traffic_vector['timestamp'],
                 traffic_vector["packet_size"]
             )
         else:
-            socket = self.state.update_get_stats_2D(
+            socket = state.update_get_stats_2D(
                 f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}",
                 f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}",
                 traffic_vector['timestamp'], traffic_vector["packet_size"]
             )
         
-        self.state.num_updated+=1 
+        state.num_updated+=1 
         
-        self.state.last_timestamp=traffic_vector["timestamp"]
+        state.last_timestamp=traffic_vector["timestamp"]
         
         feature=np.hstack([src_mac_ip, jitter, channel, socket])
         
         # clean our records
-        if self.state.num_updated % self.clean_up_round == 0:
-            self.state.clean_records(traffic_vector['timestamp'])
+        if state.num_updated % self.clean_up_round == 0:
+            state.clean_records(traffic_vector['timestamp'])
 
         return np.expand_dims(feature, axis=0)
 
@@ -465,7 +460,7 @@ def magnitude(x:float, y:float):
 
 
 class IncStat1D:
-    def __init__(self, len_factors: int, t:float, v:int=None):  # timestamp is creation time
+    def __init__(self, len_factors: int):  # timestamp is creation time
         """
         Incremental Statistics for 1 dimensional features
         keeps an array of size 3*decay_factors.
@@ -479,35 +474,16 @@ class IncStat1D:
             t (float): timestamp of this incstat
             v (float, optional): value of this incstat. pass None to use jitter. Defaults to None.
         """
-        self.last_timestamp = t
-        if v is None:
-            v = t - self.last_timestamp
-        self.incremental_statistics = np.tile(
-            np.expand_dims([1.0, v, v**2], axis=1), [1, len_factors]
-        )  # each row corresponds to weight, linear sum, sum of squares
         self.weight_thresh = 1e-3
+        self.last_timestamp=None
+        self.incremental_statistics=None
+        self.len_factors=len_factors
 
-    # def to_dict(self):
-    #     return {
-    #         'last_timestamp': self.last_timestamp,
-    #         'incremental_statistics': self.incremental_statistics.tolist(),  # Convert numpy array to list
-    #         'weight_thresh': self.weight_thresh
-    #     }
-    
-    # @classmethod
-    # def from_dict(cls, dict_obj):
-    #     obj = cls.__new__(cls)  # Create a new instance without calling __init__
-    #     obj.last_timestamp = dict_obj['last_timestamp']
-    #     obj.incremental_statistics = np.array(dict_obj['incremental_statistics'])  # Convert list back to numpy array
-    #     obj.weight_thresh = dict_obj['weight_thresh']
-    #     return obj
     
     def __repr__(self):
         return pformat(vars(self))
     
-    
-
-    def insert(self, decay_factors, t:float, v:int =None):
+    def insert(self, decay_factors, t:float, v =None):
         """updates the incstat with value.
         decays the statistics and increments it.
 
@@ -516,17 +492,29 @@ class IncStat1D:
             v (float, optional): value of new information. use None to measure
             jitter. Defaults to None.
         """
-        # special case for jitter
+        
         if v is None:
-            v = t - self.last_timestamp
+            if self.last_timestamp is None:
+                v=0
+            else:
+                v = t - self.last_timestamp
+        
+        if self.incremental_statistics is None:
+            
+            self.incremental_statistics = np.tile(
+                np.expand_dims([1.0, v, v**2], axis=1), [1, self.len_factors]
+            )  # each row corresponds to weight, linear sum, sum of squares
+        
+        else:    
+            self.decay(decay_factors, t)
 
-        self.decay(decay_factors, t)
-
-        # update with v
-        self.incremental_statistics += np.expand_dims(
-            [1.0, v, v**2], axis=1
-        )  # broadcast to [3,1]
+            # update with v
+            self.incremental_statistics += np.expand_dims(
+                [1.0, v, v**2], axis=1
+            )  # broadcast to [3,1]
+        
         self.last_timestamp = t
+            
 
     def decay(self, decay_factors:NDArray[np.float_], t:float):
         """decays the incremental statistics according to t
@@ -611,7 +599,7 @@ class IncStat1D:
 
     
 class IncStat2D:
-    def __init__(self, len_factor:int, t:float):
+    def __init__(self, len_factor:int):
         """2 dimensional IncStat, stores the relationship between two
         1d inc stat. keeps track of the sum of residual products (A-uA)(B-uB)
 
@@ -623,23 +611,7 @@ class IncStat2D:
         # store references to the streams' incStats
         self.sum_of_residual = np.zeros(len_factor)
         self.eps = 2e-3
-        self.last_timestamp = t
-        
-    # def to_dict(self):
-    #     return {
-    #         'sum_of_residual': self.sum_of_residual.tolist(),  # Convert numpy array to list
-    #         'eps': self.eps,
-    #         'last_timestamp': self.last_timestamp
-    #     }
-
-    # @classmethod
-    # def from_dict(cls, dict_obj):
-    #     len_factor = len(dict_obj['sum_of_residual'])
-    #     t = dict_obj['last_timestamp']
-    #     obj = cls(len_factor, t)  # Call the constructor with len_factor and t
-    #     obj.sum_of_residual = np.array(dict_obj['sum_of_residual'])  # Convert list back to numpy array
-    #     obj.eps = dict_obj['eps']
-    #     return obj
+        self.last_timestamp = None
 
     def update_cov(self, inc_stats1, inc_stats2, decay_factors, t:float, v:int):
         """updates the covariance of the two streams.
@@ -649,14 +621,18 @@ class IncStat2D:
             t (float): current time
             v (float): the value to be updated
         """
-        # Decay residules
-        self.decay(decay_factors, t)
+        
+        if self.last_timestamp is None:
+            self.last_timestamp=t 
+        else:
+            # Decay residules
+            self.decay(decay_factors, t)
 
-        # Compute and update residule
-        self.sum_of_residual += (v - inc_stats1.mean()) * (
-            v - inc_stats2.mean()
-        )
-        self.last_timestamp = t
+            # Compute and update residule
+            self.sum_of_residual += (v - inc_stats1.mean()) * (
+                v - inc_stats2.mean()
+            )
+            self.last_timestamp = t
 
     def decay(self,decay_factors:NDArray[np.float_], t:float):
         """decays the residual product. ignores if time diff is negative
@@ -736,31 +712,24 @@ class IncStatDB:
     
     def __repr__(self):
         return pformat(vars(self))
-    # def to_dict(self):
-    #     return {
-    #         'stat1d': {k: v.to_dict() for k, v in self.stat1d.items()},
-    #         'stat2d': {k: v.to_dict() for k, v in self.stat2d.items()},
-    #         'limit': self.limit,
-    #         'num_entries': self.num_entries,
-    #         'decay_factors': self.decay_factors.tolist(),  # Convert numpy array to list
-    #         'num_updated': self.num_updated,
-    #         'last_timestamp': self.last_timestamp,
-    #         'mac_to_idx_map': self.mac_to_idx_map
-    #     }
-        
-    # @classmethod
-    # def from_dict(cls, dict_obj):
-    #     decay_factors = dict_obj['decay_factors']
-    #     last_timestamp = dict_obj['last_timestamp']
-    #     limit = dict_obj['limit']
-    #     mac_to_idx_map = dict_obj['mac_to_idx_map']
-    #     obj = cls(decay_factors, last_timestamp, limit, mac_to_idx_map)  # Call the constructor with the dictionary values
-    #     obj.stat1d = {k: IncStat1D.from_dict(v) for k, v in dict_obj['stat1d'].items()}
-    #     obj.stat2d = {k: IncStat2D.from_dict(v) for k, v in dict_obj['stat2d'].items()}
-    #     obj.num_entries = dict_obj['num_entries']
-    #     obj.num_updated = dict_obj['num_updated']
-    #     return obj
+    
+    def get_stats_1D(self, ID:str):
+        if ID not in self.stat1d or self.stat1d[ID] is None:
+            if self.num_entries + 1 > self.limit:
+                raise LookupError(
+                    "Adding Entry:\n"
+                    + ID
+                    + "\nwould exceed incStat 1D limit of "
+                    + str(self.limit)
+                    + ".\nObservation Rejected."
+                )
 
+            self.stat1d[ID] = IncStat1D(len(self.decay_factors))
+
+            self.num_entries += 1
+        
+        return self.stat1d[ID]
+            
     def update_get_stats_1D(self, ID:str, t:float, v:int):
         """Updates 1d incstat with ID given time and value.
         if ID does not exist, create it.
@@ -778,23 +747,20 @@ class IncStatDB:
             array: array of 1d stats
         """
         # not in our db
-        if ID not in self.stat1d or self.stat1d[ID] is None:
-            if self.num_entries + 1 > self.limit:
-                raise LookupError(
-                    "Adding Entry:\n"
-                    + ID
-                    + "\nwould exceed incStat 1D limit of "
-                    + str(self.limit)
-                    + ".\nObservation Rejected."
-                )
+        stat1d=self.get_stats_1D(ID)
+        stat1d.insert(self.decay_factors, t, v)
 
-            self.stat1d[ID] = IncStat1D(len(self.decay_factors), t, v)
-
-            self.num_entries += 1
-        else:
-            self.stat1d[ID].insert(self.decay_factors,t, v)
-
-        return self.stat1d[ID].all_stats_1D()
+        return stat1d.all_stats_1D()
+    
+    def get_stats_2D(self, ID1:str, ID2:str ):
+        # check for pre-exiting link
+        if (
+            f"{ID1}->{ID2}" not in self.stat2d
+            or self.stat2d[f"{ID1}->{ID2}"] is None
+        ):
+            # Link incStats
+            self.stat2d[f"{ID1}->{ID2}"] = IncStat2D(len(self.decay_factors))
+        return self.stat2d[f"{ID1}->{ID2}"]
     
     def update_get_stats_2D(self, ID1:str, ID2:str, t:float, v:int, return_1d=True):
         """updates incstat of ID1 with t, v and ID2 with t, -v.
@@ -819,20 +785,14 @@ class IncStatDB:
             self.update_get_stats_1D(ID2, t, -v)
 
         # check for pre-exiting link
-        if (
-            f"{ID1}->{ID2}" not in self.stat2d
-            or self.stat2d[f"{ID1}->{ID2}"] is None
-        ):
-            # Link incStats
-            self.stat2d[f"{ID1}->{ID2}"] = IncStat2D(len(self.decay_factors), t)
-
-        self.stat2d[f"{ID1}->{ID2}"].update_cov(self.stat1d[ID1], self.stat1d[ID2], self.decay_factors,t, v)
-        stats2d = self.stat2d[f"{ID1}->{ID2}"].all_stats_2D(self.stat1d[ID1], self.stat1d[ID2])
+        stat2d=self.get_stats_2D(ID1, ID2)
+        stat2d.update_cov(self.stat1d[ID1], self.stat1d[ID2], self.decay_factors, t, v)
+        feature2d=stat2d.all_stats_2D(self.stat1d[ID1], self.stat1d[ID2])
 
         if return_1d:
-            return np.hstack([stats1d, stats2d])
+            return np.hstack([stats1d, feature2d])
         else:
-            return stats2d
+            return feature2d
         
     def clean_records(self, t:float):
         """cleans out records that have small weight

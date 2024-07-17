@@ -132,6 +132,27 @@ class BasicSummarizer:
                 self.plot_scores(df, dataset, file, filename)
                 self.plot_dr(df, dataset, file, filename)
 
+    def calc_stats(self, group):
+        pos_benign = group[group["file"].str.startswith("benign")][
+                        "pos_count"
+                    ].sum()
+        total_benign = group[group["file"].str.startswith("benign")][
+            "batch_size"
+        ].sum()
+
+        pos_malicious = group[group["file"].str.startswith("malicious")][
+            "pos_count"
+        ].sum()
+        total_malicious = group[group["file"].str.startswith("malicious")][
+            "batch_size"
+        ].sum()
+
+        
+        mean_mal=np.mean(group[group["file"].str.startswith("malicious")]['acc'])
+        mean_ben=np.mean(group[group["file"].str.startswith("benign")]['acc'])
+        return pos_benign, total_benign, pos_malicious, total_malicious, mean_mal, mean_ben
+                    
+
     def gen_summary(self):
         for dataset in self.datasets:
             dataframes = []
@@ -167,52 +188,47 @@ class BasicSummarizer:
 
             if self.calc_f1:
                 data = defaultdict(list)
-                if self.col is not None:
-                    by=["pipeline", self.col]
-                else:
-                    by="pipeline"
+                
+                for pipeline, group in all_df.groupby("pipeline"):
+                    pos_benign, total_benign, pos_malicious, total_malicious, mean_mal, mean_ben=self.calc_stats(group)
+                    f1 = f_beta(pos_malicious, total_malicious-pos_malicious, pos_benign, beta=1)
                     
-                for label, group in all_df.groupby(by):
-                    if self.col is not None:
-                        pipeline, col=label
-                        data['protocol'].append(col)
-                     
-                    else:
-                        pipeline=label
-                    
-                    pos_benign = group[group["file"].str.startswith("benign")][
-                        "pos_count"
-                    ].sum()
-                    total_benign = group[group["file"].str.startswith("benign")][
-                        "batch_size"
-                    ].sum()
-
-                    pos_malicious = group[group["file"].str.startswith("malicious")][
-                        "pos_count"
-                    ].sum()
-                    total_malicious = group[group["file"].str.startswith("malicious")][
-                        "batch_size"
-                    ].sum()
-
+                    data["protocol"].append("All")
                     data['pos_mal'].append(pos_malicious)
                     data['total_mal'].append(total_malicious)
                     data['pos_ben'].append(pos_benign)
                     data["total_ben"].append(total_benign)
                     
-                    f1 = f_beta(pos_malicious, total_malicious-pos_malicious, pos_benign, beta=1)
-
                     data['pipelines'].append(pipeline)
-                    
                     data['f1_scores'].append(f1)
                     
-                    mean_mal=np.mean(group[group["file"].str.startswith("malicious")]['acc'])
-                    mean_ben=np.mean(group[group["file"].str.startswith("benign")]['acc'])
                     data['mean_mal'].append(mean_mal)
                     data['mean_ben'].append(mean_ben)
                     data['hmean_1_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=1))
                     data['hmean_0.5_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=0.5))
                     data['hmean_2_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=2))
-                    
+                
+                if self.col is not None:
+                    for (pipeline, col), group in all_df.groupby(["pipeline",self.col]):
+                        pos_benign, total_benign, pos_malicious, total_malicious, mean_mal, mean_ben=self.calc_stats(group)
+                        f1 = f_beta(pos_malicious, total_malicious-pos_malicious, pos_benign, beta=1)
+                        
+                        data["protocol"].append(col)
+                        data['pos_mal'].append(pos_malicious)
+                        data['total_mal'].append(total_malicious)
+                        data['pos_ben'].append(pos_benign)
+                        data["total_ben"].append(total_benign)
+                        
+                        data['pipelines'].append(pipeline)
+                        data['f1_scores'].append(f1)
+                        
+                        data['mean_mal'].append(mean_mal)
+                        data['mean_ben'].append(mean_ben)
+                        data['hmean_1_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=1))
+                        data['hmean_0.5_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=0.5))
+                        data['hmean_2_acc'].append(weighted_hmean(mean_ben, mean_mal, beta=2))
+                
+                
                 summary_df= pd.DataFrame(data)
 
                 g = sns.catplot(kind="bar", data=summary_df, x="pipelines", y="hmean_2_acc", col=self.col)

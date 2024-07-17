@@ -3,21 +3,28 @@ from ANIDSC import models
 from ANIDSC.base_files.evaluator import BaseEvaluator
 from ANIDSC.base_files.feature_extractor import FeatureBuffer
 
-from ANIDSC.base_files.model import ConceptDriftWrapper
-from ANIDSC.base_files.save_mixin import TorchSaveMixin
+
 from ANIDSC.data_source.offline_sources import CSVReader, PacketReader
 from ANIDSC.feature_extractors import AfterImage, FrequencyExtractor
-from ANIDSC.models.autoencoder import AE
+
 from ANIDSC.normalizer.t_digest import LivePercentile
 from shutil import rmtree
 import os
 import glob
-import pickle
 
+
+METRICS=[
+            "detection_rate",
+            "median_score",
+            "median_threshold",
+            "pos_count",
+            "batch_size",
+        ]
 
 @given('a PacketReader initialized with dataset "{dataset}" and {file}')
 def step_given_packet_reader(context, dataset, file):
-    context.data_source = PacketReader(dataset, file)
+    # limit to 5e5 so it doesnt take too long
+    context.data_source = PacketReader(dataset, file, max_pkts=5e5)
     context.dataset = dataset
     context.file = file
 
@@ -43,7 +50,7 @@ def step_given_basic_boxplot_model(context):
     model = getattr(models, "BoxPlot")()
 
     evaluator = BaseEvaluator(
-        ["detection_rate", "median_score", "median_threshold"],
+        METRICS,
         log_to_tensorboard=True,
         save_results=True,
         draw_graph_rep_interval=0,
@@ -89,7 +96,7 @@ def step_given_basic_NIDS_model_with_AE(context, model_name):
     standardizer = LivePercentile()
 
     evaluator = BaseEvaluator(
-        ["detection_rate", "median_score", "median_threshold","pos_count","batch_size"],
+        METRICS,
         log_to_tensorboard=True,
         save_results=True,
         draw_graph_rep_interval=10,
