@@ -40,7 +40,7 @@ if __name__ == "__main__":
     # dataset="../datasets/Test_Data"
     
     # summarizer=BasicSummarizer([dataset],"AfterImage", get_file_names(dataset), calc_f1=True)
-    # summarizer.plots()
+    # # summarizer.plots()
     # summarizer.gen_summary()
 
     

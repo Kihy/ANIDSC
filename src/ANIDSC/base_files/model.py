@@ -90,6 +90,10 @@ class BaseOnlineODModel(PipelineComponent):
         if preprocess:
             X = self.preprocess(X)
         _, loss = self.forward(X, inference=True)
+        
+        if loss is None:
+            return None, None
+        
         self.num_evaluated += 1
         return loss.detach().cpu().numpy(), self.get_threshold()
 
@@ -97,10 +101,13 @@ class BaseOnlineODModel(PipelineComponent):
         if preprocess:
             X = self.preprocess(X)
         _, loss = self.forward(X, inference=False)
-        loss = loss.mean()
-        if self.profile:
-            self.prof.step()
+        if loss is not None:
+            loss = loss.mean()
+            if self.profile:
+                self.prof.step()
         return loss
+    
+    
 
     def train_step(self, X, preprocess: bool = False) -> NDArray:
         """train the model on batch X
@@ -112,17 +119,28 @@ class BaseOnlineODModel(PipelineComponent):
         Returns:
             _type_: _description_
         """
+        
         if preprocess:
             X = self.preprocess(X)
         self.optimizer.zero_grad()
         _, loss = self.forward(X, inference=False)
-        loss = loss.mean()
-        loss.backward()
-        self.optimizer.step()
-        self.num_trained += 1
+        
+        if loss is not None:
+            loss = loss.mean()
+            loss.backward()
+            self.optimizer.step()
+            self.num_trained += 1
 
-        if self.profile:
-            self.prof.step()
+            if self.profile:
+                self.prof.step()
+        else:
+            loss=0.
+            
+        # update scaler
+        context=self.get_context()
+        if "scaler" in context.keys():
+            context["scaler"].update_current()
+        
         return loss.detach().cpu().item()
 
     @abstractmethod

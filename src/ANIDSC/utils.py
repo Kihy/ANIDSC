@@ -81,7 +81,7 @@ def fig_to_array(fig):
     data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
     return data.transpose(2, 0, 1)  # Convert to [C, H, W] format
 
-def draw_graph(G, threshold, node_as, fig, ax, relative_as, title, mac_to_device_map, idx_to_mac_map):
+def draw_graph(G, fig, ax, threshold, node_as, relative_as, title, mac_to_device_map, idx_to_mac_map):
     # convert attributes
     for node, attrs in G.nodes(data=True):
         for attr in attrs:
@@ -89,13 +89,14 @@ def draw_graph(G, threshold, node_as, fig, ax, relative_as, title, mac_to_device
                 G.nodes[node][attr] = eval(G.nodes[node][attr])
 
     # pos = nx.spiral_layout(G, resolution=0.8, equidistant=True)
+    
     pos=nx.circular_layout(G)
     
     ax.margins(x=0.2, y=0.2)
     ax.set_title(title)
 
     if relative_as:
-        node_as-=threshold 
+        node_as-=threshold
 
         node_sm = ScalarMappable(
             norm=TwoSlopeNorm(
@@ -106,7 +107,7 @@ def draw_graph(G, threshold, node_as, fig, ax, relative_as, title, mac_to_device
     else:
 
         node_sm = ScalarMappable(
-            norm=Normalize(vmin=0, vmax=np.max(node_as)),
+            norm=Normalize(vmin=min(0,np.min(node_as)), vmax=np.max(node_as)),
             cmap=plt.cm.Blues,
         )
 

@@ -17,9 +17,11 @@ class LivePercentile(BaseOnlineNormalizer):
         self.count = 0
         self.dims=[]
         
+        self.current_X=None
+        
     def setup(self):
         super().setup()
-        
+        self.parent.context["scaler"]=self
         if not self.loaded_from_file:
             self.dims=[TDigest() for _ in range(self.ndim-self.skip)]
     
@@ -49,10 +51,13 @@ class LivePercentile(BaseOnlineNormalizer):
             scaled_features, nan=0.0, posinf=0.0, neginf=0.0
         )
 
-        self.add(scale)
+        self.current_X=scale 
 
         return np.hstack((no_scale, scaled_features))
 
+    def update_current(self):
+        self.add(self.current_X)
+    
     def reset(self):
         self.dims = [TDigest() for _ in range(self.ndim-self.skip)]
         self.count = 0

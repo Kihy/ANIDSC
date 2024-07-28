@@ -1,5 +1,6 @@
 from typing import Any, Dict, List
-
+from networkx.drawing.nx_pydot import write_dot
+import networkx as nx
 import numpy as np
 from .pipeline import PipelineComponent
 from .. import evaluations 
@@ -33,6 +34,11 @@ class CollateEvaluator(PipelineComponent):
             self.output_file = open(str(layerwise_path), "w")
             self.write_output_header=True 
             
+            
+            # folder to dot folder
+            self.dot_folder=Path(f"{context['dataset_name']}/{context['fe_name']}/dot/{context['file_name']}/{context['pipeline_name']}")
+            self.dot_folder.mkdir(parents=True, exist_ok=True)
+            print(f"dot folder {str(self.dot_folder)}")
             
             
         if self.log_to_tensorboard:
@@ -68,25 +74,35 @@ class CollateEvaluator(PipelineComponent):
                 continue
             
             if self.log_to_tensorboard:
-                for name, value in result_dict.items():
+                for name, value in list(result_dict.items()):
                     if name=="batch_num":
                         continue 
+                    
                     elif name=="graph_rep":
                         self.writer.add_image(
                            protocol, value, global_step=result_dict['batch_num'])
-                    elif isinstance(value, (int, float)):       
+                        del result_dict["graph_rep"]    
+                    elif isinstance(value, (int, float, np.generic)):       
                         self.writer.add_scalar(
                                         f"{name}/{protocol}",
                                         value,
                                         result_dict['batch_num'],
                                     )
+                
                     
             if self.save_results:
+                if "G" in result_dict.keys():
+                    write_dot(result_dict["G"], f"{str(self.dot_folder)}/{protocol}_{result_dict['batch_num']}.dot")
+                    del result_dict["G"]
+                    
+                    
                 result_dict["protocol"]=protocol
                 
                 if self.write_output_header:
                     self.output_file.write(",".join(result_dict.keys()) + "\n")
                     self.write_output_header=False
+                    
+                
                 self.output_file.write(
                     ",".join(list(map(str, result_dict.values()))) + "\n"
                 )     
@@ -121,6 +137,11 @@ class BaseEvaluator(PipelineComponent):
             scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
             self.output_file = open(str(scores_and_thresholds_path), "w")
             
+            # folder to dot folder
+            self.dot_folder=Path(f"{context['dataset_name']}/{context['fe_name']}/dot/{context['file_name']}/{context['pipeline_name']}")
+            self.dot_folder.mkdir(parents=True, exist_ok=True)
+            print(f"dot folder {str(self.dot_folder)}")
+            
         if self.log_to_tensorboard:
             log_dir=f"{context['dataset_name']}/{context['fe_name']}/runs/{context['file_name']}/{context['pipeline_name']}"
             self.writer = SummaryWriter(
@@ -136,7 +157,9 @@ class BaseEvaluator(PipelineComponent):
             }
 
             self.writer.add_custom_scalars(layout)
-            
+        
+        
+        
         self.prev_timestamp = time.time()
         
     def teardown(self):
@@ -155,17 +178,18 @@ class BaseEvaluator(PipelineComponent):
             Dict[str, Any]: dictionary of metric, value pair
         """        
         # records time
+        context=self.get_context()
         current_time=time.time()
-        duration=current_time -self.prev_timestamp
-        self.prev_timestamp=current_time
+        duration=current_time - context["start_time"]
+        
         
         result_dict={"time":duration}
-        if self.get_context().get('concept_drift_detection',False):
+        if context.get('concept_drift_detection',False):
             result_dict['model_idx']= results['model_idx']
             result_dict['num_model']=results['num_model']
         
-        header=[]
-        values=[]
+        header=["time"]
+        values=[str(duration)]
         for metric_name, metric in zip(self.metric_list, self.metrics):
             result_dict[metric_name]=metric(results)
             if isinstance(result_dict[metric_name], (int, float, np.generic)):
@@ -191,12 +215,20 @@ class BaseEvaluator(PipelineComponent):
         context=self.get_context()
         if context.get('G',False) and self.draw_graph_rep_interval and results['batch_num']%self.draw_graph_rep_interval==0:
             G=context['G']
+            nx.set_node_attributes(G, { n: {"score": score} for n, score in zip(G.nodes(), results["score"]) })
+            G.graph["graph"]={'threshold':results["threshold"],
+                              'protocol':context['protocol']}
+            
+            if self.save_results:
+                # save graph as dot file 
+                write_dot(G, f"{str(self.dot_folder)}/{context['protocol']}_{results['batch_num']}.dot")
+            
             fig, ax = plt.subplots()
-
+            
             idx_to_max_map={value: key for key, value in context['mac_to_idx_map'].items()}
             # draw graph
             draw_graph(
-                G,  results['threshold'],results['score'], fig, ax, False, context["protocol"], {}, idx_to_max_map
+                G, fig, ax, results["threshold"], results["score"], False, context["protocol"], {}, idx_to_max_map
             )
 
             image = fig_to_array(fig)
@@ -209,6 +241,7 @@ class BaseEvaluator(PipelineComponent):
             else:
                 result_dict["graph_rep"]=image
             
+            result_dict["G"]=G
         
         result_dict['batch_num']=results['batch_num']
         return result_dict

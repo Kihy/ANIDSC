@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import time
 from typing import Callable, Dict, Any, Union
 from ..base_files.save_mixin import PickleSaveMixin
 
@@ -90,7 +91,8 @@ class Pipeline(PipelineComponent):
 
         Returns:
             _type_: output data
-        """        
+        """
+        self.context["start_time"]=time.time()
         for component in self.components:
             data = component.process(data)
             if data is None:

@@ -15,13 +15,18 @@ from ANIDSC.normalizer import LivePercentile
 import warnings
 
 
-METRICS=[
-            "detection_rate",
-            "median_score",
-            "median_threshold",
-            "pos_count",
-            "batch_size",
-        ]
+METRICS = [
+    "detection_rate",
+    "lower_quartile_score",
+    "upper_quartile_score",
+    "soft_min_score",
+    "soft_max_score",
+    "median_score",
+    "median_threshold",
+    "pos_count",
+    "batch_size",
+]
+
 
 def get_pipeline(
     model_name,
@@ -30,14 +35,13 @@ def get_pipeline(
     node_encoder_type="LinearNodeEncoder",
     dist_type="gaussian",
 ):
-    
 
     standardizer = LivePercentile()
     evaluator = BaseEvaluator(
         METRICS,
         log_to_tensorboard=(pipeline_type == "vanilla"),
         save_results=(pipeline_type == "vanilla"),
-        draw_graph_rep_interval=0,
+        draw_graph_rep_interval=100,
     )
 
     if pipeline_type == "vanilla":
@@ -45,7 +49,7 @@ def get_pipeline(
             preprocessors = []
         else:
             preprocessors = ["to_float_tensor", "to_device"]
-        
+
         model = getattr(models, model_name)(preprocessors=preprocessors, profile=False)
 
         if from_pcap:
@@ -59,18 +63,20 @@ def get_pipeline(
 
     elif pipeline_type == "graph_cdd":
         # graph cdd model
-        if model_name =="KitNET":
+        if model_name == "KitNET":
             model = getattr(models, model_name)(preprocessors=["to_numpy"])
         else:
             model = getattr(models, model_name)(preprocessors=[])
-            
+
         node_encoder = getattr(models, node_encoder_type)(15, dist_type)
         encoder_model = NodeEncoderWrapper(node_encoder, model)
         cd_model = ConceptDriftWrapper(encoder_model, 1000, 50)
 
         standardizer = LivePercentile()
 
-        graph_rep = HomoGraphRepresentation(preprocessors=["to_float_tensor", "to_device"])
+        graph_rep = HomoGraphRepresentation(
+            preprocessors=["to_float_tensor", "to_device"]
+        )
 
         collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
         protocol_splitter = MultilayerSplitter(
@@ -80,22 +86,29 @@ def get_pipeline(
         if from_pcap:
             feature_extractor = AfterImageGraph(["TCP", "UDP", "ARP", "ICMP"])
             feature_buffer = FeatureBuffer(buffer_size=256)
-            pipeline = feature_extractor | feature_buffer | protocol_splitter | collate_evaluator
-            
+            pipeline = (
+                feature_extractor
+                | feature_buffer
+                | protocol_splitter
+                | collate_evaluator
+            )
+
         else:
             pipeline = protocol_splitter | collate_evaluator
 
-    elif pipeline_type=="graph":
+    elif pipeline_type == "graph":
         # graph cdd model
-        if model_name =="KitNET":
+        if model_name == "KitNET":
             model = getattr(models, model_name)(preprocessors=["to_numpy"])
         else:
             model = getattr(models, model_name)(preprocessors=[])
-            
+
         node_encoder = getattr(models, node_encoder_type)(15, dist_type)
         encoder_model = NodeEncoderWrapper(node_encoder, model)
         standardizer = LivePercentile()
-        graph_rep = HomoGraphRepresentation(preprocessors=["to_float_tensor", "to_device"])
+        graph_rep = HomoGraphRepresentation(
+            preprocessors=["to_float_tensor", "to_device"]
+        )
 
         collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
         protocol_splitter = MultilayerSplitter(
@@ -105,11 +118,15 @@ def get_pipeline(
         if from_pcap:
             feature_extractor = AfterImageGraph(["TCP", "UDP", "ARP", "ICMP"])
             feature_buffer = FeatureBuffer(buffer_size=256)
-            pipeline = feature_extractor | feature_buffer | protocol_splitter | collate_evaluator
-            
+            pipeline = (
+                feature_extractor
+                | feature_buffer
+                | protocol_splitter
+                | collate_evaluator
+            )
+
         else:
             pipeline = protocol_splitter | collate_evaluator
-
 
     return pipeline
 
@@ -128,7 +145,7 @@ def load_pipeline(
         METRICS,
         log_to_tensorboard=(pipeline_type == "vanilla"),
         save_results=(pipeline_type == "vanilla"),
-        draw_graph_rep_interval=0,
+        draw_graph_rep_interval=100,
     )
 
     if pipeline_type == "vanilla":
@@ -175,8 +192,8 @@ def load_pipeline(
             )
         else:
             pipeline = protocol_splitter | collate_evaluator
-    elif pipeline_type=="graph":
-        
+    elif pipeline_type == "graph":
+
         collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
         protocol_splitter = MultilayerSplitter.load_pickle(
             "models",
@@ -293,7 +310,7 @@ def uq_benign(
 
     if pipeline_type == "vanilla":
         fe_name = "AfterImage"
-    elif pipeline_type in ["graph_cdd","graph"]:
+    elif pipeline_type in ["graph_cdd", "graph"]:
         fe_name = "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
     else:
         raise ValueError("unknown pipeline type")
@@ -304,7 +321,7 @@ def uq_benign(
     else:
         if pipeline_type == "vanilla":
             offline_reader = CSVReader(dataset_name, "AfterImage", fe_name, file_name)
-        elif pipeline_type in ["graph_cdd","graph"]:
+        elif pipeline_type in ["graph_cdd", "graph"]:
             offline_reader = CSVReader(
                 dataset_name, "AfterImageGraph", fe_name, file_name
             )
@@ -344,8 +361,10 @@ def uq_malicious(
     ]
     if pipeline_type == "vanilla":
         fe_name = "AfterImage"
-    elif pipeline_type == "graph_cdd":
+    elif pipeline_type in ["graph_cdd", "graph"]:
         fe_name = "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
+    else:
+        raise ValueError("unknown pipeline type")
 
     for d, a in itertools.product(devices, attacks):
         file_name = f"malicious/{d}/{a}"
@@ -358,10 +377,12 @@ def uq_malicious(
                 offline_reader = CSVReader(
                     dataset_name, "AfterImage", fe_name, file_name
                 )
-            else:
+            elif pipeline_type in ["graph_cdd", "graph"]:
                 offline_reader = CSVReader(
                     dataset_name, "AfterImageGraph", fe_name, file_name
                 )
+            else:
+                raise ValueError("unknown pipeline type")
 
         pipeline = load_pipeline(
             dataset_name,
@@ -385,7 +406,7 @@ def cic_vanilla():
         ["detection_rate", "median_score", "median_threshold"],
         log_to_tensorboard=True,
         save_results=True,
-        draw_graph_rep_interval=0,
+        draw_graph_rep_interval=100,
     )
     feature_buffer = FeatureBuffer(buffer_size=256)
     pipeline = feature_extractor | feature_buffer | standardizer | model | evaluator
@@ -409,7 +430,7 @@ def cic_cdd():
         ["detection_rate", "median_score", "median_threshold"],
         log_to_tensorboard=True,
         save_results=True,
-        draw_graph_rep_interval=0,
+        draw_graph_rep_interval=100,
     )
     pipeline = standardizer | cd_model | evaluator
 
@@ -442,7 +463,7 @@ def cic_graph_cdd():
         ["detection_rate", "median_score", "median_threshold"],
         log_to_tensorboard=False,
         save_results=False,
-        draw_graph_rep_interval=10,
+        draw_graph_rep_interval=100,
     )
     collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
     feature_extraction = feature_extractor | feature_buffer
@@ -477,7 +498,7 @@ def uq_benign_boxplot():
         ],
         log_to_tensorboard=True,
         save_results=True,
-        draw_graph_rep_interval=0,
+        draw_graph_rep_interval=100,
     )
 
     dataset_name = "../datasets/UQ_IoT_IDS21"
@@ -509,7 +530,7 @@ def uq_malicious_boxplot():
         ],
         log_to_tensorboard=True,
         save_results=True,
-        draw_graph_rep_interval=0,
+        draw_graph_rep_interval=100,
     )
 
     attacks = [
@@ -554,16 +575,15 @@ if __name__ == "__main__":
     # uq_benign_boxplot()
     # uq_malicious_boxplot()
 
-    pipeline_type = "graph"
+    pipeline_type = "vanilla"
     node_encoder_type = "LinearNodeEncoder"
     dist_type = "gaussian"
-    
-    
+
     # feature extraction
     # uq_feature_extraction(pipeline_type=pipeline_type)
 
     # # evaluate models
-    model_names = ["AE", "GOAD", "VAE", "ICL", "SLAD", "KitNET"] # 
+    model_names = ["AE", "GOAD", "VAE", "ICL", "SLAD", "Kitsune", "ARCUS"] # "AE", "GOAD", "VAE", "ICL", "SLAD", "Kitsune", "ARCUS" 
 
     with warnings.catch_warnings():
         warnings.filterwarnings("error", category=RuntimeWarning)

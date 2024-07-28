@@ -619,15 +619,18 @@ class NodeEncoderWrapper(BaseOnlineODModel, torch.nn.Module):
             
         if isinstance(self.model, torch.nn.Module):    
             recon_loss = self.model.get_loss(latent_nodes, preprocess)
-            loss = recon_loss.mean() + dist_loss
+            if recon_loss is not None:
+                loss = recon_loss.mean() + dist_loss
 
-            loss.backward()
-            self.optimizer.step()
-            
-            if self.profile:
-                self.prof.step()
+                loss.backward()
+                self.optimizer.step()
                 
-            loss=loss.detach().cpu().numpy()
+                if self.profile:
+                    self.prof.step()
+                    
+                loss=loss.detach().cpu().numpy()
+            else:
+                loss=0.
         else:
             loss=self.model.train_step(latent_nodes, preprocess)
             
@@ -636,27 +639,37 @@ class NodeEncoderWrapper(BaseOnlineODModel, torch.nn.Module):
             self.optimizer.step()
             
         self.num_trained += 1
+        
+        # update scaler
+        context=self.get_context()
+        if "scaler" in context.keys():
+            context["scaler"].update_current()
 
         return loss
 
     def forward(self, X, inference=False):
         pass
 
-    def process(self, X) -> Dict[str, Any]:
-        """process the input. First preprocess, then predict, then extend loss queue and finally train
+    # def process(self, X) -> Dict[str, Any]:
+    #     """process the input. First preprocess, then predict, then extend loss queue and finally train
 
-        Args:
-            X (_type_): _description_
+    #     Args:
+    #         X (_type_): _description_
 
-        Returns:
-            Dict[str, Any]: output dictionary
-        """
+    #     Returns:
+    #         Dict[str, Any]: output dictionary
+    #     """
 
-        score, threshold = self.predict_step(X)
-        self.loss_queue.extend(score)
-        self.train_step(X)
+    #     score, threshold = self.predict_step(X, preprocess=True)
+        
+            
+    #     if self.num_trained < self.warmup or threshold > np.median(score):
+    #         if score is not None:
+    #             self.loss_queue.extend(score)
+            
+    #         self.train_step(X, preprocess=True)
 
-        return {"threshold": threshold, "score": score, "batch_num": self.num_trained}
+    #     return {"threshold": threshold, "score": score, "batch_num": self.num_trained}
 
 
 class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin):
@@ -806,7 +819,7 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
 
     def get_graph_representation(self):
         G = to_networkx(
-            self.G, node_attrs=["idx", "updated"], to_undirected=False, to_multi=False
+            self.G, node_attrs=["idx", "updated","x"], edge_attrs=['edge_attr'], to_undirected=False, to_multi=False
         )
         return G
 

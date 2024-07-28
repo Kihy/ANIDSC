@@ -20,7 +20,7 @@ class GOAD(BaseOnlineODModel,torch.nn.Module):
         self.eps = 0
 
         self.kernel_size = 1
-        self.hidden_dim = 16
+        self.hidden_dim = 10
         self.n_layers = 4
 
         

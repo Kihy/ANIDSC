@@ -142,13 +142,19 @@ class RAPP(nn.Module):
         latent_x = self.encoder(x)
         recons_x = self.decoder(latent_x)
         return recons_x
+    
+    def get_loss(self, X):
+        recons_x = self.forward(X)
+        loss = self.loss(X, recons_x)
+        return loss
 
     def train_step(self, x):
         self.optimizer.zero_grad()
         recons_x = self.forward(x)
         loss = self.loss(x, recons_x)
-        loss.backward()
+        loss.backward(retain_graph=True)
         self.optimizer.step()
+        
         return loss
 
     def get_latent(self, x):
@@ -338,6 +344,17 @@ class ARCUS(BaseOnlineODModel, torch.nn.Module):
             if len(self.model_pool) > 1:
                 self._reduce_models_last(x_inp, epochs)
 
+    def get_loss(self, X, preprocess=False):
+        if preprocess:
+            X = self.preprocess(X).float()
+        
+        
+        indices = torch.randperm(X.size(0))
+        min_batch_x_inp = X[indices[: self._min_batch_size]]
+
+        return self.curr_model.get_loss(min_batch_x_inp)    
+    
+
     def _train_model(self, model, x_inp, epochs):
         # train a model in the model pool of ARCUS
         tmp_losses = []
@@ -353,24 +370,30 @@ class ARCUS(BaseOnlineODModel, torch.nn.Module):
         model.last_max_score = np.max(temp_scores)
         model.last_min_score = np.min(temp_scores)
         model.num_batch = model.num_batch + 1
+        
+        # update scaler
+        context=self.get_context()
+        if "scaler" in context.keys():
+            context["scaler"].update_current()
         return tmp_losses
 
     def forward(self, X, inference=False):
         """not used since process is overriden"""
         pass
 
-    def process(self, x):
+    def predict_step(self, X, preprocess=False):
         threshold = self.get_threshold()
-        x = self.preprocess(x).float()
-
+        if preprocess:
+            X = self.preprocess(X).float()
+            
         if self.num_trained == 0:
-            self._train_model(self.model_pool[0], x, self._init_epoch)
+            self._train_model(self.model_pool[0], X, self._init_epoch)
 
         # reliability calculation
         scores = []
-        model_reliabilities = []
+        self.model_reliabilities = []
         for m in self.model_pool:
-            scores.append(m.inference_step(x))
+            scores.append(m.inference_step(X))
             curr_mean_score = np.mean(scores[-1])
             curr_max_score = np.max(scores[-1])
             curr_min_score = np.min(scores[-1])
@@ -398,40 +421,55 @@ class ARCUS(BaseOnlineODModel, torch.nn.Module):
                 ),
                 4,
             )
-            model_reliabilities.append(reliability)
+            self.model_reliabilities.append(reliability)
 
-        curr_model_index = model_reliabilities.index(max(model_reliabilities))
-        curr_model = self.model_pool[curr_model_index]
+        curr_model_index = self.model_reliabilities.index(max(self.model_reliabilities))
+        self.curr_model = self.model_pool[curr_model_index]
 
         weighted_scores = []
         for idx in range(len(self.model_pool)):
-            weight = model_reliabilities[idx]
+            weight = self.model_reliabilities[idx]
             weighted_scores.append(self._standardize_scores(scores[idx]) * weight)
         final_scores = np.sum(weighted_scores, axis=0)
+        self.num_evaluated+=1
+        return final_scores, threshold
 
-        self.loss_queue.extend(final_scores)
-
-        # drift detection
-        pool_reliability = 1 - np.prod([1 - p for p in model_reliabilities])
-
-        if pool_reliability < self._reliability_thred:
-            drift = True
-        else:
-            drift = False
-
-        if drift:
+    def train_step(self, X, preprocess=False):
+        if preprocess:
+            X = self.preprocess(X).float()
+            
+        if self.drift:
             # Create new model
             new_model = self._model_generator.init_model()
             new_model.to(self.device)
-            self._train_model(new_model, x, self._init_epoch)
+            loss=self._train_model(new_model, X, self._init_epoch)
             self.model_pool.append(new_model)
             # Merge models
-            self._reduce_models_last(x, 1)
+            self._reduce_models_last(X, 1)
 
         else:
-            self._train_model(curr_model, x, self._intm_epoch)
+            loss=self._train_model(self.curr_model, X, self._intm_epoch)
+            
+        self.num_trained += 1
+        
+        return loss.detach().cpu().numpy().item()
 
-        self.num_evaluated+=1
+    def process(self, X):
+        X_scaled = self.preprocess(X)
+
+        final_scores, threshold = self.predict_step(X_scaled)
+        
+        if final_scores is not None:
+            self.loss_queue.extend(final_scores)
+
+        # drift detection
+        pool_reliability = 1 - np.prod([1 - p for p in self.model_reliabilities])
+
+        self.drift=pool_reliability < self._reliability_thred
+
+        self.train_step(X, False)
+        
+        
         return {
             "drift_level": pool_reliability,
             "threshold": threshold,

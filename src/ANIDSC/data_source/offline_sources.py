@@ -1,3 +1,4 @@
+import time
 from scapy.all import PcapReader
 from ..base_files import PipelineSource
 from pathlib import Path
@@ -31,6 +32,7 @@ class PacketReader(PipelineSource):
         self.on_start()
 
         for packet in tqdm(self.input_pcap):
+            
             self.call_back(packet)
             self.count += 1
 
@@ -97,7 +99,9 @@ class CSVReader(PipelineSource):
         self.on_start()
 
         for features in tqdm(self.data):
+            
             self.call_back(features.to_numpy())
+            
             self.count += features.shape[0]
 
             if self.count == self.max_pkts:

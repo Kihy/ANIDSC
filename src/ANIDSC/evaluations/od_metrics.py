@@ -25,6 +25,26 @@ def median_score(result_dict):
         return 0
     return np.nanmedian(result_dict["score"])
 
+def lower_quartile_score(result_dict):
+    if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
+        return 0
+    return np.nanpercentile(result_dict["score"],25)
+
+def upper_quartile_score(result_dict):
+    if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
+        return 0
+    return np.nanpercentile(result_dict["score"],75)
+
+def soft_min_score(result_dict):
+    if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
+        return 0
+    return np.nanpercentile(result_dict["score"],1)
+
+def soft_max_score(result_dict):
+    if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
+        return 0
+    return np.nanpercentile(result_dict["score"],99)
+
 def median_threshold(result_dict):
     if result_dict["threshold"] is None or np.isnan(result_dict["threshold"]).all():
         return 0

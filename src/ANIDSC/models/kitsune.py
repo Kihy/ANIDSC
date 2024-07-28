@@ -58,6 +58,12 @@ class KitNET(BaseOnlineODModel):
             X=self.preprocess(X)
         loss=[self.train_single(i) for i in X]
         self.num_trained+=1
+        
+        # update scaler
+        context=self.get_context()
+        if "scaler" in context.keys():
+            context["scaler"].update_current()
+        
         return np.array(loss) 
     
     def predict_step(self, X,preprocess=False):
