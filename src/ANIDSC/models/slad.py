@@ -17,15 +17,15 @@ class SLAD(BaseOnlineODModel,torch.nn.Module):
         BaseOnlineODModel.__init__(self, **kwargs)
         torch.nn.Module.__init__(self)
         
-        self.hidden_dims = 32
+        self.hidden_dims = 8
         self.distribution_size = 10
-        self.n_slad_ensemble = 20
+        self.n_slad_ensemble = 4
 
         self.max_subspace_len = None # maximum length of subspace
         self.sampling_size = None # number of objects per ensemble member
-        self.subspace_pool_size = 50
+        self.subspace_pool_size = 32
 
-        self.n_unified_features = 50
+        self.n_unified_features = 16
         self.magnify_factor = 200
 
         self.affine_network_lst = {}

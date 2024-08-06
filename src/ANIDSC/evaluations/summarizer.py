@@ -40,6 +40,8 @@ def name_map_func(value):
 
     if "ConceptDriftWrapper" in value:
         name_str.append("CDD")
+    else:
+        name_str.append("NCD")
 
     if len(name_str) == 0:
         return "NA"

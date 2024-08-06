@@ -10,6 +10,7 @@ from ANIDSC.base_files import (
     CollateEvaluator,
     ConceptDriftWrapper,
 )
+from ANIDSC.models.arcus import ARCUS
 from ANIDSC.models.gnnids import LinearNodeEncoder, NodeEncoderWrapper
 from ANIDSC.normalizer import LivePercentile
 import warnings
@@ -69,9 +70,9 @@ def get_pipeline(
             model = getattr(models, model_name)(preprocessors=[])
 
         node_encoder = getattr(models, node_encoder_type)(15, dist_type)
-        encoder_model = NodeEncoderWrapper(node_encoder, model)
-        cd_model = ConceptDriftWrapper(encoder_model, 1000, 50)
-
+        cd_model = ARCUS(model)
+        encoder_model = NodeEncoderWrapper(node_encoder, cd_model)
+        
         standardizer = LivePercentile()
 
         graph_rep = HomoGraphRepresentation(
@@ -80,7 +81,7 @@ def get_pipeline(
 
         collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
         protocol_splitter = MultilayerSplitter(
-            pipeline=(standardizer | graph_rep | cd_model | evaluator)
+            pipeline=(standardizer | graph_rep | encoder_model | evaluator)
         )
 
         if from_pcap:
@@ -575,15 +576,15 @@ if __name__ == "__main__":
     # uq_benign_boxplot()
     # uq_malicious_boxplot()
 
-    pipeline_type = "vanilla"
-    node_encoder_type = "LinearNodeEncoder"
+    pipeline_type = "graph"
+    node_encoder_type = "GATNodeEncoder"
     dist_type = "gaussian"
 
     # feature extraction
     # uq_feature_extraction(pipeline_type=pipeline_type)
 
     # # evaluate models
-    model_names = ["AE", "GOAD", "VAE", "ICL", "SLAD", "Kitsune", "ARCUS"] # "AE", "GOAD", "VAE", "ICL", "SLAD", "Kitsune", "ARCUS" 
+    model_names = ["AE", "GOAD", "VAE", "ICL", "Kitsune", "SLAD"] # "AE", "GOAD", "VAE", "ICL", "SLAD", "Kitsune", "ARCUS" 
 
     with warnings.catch_warnings():
         warnings.filterwarnings("error", category=RuntimeWarning)

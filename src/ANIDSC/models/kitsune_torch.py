@@ -263,6 +263,8 @@ class Kitsune(BaseOnlineODModel, nn.Module):
         self.max_features_per_cluster = 10
         self.grace_period=40
         self.mse = RMSELoss(reduction="none")
+        self.optimizer=None
+        
 
     def init_model(self, context):
         self.fm = FeatureMapper(
@@ -299,6 +301,7 @@ class Kitsune(BaseOnlineODModel, nn.Module):
                     compression_rate=self.compression_rate,
                     dropout_rate=self.dropout_rate,
                 ).to(self.device)
+                self.optimizer=torch.optim.Adam(params=self.parameters())
 
         # transform and convert to float tensor
         split_feat = self.fm.transform(x)

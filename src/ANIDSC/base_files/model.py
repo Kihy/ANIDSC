@@ -119,6 +119,10 @@ class BaseOnlineODModel(PipelineComponent):
         Returns:
             _type_: _description_
         """
+        if self.optimizer is None:
+            self.forward(X, inference=False)
+            self.num_trained += 1
+            return 0.
         
         if preprocess:
             X = self.preprocess(X)
@@ -127,7 +131,8 @@ class BaseOnlineODModel(PipelineComponent):
         
         if loss is not None:
             loss = loss.mean()
-            loss.backward()
+            # retain for node encoder
+            loss.backward(retain_graph=True)
             self.optimizer.step()
             self.num_trained += 1
 
@@ -238,14 +243,6 @@ class ConceptDriftWrapper(PipelineComponent):
         self.time_since_last_drift = 0
         self.num_trained = 0
         self.name = self.__str__()
-
-    def set_context(self, context: Dict[str, Any]):
-        """sets the current context
-
-        Args:
-            context (Dict[str, Any]): context to set
-        """
-        self.context = context
 
     def create_model(self) -> BaseOnlineODModel:
         """creates a new model based on base model
@@ -375,8 +372,6 @@ class ConceptDriftWrapper(PipelineComponent):
             "num_model": len(self.model_pool),
         }
 
-    def __str__(self):
-        return f"ConceptDriftWrapper({self.model})"
 
     def update_queue(self, score: List[float], threshold: float, x: Any):
         """updates the queues to check for concept drift
@@ -401,6 +396,10 @@ class ConceptDriftWrapper(PipelineComponent):
         """clears the potential queue"""
         self.potential_queue.clear()
         self.potential_x_queue.clear()
+        
+    def __str__(self):
+        return f"ConceptDriftWrapper({self.model})"
+
 
 
 class MultilayerSplitter(SplitterComponent):

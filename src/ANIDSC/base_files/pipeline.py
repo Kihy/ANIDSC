@@ -32,6 +32,14 @@ class PipelineComponent(ABC, PickleSaveMixin):
             parent=parent.parent
         return context
     
+    def set_context(self, context: Dict[str, Any]):
+        """sets the current context
+
+        Args:
+            context (Dict[str, Any]): context to set
+        """
+        self.context = context
+    
     @abstractmethod
     def setup(self):
         pass
@@ -99,13 +107,7 @@ class Pipeline(PipelineComponent):
                 break
         return data
 
-    def set_context(self, context: Dict[str, Any]):
-        """sets the context of current pipeline
-
-        Args:
-            context (Dict[str, Any]): context to be set
-        """        
-        self.context=context
+    
 
     def teardown(self):
         """iteratively calls the teardown function of each pipeline
@@ -193,8 +195,7 @@ class SplitterComponent(PipelineComponent):
         self.pipelines={}
         self.context={}
 
-    def set_context(self, context: Dict[str, Any]):
-        self.context=context
+    
 
     @abstractmethod
     def split_function(self, data):

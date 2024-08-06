@@ -618,11 +618,9 @@ class NodeEncoderWrapper(BaseOnlineODModel, torch.nn.Module):
         latent_nodes, dist_loss = self.node_encoder(*X)
             
         if isinstance(self.model, torch.nn.Module):    
-            recon_loss = self.model.get_loss(latent_nodes, preprocess)
-            if recon_loss is not None:
-                loss = recon_loss.mean() + dist_loss
-
-                loss.backward()
+            loss = self.model.get_loss(latent_nodes, preprocess)
+            if loss is not None:
+                loss.mean().backward()
                 self.optimizer.step()
                 
                 if self.profile:
