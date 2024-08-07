@@ -2,7 +2,6 @@ from behave import given, when, then
 
 from ANIDSC import models
 from ANIDSC.base_files.evaluator import BaseEvaluator
-from ANIDSC.base_files.model import ConceptDriftWrapper
 from ANIDSC.models.autoencoder import AE
 from ANIDSC.normalizer.t_digest import LivePercentile
 
@@ -21,7 +20,7 @@ def step_given_CDD_NIDS_model_with_AE(context, model_name):
         cd_model=model 
         context.model_name="ARCUS"
     else:
-        cd_model=ConceptDriftWrapper(model, 1000, 50)
+        cd_model=DriftSense(model, 1000, 50)
         context.model_name=f"CDD({model_name})"
 
     standardizer = LivePercentile()

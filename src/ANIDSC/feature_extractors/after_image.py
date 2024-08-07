@@ -1,13 +1,12 @@
 import numpy as np
 from pprint import pformat
 import copy
-from ..base_files import BaseTrafficFeatureExtractor
 from scapy.all import IP, IPv6, TCP, UDP, ARP, ICMP, Packet
 from socket import getservbyport
 from itertools import product
 from typing import List, Dict, Any
 from numpy.typing import NDArray
-from ..base_files import PickleSaveMixin
+from ..base_files import PickleSaveMixin, BaseTrafficFeatureExtractor
 
 class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
     def __init__(self, decay_factors:List[float]=[5, 3, 1, 0.1, 0.01], **kwargs):
@@ -267,7 +266,7 @@ class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
 
 
 class AfterImageGraph(AfterImage):
-    def __init__(self, protocols:List[str], **kwargs):
+    def __init__(self, protocols:List[str]=["TCP", "UDP", "ARP", "ICMP"], **kwargs):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
         Args:

@@ -1,7 +1,7 @@
 from behave import given, when, then
 
 from ANIDSC.base_files.evaluator import BaseEvaluator, CollateEvaluator
-from ANIDSC.base_files.model import ConceptDriftWrapper, MultilayerSplitter
+from ANIDSC.base_files.model import MultilayerSplitter
 from ANIDSC.models.autoencoder import AE
 from ANIDSC.models.gnnids import GCNNodeEncoder, HomoGraphRepresentation, NodeEncoderWrapper
 from ANIDSC.normalizer.t_digest import LivePercentile

@@ -44,7 +44,10 @@ class PickleSaveMixin:
         """        
         file_path = Path(
         f"{dataset_name}/{fe_name}/{folder}/{file_name}/{name}{f'-{suffix}' if suffix !='' else ''}.pkl"
-    )
+    )   
+        if not file_path.exists():
+            return None
+        
         with open(file_path, 'rb') as file:
             obj = pickle.load(file)
         if not isinstance(obj, cls):

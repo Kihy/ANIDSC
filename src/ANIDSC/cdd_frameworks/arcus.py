@@ -6,9 +6,7 @@ import torch
 import math
 import torch.nn as nn
 import torch.optim as optim
-
 from ..base_files.model import BaseOnlineODModel
-from ..base_files.pipeline import PipelineComponent
 
 
 def centering(K):

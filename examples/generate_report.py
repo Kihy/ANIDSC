@@ -6,7 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 import scienceplots
 from collections import defaultdict
-from utils import *
+from ANIDSC.utils import calc_quantile
 from matplotlib.ticker import NullFormatter
 
 from itertools import product

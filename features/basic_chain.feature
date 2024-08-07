@@ -14,7 +14,7 @@ Feature: Basic chaining of components
 
     Scenario Outline: Process packets from an offline csv reader
         Given a csv file initialized with dataset "../datasets/Test_Data", file "benign_lenovo_bulb", and feature extractor AfterImage
-            And a basic NIDS model with <model>
+            And a new basic pipeline with <model>
         When the PacketReader starts
         Then the pipeline should not fail
             And the components are saved
@@ -23,14 +23,14 @@ Feature: Basic chaining of components
         | model  |
         | AE     |
         | ICL    |
-        | KitNET |
+        | Kitsune|
         | GOAD   |
         | SLAD   |
         | VAE    |
 
     Scenario Outline: Process packets from an offline csv reader
         Given a csv file initialized with dataset "../datasets/Test_Data", file "malicious_ACK_Flooding", and feature extractor AfterImage
-            And a basic NIDS model with <model>
+            And a loaded basic pipeline with <model>
         When the PacketReader starts
         Then the pipeline should not fail
             And the components are saved
@@ -42,11 +42,11 @@ Feature: Basic chaining of components
         | GOAD   |
         | SLAD   |
         | VAE    |
-        | KitNET |
+        | Kitsune |
 
     Scenario Outline: Process packets from an offline csv reader
         Given a csv file initialized with dataset "../datasets/Test_Data", file "malicious_Service_Detection", and feature extractor AfterImage
-            And a basic NIDS model with <model>
+            And a loaded basic pipeline with <model>
         When the PacketReader starts
         Then the pipeline should not fail
             And the components are saved
@@ -58,12 +58,12 @@ Feature: Basic chaining of components
         | GOAD   |
         | SLAD   |
         | VAE    |
-        | KitNET |
+        | Kitsune |
 
     Scenario: Process packets directly from an offline pcap reader
         Given a PacketReader initialized with dataset "../datasets/Test_Data" and benign_lenovo_bulb
             And a feature extraction pipeline with AfterImage
-            And a basic NIDS model with AE
+            And a new basic pipeline with AE
         When the PacketReader starts
         Then the pipeline should not fail
             And the components are saved
