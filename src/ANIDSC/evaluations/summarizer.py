@@ -202,6 +202,7 @@ class BasicSummarizer:
             mal_means=g[g["file"].str.startswith("malicious")]["diff_magnitude_mean"].to_numpy()
             mal_stds=g[g["file"].str.startswith("malicious")]["diff_magnitude_std"].to_numpy()
             # mal_stds=np.nan_to_num(mal_stds, nan=1.)
+            
             #benign is P mal is Q
             kl_div=np.log(mal_stds/benign_std)+(benign_std**2+(benign_mean-mal_means)**2)/(2*mal_stds**2)-1/2
             kl_divs.append(np.nanmedian(kl_div))
@@ -320,7 +321,7 @@ class BasicSummarizer:
                         data["mean_mal"].append(mean_mal)
                         data["mean_ben"].append(mean_ben)
                         
-                        data["mean_kl_div"].append(np.mean(kl_divs)) 
+                        data["mean_kl_div"].append(np.median(kl_divs)) 
                         data["max_kl_div"].append(np.max(kl_divs)) 
                         data["min_kl_div"].append(np.min(kl_divs)) 
                         

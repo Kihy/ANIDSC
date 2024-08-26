@@ -39,9 +39,9 @@ if __name__ == "__main__":
     dataset="../datasets/UQ_IoT_IDS21"
     # dataset="../datasets/Test_Data"
     
-    summarizer=BasicSummarizer([dataset],"AfterImage", get_file_names(dataset), calc_f1=True)
-    # summarizer.plots()
-    summarizer.gen_summary()
+    # summarizer=BasicSummarizer([dataset],"AfterImage", get_file_names(dataset), calc_f1=True)
+    # # summarizer.plots()
+    # summarizer.gen_summary()
 
     
     # summarizer=BasicSummarizer([dataset],"FrequencyExtractor", get_file_names(dataset), calc_f1=True)
