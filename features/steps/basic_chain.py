@@ -5,9 +5,8 @@ from ANIDSC.base_files.feature_extractor import FeatureBuffer
 
 
 from ANIDSC.data_source.offline_sources import CSVReader, PacketReader
-from ANIDSC.feature_extractors import AfterImage, FrequencyExtractor
+from ANIDSC.feature_extractors import FrequencyExtractor
 
-from ANIDSC.normalizer.t_digest import LivePercentile
 from shutil import rmtree
 import os
 import glob
@@ -22,14 +21,6 @@ def step_given_packet_reader(context, dataset, file):
     context.file = file
 
 
-@given("a feature extraction pipeline with AfterImage")
-def step_given_feature_extraction_pipeline_with_AfterImage(context):
-    context.pipeline = get_pipeline(
-        pipeline_components=["feature_extraction"],
-        pipeline_desc={"fe_cls": "AfterImage"},
-    )
-    context.fe_name = "AfterImage"
-    context.pipeline_components = ["feature_extraction", "detection"]
 
 
 @given("a feature extraction pipeline with frequency analysis")

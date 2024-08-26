@@ -288,10 +288,14 @@ class Kitsune(BaseOnlineODModel, nn.Module):
 
     def forward(self, x: torch.Tensor, inference: bool = True):
         # transform to numpy array for feature mapper
-        x=self.to_numpy(x)
+        if isinstance(x, torch.Tensor):
+            x=self.to_numpy(x)
+            
         if not self.fm._fitted:
             if not inference:
                 self.fm.parital_fit(x)
+                
+                
             return None, None
         else:
             if self.head is None:

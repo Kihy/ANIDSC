@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple
+
+from ..cdd_frameworks.drift_sense import DriftSense
 from ..base_files.model import BaseOnlineODModel
 import torch
 import numpy as np
@@ -580,94 +582,87 @@ def loss_fn(model, x, marginal_prob_std, eps=1e-5):
     return loss
 
 
-class NodeEncoderWrapper(BaseOnlineODModel, torch.nn.Module):
+class NodeEncoderWrapper(PipelineComponent, torch.nn.Module):
     def __init__(self, node_encoder, model, **kwargs):
-        BaseOnlineODModel.__init__(self, **kwargs)
+        PipelineComponent.__init__(self, **kwargs)
         torch.nn.Module.__init__(self)
         self.node_encoder = node_encoder
         self.node_encoder.parent = self
         self.model = model
         self.model.parent = self
         self.context = {}
-        self.loss_queue=self.model.loss_queue
+        # self.loss_queue=self.model.loss_queue
         
     def __str__(self):
         return f"NodeEncoderWrapper({self.node_encoder}-{self.model})"
 
-    def init_model(self, context):
+    def setup(self):
+        context=self.get_context()
         self.node_encoder.setup(context["fe_features"])
         self.context["output_features"] = self.node_encoder.node_latent_dim
         self.model.setup()
         self.optimizer = torch.optim.Adam(params=self.parameters())
 
-    def predict_step(self, X, preprocess=False):
-        if preprocess:
-            X = self.preprocess(X)
+    # def predict_step(self, X, preprocess=False):
+    #     if preprocess:
+    #         X = self.preprocess(X)
 
-        latent_nodes, dist_loss = self.node_encoder(*X)
-        loss, threshold = self.model.predict_step(latent_nodes, preprocess)
+    #     latent_nodes, dist_loss = self.node_encoder(*X)
+    #     loss, threshold = self.model.predict_step(latent_nodes, preprocess)
 
-        self.num_evaluated += 1
-        return loss, threshold
+    #     self.num_evaluated += 1
+    #     return loss, threshold
 
-    def train_step(self, X, preprocess=False):
-        if preprocess:
-            X = self.preprocess(X)
+    # def train_step(self, X, preprocess=False):
+    #     if preprocess:
+    #         X = self.preprocess(X)
 
-        self.optimizer.zero_grad()
-        latent_nodes, dist_loss = self.node_encoder(*X)
+    #     self.optimizer.zero_grad()
+    #     latent_nodes, dist_loss = self.node_encoder(*X)
             
-        if isinstance(self.model, torch.nn.Module):    
-            loss = self.model.get_loss(latent_nodes, preprocess)
-            if loss is not None:
-                loss.mean().backward()
-                self.optimizer.step()
+    #     if isinstance(self.model, torch.nn.Module):    
+    #         loss = self.model.get_loss(latent_nodes, preprocess)
+    #         if loss is not None:
+    #             loss.mean().backward()
+    #             self.optimizer.step()
                 
-                if self.profile:
-                    self.prof.step()
+    #             if self.profile:
+    #                 self.prof.step()
                     
-                loss=loss.detach().cpu().numpy()
-            else:
-                loss=0.
+    #             loss=loss.detach().cpu().numpy()
+    #         else:
+    #             loss=0.
+    #     else:
+    #         loss=self.model.train_step(latent_nodes, preprocess)
+            
+    #         dist_loss.backward()
+            
+    #         self.optimizer.step()
+            
+    #     self.num_trained += 1
+        
+    #     # update scaler
+    #     context=self.get_context()
+    #     if "scaler" in context.keys():
+    #         context["scaler"].update_current()
+
+    #     return loss
+
+    def process(self, X) -> Dict[str, Any]:
+        latent_nodes, dist_loss = self.node_encoder(*X)
+        
+        if isinstance(self.model, DriftSense):
+            
+            result_dict = self.model.process(latent_nodes.detach())
         else:
-            loss=self.model.train_step(latent_nodes, preprocess)
-            
-            dist_loss.backward()
-            
+            result_dict = self.model.process(latent_nodes)
+        
+        if result_dict.get("train", False):
+            self.optimizer.zero_grad()
+            dist_loss.mean().backward()
             self.optimizer.step()
-            
-        self.num_trained += 1
         
-        # update scaler
-        context=self.get_context()
-        if "scaler" in context.keys():
-            context["scaler"].update_current()
-
-        return loss
-
-    def forward(self, X, inference=False):
-        pass
-
-    # def process(self, X) -> Dict[str, Any]:
-    #     """process the input. First preprocess, then predict, then extend loss queue and finally train
-
-    #     Args:
-    #         X (_type_): _description_
-
-    #     Returns:
-    #         Dict[str, Any]: output dictionary
-    #     """
-
-    #     score, threshold = self.predict_step(X, preprocess=True)
-        
-            
-    #     if self.num_trained < self.warmup or threshold > np.median(score):
-    #         if score is not None:
-    #             self.loss_queue.extend(score)
-            
-    #         self.train_step(X, preprocess=True)
-
-    #     return {"threshold": threshold, "score": score, "batch_num": self.num_trained}
+        return result_dict
 
 
 class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin):

@@ -1,41 +1,26 @@
 from behave import given, when, then
 
-from ANIDSC.base_files.evaluator import BaseEvaluator, CollateEvaluator
-from ANIDSC.base_files.model import MultilayerSplitter
-from ANIDSC.models.autoencoder import AE
-from ANIDSC.models.gnnids import GCNNodeEncoder, HomoGraphRepresentation, NodeEncoderWrapper
-from ANIDSC.normalizer.t_digest import LivePercentile
+
+from ANIDSC.templates import get_pipeline
 
 
-@given('a graph NIDS concept drift detection model with AE')
-def step_given_basic_NIDS_model_with_AE(context):
-    model = AE(
-        preprocessors=[],
-        profile=False
+@given('a {state} cdd graph pipeline with {model_name} and {cdd_framework}')
+def step_given_CDD_graph_pipeline_with_AE(context, state, cdd_framework, model_name):
+    
+    if state == "new":
+        load_existing=False 
+    else:
+        load_existing=[context.dataset, context.fe_name, context.benign_file]
+    
+    context.pipeline_components.append('cdd')
+    
+    context.pipeline = get_pipeline(
+        pipeline_components=context.pipeline_components,
+        pipeline_desc={"fe_cls": "AfterImageGraph", "model_name": model_name,
+                       "cdd_framework":cdd_framework,
+                       "node_encoder":"LinearNodeEncoder",
+                       "distribution":"gaussian"},
+        load_existing=load_existing
     )
 
-    node_encoder=GCNNodeEncoder(10, "gaussian")
-
-    encoder_model=NodeEncoderWrapper(node_encoder, model)
-    
-    standardizer = LivePercentile()
-    graph_rep = HomoGraphRepresentation(preprocessors=["to_float_tensor", "to_device"])
-    
-    cd_model=ConceptDriftWrapper(encoder_model, 1000, 50)
-
-    evaluator = BaseEvaluator(
-        ["detection_rate", "median_score", "median_threshold"],
-        log_to_tensorboard=False,
-        save_results=False,
-        draw_graph_rep_interval=10,
-    )
-    
-    collate_evaluator = CollateEvaluator(log_to_tensorboard=True, save_results=True)
-    
-    context.detection = MultilayerSplitter(
-        pipeline=(standardizer | graph_rep | cd_model | evaluator),
-        
-    )|collate_evaluator
-    
-    context.model_name="MultlayerSplitter(LivePercentile-HomoGraphRepresentation-ConceptDriftWrapper(NodeEncoderWrapper(GCNNodeEncoder-AE))-BaseEvaluator)"
-    
+    context.model_name = model_name

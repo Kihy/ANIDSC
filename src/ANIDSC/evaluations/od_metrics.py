@@ -49,3 +49,9 @@ def median_threshold(result_dict):
     if result_dict["threshold"] is None or np.isnan(result_dict["threshold"]).all():
         return 0
     return np.nanmedian(result_dict["threshold"])
+
+def pool_size(result_dict):
+    return result_dict["num_model"]
+
+def drift_level(result_dict):
+    return result_dict["drift_level"]

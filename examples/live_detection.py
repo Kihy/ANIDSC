@@ -1,4 +1,8 @@
 import itertools
+
+import torch
+
+
 from ANIDSC import cdd_frameworks, models
 from ANIDSC.data_source import LiveSniffer, PacketReader, CSVReader
 from ANIDSC.base_files import Processor, FeatureBuffer
@@ -55,13 +59,15 @@ def uq_feature_extraction(fe_type="vanilla"):
 
 
 def uq_benign(
-    pipeline_desc
+    
+    pipeline_desc,
+    pipeline_componenets=["detection"],
 ):
     dataset_name = "../datasets/UQ_IoT_IDS21"
     file_name = "benign/whole_week"
 
     pipeline = get_pipeline(
-        pipeline_components=["detection"],
+        pipeline_components=pipeline_componenets,
         pipeline_desc=pipeline_desc,
         load_existing=False
     )
@@ -74,10 +80,13 @@ def uq_benign(
             )
     offline_reader >> pipeline
     offline_reader.start()
+    
+    
 
 
 def uq_malicious(
-    pipeline_desc
+    pipeline_desc,
+    pipeline_componenets=["detection"],
 ):
     dataset_name = "../datasets/UQ_IoT_IDS21"
     benign_file = "benign/whole_week"
@@ -100,28 +109,27 @@ def uq_malicious(
         "Smartphone_2",
     ]
 
-
     for d, a in itertools.product(devices, attacks):
         file_name = f"malicious/{d}/{a}"
 
-    if pipeline_desc["fe_cls"]=="AfterImage":
-        offline_reader = CSVReader(dataset_name, "AfterImage", "AfterImage", file_name)
-        fe_name="AfterImage"
-    else:
-        offline_reader = CSVReader(
-                dataset_name, "AfterImageGraph", "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)", file_name
-            )
-        fe_name="AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
-    
+        if pipeline_desc["fe_cls"]=="AfterImage":
+            offline_reader = CSVReader(dataset_name, "AfterImage", "AfterImage", file_name)
+            fe_name="AfterImage"
+        else:
+            offline_reader = CSVReader(
+                    dataset_name, "AfterImageGraph", "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)", file_name
+                )
+            fe_name="AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
+        
 
-    pipeline = get_pipeline(
-        pipeline_components=["detection"],
-        pipeline_desc=pipeline_desc,
-        load_existing=[dataset_name, fe_name, benign_file]
-    )
-    
-    offline_reader >> pipeline
-    offline_reader.start()
+        pipeline = get_pipeline(
+            pipeline_components=pipeline_componenets,
+            pipeline_desc=pipeline_desc,
+            load_existing=[dataset_name, fe_name, benign_file]
+        )
+        
+        offline_reader >> pipeline
+        offline_reader.start()
 
 
 
@@ -218,25 +226,70 @@ if __name__ == "__main__":
     # uq_benign_boxplot()
     # uq_malicious_boxplot()
 
-    node_encoder = "LinearNodeEncoder"
-    distribution = "uniform"
 
-    # feature extraction
-    # uq_feature_extraction(pipeline_type=pipeline_type)
+    # evaluate models
+    model_names = ["AE", "VAE", "GOAD", "ICL", "Kitsune", "SLAD"] 
+    
+    # #vanilla models 
+    # with warnings.catch_warnings():
+    #     warnings.filterwarnings("error", category=RuntimeWarning)
+    #     for model_name in model_names:
+            
+    #         pipeline_desc={"fe_cls": "AfterImage", "model_name": model_name}
+    #         uq_benign(pipeline_desc, pipeline_componenets=["detection"])
+    #         uq_malicious(pipeline_desc,pipeline_componenets=["detection"])
 
-    # # evaluate models
-    model_names = ["AE", "GOAD", "VAE", "ICL", "Kitsune", "SLAD"] # "AE", "GOAD", "VAE", "ICL", "SLAD", "Kitsune", "ARCUS" 
+    # # graph models
+    node_encoders = ["LinearNodeEncoder","GCNNodeEncoder", "GATNodeEncoder"] #"LinearNodeEncoder",
+    distribution = "log-normal"
 
     with warnings.catch_warnings():
         warnings.filterwarnings("error", category=RuntimeWarning)
-        for model_name in model_names:
+        for node_encoder, model_name in itertools.product(node_encoders, model_names):
+            if not (node_encoder=="LinearNodeEncoder" and model_name != "SLAD"):
+                continue 
             pipeline_desc={"fe_cls": "AfterImageGraph", 
-                               "model_name": model_name,
+                            "model_name": model_name,
                        "node_encoder":node_encoder,
                        "distribution":distribution}
-            uq_benign(
-                pipeline_desc
-            )
-            uq_malicious(
-                pipeline_desc
-            )
+            
+            uq_benign(pipeline_desc)
+            uq_malicious(pipeline_desc)
+
+    # # concept drift models
+    # cdd=["DriftSense"] #"ARCUS",
+    # with warnings.catch_warnings():
+    #     warnings.filterwarnings("error", category=RuntimeWarning)
+    #     for cdd_framework, model_name in itertools.product(cdd, model_names):
+            
+    #         # if cdd_framework=="ARCUS" and model_name in ["AE","VAE","GOAD","ICL","Kitsune"]: # goad consumes too much memory, ICL and SLAD always creates too many model, Kitsune cannot merge models since feature mapper is different
+    #         #     continue 
+            
+    #         if cdd_framework=="DriftSense" and model_name in ["AE","VAE","GOAD"]: # goad consumes too much memory,
+    #             continue 
+            
+    #         pipeline_desc={"fe_cls": "AfterImage", "model_name": model_name,
+    #                     "cdd_framework":cdd_framework}
+    #         uq_benign(pipeline_desc, pipeline_componenets=["detection","cdd"])
+    #         uq_malicious(pipeline_desc,pipeline_componenets=["detection","cdd"])
+    
+    # graph cdd models 
+    
+    # node_encoder = "GCNNodeEncoder"
+    # distribution = "gaussian"
+    # cdd_framework="DriftSense"
+    # with warnings.catch_warnings():
+    #     warnings.filterwarnings("error", category=RuntimeWarning)
+    #     for model_name in model_names:
+            
+    #         pipeline_desc={"fe_cls": "AfterImageGraph", 
+    #                         "model_name": model_name,
+    #                         "cdd_framework":cdd_framework,
+    #                    "node_encoder":node_encoder,
+    #                    "distribution":distribution}
+            
+    #         uq_benign(pipeline_desc,pipeline_componenets=["detection","cdd"])
+    #         uq_malicious(pipeline_desc,pipeline_componenets=["detection","cdd"])
+    
+    
+    

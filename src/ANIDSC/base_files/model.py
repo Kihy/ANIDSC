@@ -1,3 +1,4 @@
+import gc
 from typing import Any, Dict, List
 from .pipeline import PipelineComponent, SplitterComponent
 from collections import deque
@@ -78,13 +79,16 @@ class BaseOnlineODModel(PipelineComponent):
 
         score, threshold = self.predict_step(X_scaled)
 
+        trained=False 
         # do not train if malicious or less than warmup
         if self.num_trained < self.warmup or threshold > np.median(score):
             if score is not None:
                 self.loss_queue.extend(score)
             self.train_step(X_scaled)
+            trained=True
 
-        return {"threshold": threshold, "score": score, "batch_num": self.num_evaluated}
+        return {"threshold": threshold, "score": score, "batch_num": self.num_evaluated,
+                "trained":trained}
 
     def predict_step(self, X, preprocess=False):
         if preprocess:
@@ -121,7 +125,7 @@ class BaseOnlineODModel(PipelineComponent):
         """
         if self.optimizer is None:
             self.forward(X, inference=False)
-            self.num_trained += 1
+            
             return 0.
         
         if preprocess:
@@ -212,6 +216,10 @@ class BaseOnlineODModel(PipelineComponent):
         if self.save:
             suffix = "-".join([s for s in self.suffix if s is not None])
             self.save_pickle(self.component_type, suffix)
+            
+        # clean up memory
+        gc.collect()
+        torch.cuda.empty_cache()
 
 
 

@@ -241,252 +241,6 @@ class ModelGenerator:
         return model
 
 
-# class ARCUS(BaseOnlineODModel, torch.nn.Module):
-#     def __init__(self, **kwargs):
-#         BaseOnlineODModel.__init__(self,loss_dist="norm",**kwargs)
-#         torch.nn.Module.__init__(self)
-#         self.model_pool = []
-#         self._init_epoch = 5
-#         self._intm_epoch = 1
-#         self._reliability_thred = 0.95
-#         self._similarity_thred = 0.80
-#         self._min_batch_size = 32
-#         self._model_type="RAPP"
-
-#     def init_model(self, context):
-#         self._itr_num = context["batch_size"] // self._min_batch_size
-#         self._model_generator = ModelGenerator(input_dim=context["output_features"])
-#         self._batch_size = context["batch_size"]
-#         initial_model = self._model_generator.init_model()
-#         initial_model.to(self.device)
-#         self.model_pool.append(initial_model)
-
-#     def get_total_params(self):
-#         return sum(
-#             p.numel() for p in self.model_pool[0].parameters() if p.requires_grad
-#         )
-
-#     def _standardize_scores(self, score):
-#         # get standardized anomaly scores
-#         mean_score = np.mean(score)
-#         std_score = np.std(score)
-
-#         standardized_score = np.array([(k - mean_score) / std_score for k in score])
-#         return standardized_score
-
-#     def _merge_models(self, model1, model2):
-#         # Merge a previous model and a current model
-#         num_batch_sum = model1.num_batch + model2.num_batch
-#         w1 = model1.num_batch / num_batch_sum
-#         w2 = model2.num_batch / num_batch_sum
-
-#         # Merge encoder
-#         for layer_idx in range(len(model2.encoder_layers)):
-#             l_base = model1.encoder_layers[layer_idx]
-#             l_target = model2.encoder_layers[layer_idx]
-#             if isinstance(l_base, nn.Linear) or isinstance(l_base, nn.BatchNorm1d):
-#                 new_weight = l_base.weight.data * w1 + l_target.weight.data * w2
-#                 new_bias = l_base.bias.data * w1 + l_target.bias.data * w2
-#                 if isinstance(l_base, nn.Linear):
-#                     l_target.weight.data = new_weight
-#                     l_target.bias.data = new_bias
-#                 elif isinstance(l_base, nn.BatchNorm1d):
-#                     new_gamma = l_base.weight.data * w1 + l_target.weight.data * w2
-#                     new_beta = l_base.bias.data * w1 + l_target.bias.data * w2
-#                     new_mm = l_base.running_mean * w1 + l_target.running_mean * w2
-#                     new_mv = l_base.running_var * w1 + l_target.running_var * w2
-#                     l_target.weight.data = new_gamma
-#                     l_target.bias.data = new_beta
-#                     l_target.running_mean = new_mm
-#                     l_target.running_var = new_mv
-
-#         # Merge decoder
-#         for layer_idx in range(len(model2.decoder_layers)):
-#             l_base = model1.decoder_layers[layer_idx]
-#             l_target = model2.decoder_layers[layer_idx]
-#             if isinstance(l_base, nn.Linear) or isinstance(l_base, nn.BatchNorm1d):
-#                 new_weight = l_base.weight.data * w1 + l_target.weight.data * w2
-#                 new_bias = l_base.bias.data * w1 + l_target.bias.data * w2
-#                 if isinstance(l_base, nn.Linear):
-#                     l_target.weight.data = new_weight
-#                     l_target.bias.data = new_bias
-#                 elif isinstance(l_base, nn.BatchNorm1d):
-#                     new_gamma = l_base.weight.data * w1 + l_target.weight.data * w2
-#                     new_beta = l_base.bias.data * w1 + l_target.bias.data * w2
-#                     new_mm = l_base.running_mean * w1 + l_target.running_mean * w2
-#                     new_mv = l_base.running_var * w1 + l_target.running_var * w2
-#                     l_target.weight.data = new_gamma
-#                     l_target.bias.data = new_beta
-#                     l_target.running_mean = new_mm
-#                     l_target.running_var = new_mv
-
-#         if self._model_type == "RSRAE":
-#             model2.A.data = model1.A.data * w1 + model2.A.data * w2
-
-#         model2.num_batch = num_batch_sum
-#         return model2
-
-#     def _reduce_models_last(self, x_inp, epochs):
-#         # delete similar models for reducing redundancy in a model pool
-#         latents = []
-#         for m in self.model_pool:
-#             z = m.get_latent(x_inp)
-#             latents.append(z.detach().cpu().numpy())
-
-#         max_CKA = 0
-#         max_Idx1 = None
-#         max_Idx2 = len(latents) - 1
-#         for idx1 in range(len(latents) - 1):
-#             CKA = linear_CKA(latents[idx1], latents[max_Idx2])
-#             if CKA > max_CKA:
-#                 max_CKA = CKA
-#                 max_Idx1 = idx1
-
-#         if max_Idx1 != None and max_CKA >= self._similarity_thred:
-#             self.model_pool[max_Idx2] = self._merge_models(
-#                 self.model_pool[max_Idx1], self.model_pool[max_Idx2]
-#             )
-#             self._train_model(
-#                 self.model_pool[max_Idx2], x_inp, epochs
-#             )  # Train just one epoch to get the latest score info
-
-#             self.model_pool.remove(self.model_pool[max_Idx1])
-#             if len(self.model_pool) > 1:
-#                 self._reduce_models_last(x_inp, epochs)
-
-#     def get_loss(self, X, preprocess=False):
-#         if preprocess:
-#             X = self.preprocess(X).float()
-        
-        
-#         indices = torch.randperm(X.size(0))
-#         min_batch_x_inp = X[indices[: self._min_batch_size]]
-
-#         return self.curr_model.get_loss(min_batch_x_inp)    
-    
-
-#     def _train_model(self, model, x_inp, epochs):
-#         # train a model in the model pool of ARCUS
-#         tmp_losses = []
-#         for _ in range(epochs):
-#             for _ in range(self._itr_num):
-#                 indices = torch.randperm(x_inp.size(0))
-#                 min_batch_x_inp = x_inp[indices[: self._min_batch_size]]
-
-#                 loss = model.train_step(min_batch_x_inp)
-#                 tmp_losses.append(loss.detach().cpu().numpy())
-#         temp_scores = model.inference_step(x_inp)
-#         if np.isfinite(temp_scores).all():
-#             model.last_mean_score = np.mean(temp_scores)
-#             model.last_max_score = np.max(temp_scores)
-#             model.last_min_score = np.min(temp_scores)
-#         model.num_batch = model.num_batch + 1
-        
-#         # update scaler
-#         context=self.get_context()
-#         if "scaler" in context.keys():
-#             context["scaler"].update_current()
-#         return tmp_losses
-
-#     def forward(self, X, inference=False):
-#         """not used since process is overriden"""
-#         pass
-
-#     def predict_step(self, X, preprocess=False):
-#         threshold = self.get_threshold()
-#         if preprocess:
-#             X = self.preprocess(X).float()
-            
-#         if self.num_trained == 0:
-#             self._train_model(self.model_pool[0], X, self._init_epoch)
-
-#         # reliability calculation
-#         scores = []
-#         self.model_reliabilities = []
-#         for m in self.model_pool:
-#             scores.append(m.inference_step(X))
-#             curr_mean_score = np.mean(scores[-1])
-#             curr_max_score = np.max(scores[-1])
-#             curr_min_score = np.min(scores[-1])
-#             min_score = (
-#                 curr_min_score
-#                 if curr_min_score < m.last_min_score
-#                 else m.last_min_score
-#             )
-#             max_score = (
-#                 curr_max_score
-#                 if curr_max_score > m.last_max_score
-#                 else m.last_max_score
-#             )
-#             gap = np.abs(curr_mean_score - m.last_mean_score)
-#             reliability = np.round(
-#                 np.exp(
-#                     -2
-#                     * gap
-#                     * gap
-#                     / (
-#                         (2 / self._batch_size)
-#                         * (max_score - min_score)
-#                         * (max_score - min_score)
-#                     )
-#                 ),
-#                 4,
-#             )
-#             self.model_reliabilities.append(reliability)
-
-#         curr_model_index = self.model_reliabilities.index(max(self.model_reliabilities))
-#         self.curr_model = self.model_pool[curr_model_index]
-
-#         weighted_scores = []
-#         for idx in range(len(self.model_pool)):
-#             weight = self.model_reliabilities[idx]
-#             weighted_scores.append(self._standardize_scores(scores[idx]) * weight)
-#         final_scores = np.sum(weighted_scores, axis=0)
-#         self.num_evaluated+=1
-#         return final_scores, threshold
-
-#     def train_step(self, X, preprocess=False):
-#         if preprocess:
-#             X = self.preprocess(X).float()
-            
-#         if self.drift:
-#             # Create new model
-#             new_model = self._model_generator.init_model()
-#             new_model.to(self.device)
-#             loss=self._train_model(new_model, X, self._init_epoch)
-#             self.model_pool.append(new_model)
-#             # Merge models
-#             self._reduce_models_last(X, 1)
-
-#         else:
-#             loss=self._train_model(self.curr_model, X, self._intm_epoch)
-            
-#         self.num_trained += 1
-        
-#         return np.mean(loss)
-
-#     def process(self, X):
-#         X_scaled = self.preprocess(X)
-
-#         final_scores, threshold = self.predict_step(X_scaled)
-        
-#         if final_scores is not None:
-#             self.loss_queue.extend(final_scores)
-
-#         # drift detection
-#         pool_reliability = 1 - np.prod([1 - p for p in self.model_reliabilities])
-
-#         self.drift=pool_reliability < self._reliability_thred
-
-#         self.train_step(X_scaled, False)
-        
-#         return {
-#             "drift_level": pool_reliability,
-#             "threshold": threshold,
-#             "score": final_scores,
-#             "batch_num": self.num_evaluated,
-#             "num_model": len(self.model_pool),
-#         }
 
 
 class ARCUS(BaseOnlineODModel):
@@ -518,8 +272,15 @@ class ARCUS(BaseOnlineODModel):
         confidence_driven_score=0
         self.product_rm=1
         max_reliability=-1
+        self.untrained_idx=None
+        
         for i, m in enumerate(self.model_pool):
             score, threshold=m.predict_step(X, preprocess=True)
+            
+            # Kitsune might return None when constructing feature mapper
+            if score is None:
+                self.untrained_idx=i
+                continue
             
             curr_mean_score = np.mean(score)
             curr_max_score = np.max(score)
@@ -554,8 +315,12 @@ class ARCUS(BaseOnlineODModel):
                 m.last_min_score=curr_min_score
                 reliability=1
             
+            # keep track of untrained index
+            if m.num_trained<m.warmup//10:
+                self.untrained_idx=i 
+                
             if max_reliability<reliability:
-                self.model_idx=i 
+                self.model_idx=i
                 max_reliability=reliability
                       
             self.product_rm*=(1-reliability)
@@ -564,9 +329,15 @@ class ARCUS(BaseOnlineODModel):
             confidence_driven_score+=reliability*(score-np.mean(score))/np.std(score)
         
         self.num_evaluated += 1
+
+        # all model return None
+        if max_reliability==-1:
+            return None, None
+        
         return confidence_driven_score, self.get_threshold()
     
     def train_step(self, X, preprocess=False):
+        self.num_trained+=1
         return self.model_pool[self.model_idx].train_step(X, preprocess=preprocess)
          
     
@@ -577,14 +348,27 @@ class ARCUS(BaseOnlineODModel):
         # reliability of model pool
         Rp=1-self.product_rm
         
+        #train if model is reliable or still in warmup stage
         if Rp>=self.reliability_thred:
             self.train_step(data, preprocess=True)
-        else:
+        
+        # if there are untrained model
+        elif self.untrained_idx is not None:
+            self.model_idx=self.untrained_idx
+            self.train_step(data, preprocess=True)
+        
+        # create new mdoel
+        else:    
             self.init_model()
             self.train_step(data, preprocess=True)
+        
+        # periodically clean
+        if self.num_trained%1000==0:
             self.reduce_model_pool(data)
         
-        self.loss_queue.append(confidence_driven_score)
+        if confidence_driven_score is not None:
+            self.loss_queue.append(np.mean(confidence_driven_score))
+            
         return {
             "drift_level": Rp,
             "threshold": threshold,
@@ -593,31 +377,46 @@ class ARCUS(BaseOnlineODModel):
             "model_batch_num": self.model_pool[self.model_idx].num_trained,
             "model_idx": self.model_idx,
             "num_model": len(self.model_pool),
+            "trained":True
         }
     
     def reduce_model_pool(self, data):
         
         latents = []
-        for m in self.model_pool:
+        # keep track of valid models
+        valid_models=[]
+        for i, m in enumerate(self.model_pool):
+            if m.num_trained<m.warmup:
+                continue 
             processed_data=m.preprocess(data)
             z, _ = m.forward(processed_data)
-            latents.append(z.numpy())
-
+            
+            # arcus only works with 1d latents, flatten if greater than 2d
+            if z.ndim >2:
+                z=z.reshape(z.size(0),-1)
+            latents.append(z.detach().cpu().numpy())
+            valid_models.append(i)
+        
+        if len(valid_models)<2:
+            return 
+        
         max_CKA = 0 
         max_Idx1 = None
-        for i, latent in enumerate(latents[:-1]):
+        for i, latent in zip(valid_models[:-1], latents[:-1]):
             CKA = linear_CKA(latent, latents[-1])
             if CKA > max_CKA:
                 max_CKA = CKA
                 max_Idx1 = i
 
-        if max_Idx1 != None and max_CKA >= self.similarity_thred:
-            self.model_pool[-1] = self.merge_models(max_Idx1, -1)
+        if max_Idx1 is not None and max_CKA >= self.similarity_thred:
+            self.model_pool[valid_models[-1]] = self.merge_models(max_Idx1, valid_models[-1])
             self.model_pool.pop(max_Idx1)
             
             # recursively remove
             if len(self.model_pool)>1:
                 self.reduce_model_pool(data)
+        
+        self.model_idx=-1
     
     def merge_models(self, idx1, idx2):
         model1=self.model_pool[idx1]
@@ -627,13 +426,13 @@ class ARCUS(BaseOnlineODModel):
         w1 = model1.num_trained / num_batch_sum
         w2 = model2.num_trained / num_batch_sum
         
-        merged_model = copy.deepcopy(model1)
+        # merged_model = copy.deepcopy(model1)
         
         with torch.no_grad():
-            for param1, param2, merged_param in zip(model1.parameters(), model2.parameters(), merged_model.parameters()):
-                merged_param.data.copy_(param1.data *w1 + param2.data *w2 )
+            for param1, param2 in zip(model1.parameters(), model2.parameters()):
+                param2.data.copy_(param1.data *w1 + param2.data *w2 )
         
-        return merged_model
+        return model2
         
     def init_model(self, context=None) -> BaseOnlineODModel:
         """creates a new model based on base model

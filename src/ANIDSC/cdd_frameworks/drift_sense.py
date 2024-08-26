@@ -10,7 +10,7 @@ from ANIDSC.base_files.pipeline import PipelineComponent
 
 class DriftSense(PipelineComponent):
     def __init__(
-        self, model: BaseOnlineODModel, patience: int, confidence: float, **kwargs
+        self, model: BaseOnlineODModel, patience: int=1000, confidence: float=50, **kwargs
     ):
         """A wrapper around baseline model to allow concept drift detection
 
@@ -65,7 +65,7 @@ class DriftSense(PipelineComponent):
             Dict[str, Any]: results of input
         """
         start_idx = self.model_idx
-
+        trained=False
         while True:
             score, threshold = self.model_pool[self.model_idx].predict_step(
                 data, preprocess=True
@@ -79,7 +79,7 @@ class DriftSense(PipelineComponent):
             ):
                 if score is not None:
                     self.model_pool[self.model_idx].loss_queue.extend(score)
-
+                trained=True
                 self.model_pool[self.model_idx].train_step(data, preprocess=True)
                 self.model_pool[self.model_idx].last_batch_num = self.num_trained
                 break
@@ -112,10 +112,10 @@ class DriftSense(PipelineComponent):
             diff_magnitude = (self.patience * difference**2) / (as_range**2)
 
             if diff_magnitude > self.confidence:
-                drift_level = "malicious"
+
                 self.clear_potential_queue()
             else:
-                drift_level = "benign"
+
                 if len(self.model_pool) == self.max_model_pool_size:
 
                     # remove last unused from model pool
@@ -138,7 +138,7 @@ class DriftSense(PipelineComponent):
 
                 for old_x in self.potential_x_queue:
                     new_model.train_step(old_x, preprocess=True)
-
+                trained=True
                 score, threshold = new_model.predict_step(data, preprocess=True)
                 new_model.loss_queue.extend(score)
 
@@ -147,23 +147,20 @@ class DriftSense(PipelineComponent):
 
                 self.clear_potential_queue()
                 self.update_queue(score, threshold, data)
-
-        elif len(self.loss_queue) != self.patience:
-            drift_level = "unfull loss queue"
         else:
-            drift_level = "no drift"
-
+            diff_magnitude=0
         if score is not None:
             self.loss_queue.extend(score)
 
         return {
-            "drift_level": drift_level,
+            "drift_level": diff_magnitude,
             "threshold": threshold,
             "score": score,
             "batch_num": self.num_trained,
             "model_batch_num": self.model_pool[self.model_idx].num_trained,
             "model_idx": self.model_idx,
             "num_model": len(self.model_pool),
+            "trained":trained
         }
 
 

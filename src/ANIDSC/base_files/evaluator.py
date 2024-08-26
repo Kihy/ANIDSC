@@ -215,7 +215,12 @@ class BaseEvaluator(PipelineComponent):
         context=self.get_context()
         if context.get('G',False) and self.draw_graph_rep_interval and results['batch_num']%self.draw_graph_rep_interval==0:
             G=context['G']
+            if results["score"] is None:
+                results['score']=[0. for _ in G.nodes()]
+                results['threshold']=0.
+            
             nx.set_node_attributes(G, { n: {"score": score} for n, score in zip(G.nodes(), results["score"]) })
+                
             G.graph["graph"]={'threshold':results["threshold"],
                               'protocol':context['protocol']}
             

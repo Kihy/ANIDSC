@@ -9,7 +9,7 @@ def step_given_summarizer(context, dataset):
     context.summarizer=summarizer 
 
 @given('a Summarizer initialized with dataset "{dataset}" and feature extractor AfterImageGraph and files')
-def step_given_summarizer(context, dataset):
+def step_given_graph_summarizer(context, dataset):
     files = [row['file'] for row in context.table]
     summarizer=BasicSummarizer([dataset], "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)", files, calc_f1=True, col="protocol")
 

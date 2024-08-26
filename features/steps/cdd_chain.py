@@ -1,33 +1,22 @@
 from behave import given, when, then
 
-from ANIDSC import models
-from ANIDSC.base_files.evaluator import BaseEvaluator
-from ANIDSC.models.autoencoder import AE
-from ANIDSC.normalizer.t_digest import LivePercentile
+from ANIDSC.templates import get_pipeline
 
-@given('a CDD NIDS model with {model_name}')
-def step_given_CDD_NIDS_model_with_AE(context, model_name):
-    if model_name=="KitNET":
-        preprocessors=[]
-    else:
-        preprocessors=["to_float_tensor", "to_device"]
-        
-    model = getattr(models, model_name)(
-        preprocessors=preprocessors
-    )
+@given('a {state} CDD pipeline with {cdd_framework} over {model_name}')
+def step_given_CDD_NIDS_model_with_AE(context, state, cdd_framework, model_name):
     
-    if model_name=="ARCUS":
-        cd_model=model 
-        context.model_name="ARCUS"
+    if state == "new":
+        load_existing=False 
     else:
-        cd_model=DriftSense(model, 1000, 50)
-        context.model_name=f"CDD({model_name})"
+        load_existing=[context.dataset, context.fe_name, context.benign_file]
+    
+    context.pipeline_components.append('cdd')
+    
+    context.pipeline = get_pipeline(
+        pipeline_components=context.pipeline_components,
+        pipeline_desc={"fe_cls": "AfterImage", "model_name": model_name,
+                       "cdd_framework":cdd_framework},
+        load_existing=load_existing
+    )
 
-    standardizer = LivePercentile()
-    evaluator = BaseEvaluator(
-        ["detection_rate", "median_score", "median_threshold"],
-        log_to_tensorboard=True,
-        save_results=True,
-    )
-    context.detection = standardizer | cd_model | evaluator
-    
+    context.model_name = model_name
