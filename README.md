@@ -9,9 +9,9 @@ run
 
 # Running the code
 The examples folder include example scripts to run this package
-feature_extraction.py shows how to extract features
-evaluate_models.py shows how to evaluate NIDS models
-generate_report.py contains functions to obtain summary
+adv_gen.py shows how to conduct adversarial attack, still under development
+live_detection.py shows how to create NIDS pipeline 
+summarize_results.py contains functions to plot the anomaly scores
 
 # extending the code
 To add a new feature extractor, inherit BaseTrafficFeatureExtractor from base_feature_extractor.py

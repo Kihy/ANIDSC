@@ -6,7 +6,12 @@ from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
-from scipy.stats import hmean    
+from scipy.stats import hmean   
+import networkx as nx 
+
+import scienceplots
+
+plt.style.use(["science", "ieee"])
 
 def find_name(names, value, abbrev=False):
     for i in names:
@@ -62,7 +67,7 @@ class BasicSummarizer:
         self.batch_size = 256
         
     def plot_scores(self, df, dataset, file, filename):
-        id_vars = ["index", self.col] if self.col else ["index"]
+        id_vars = ["index", self.col]
         
         # Sample data if it exceeds 1000 rows
         if len(df) > 1000:
@@ -71,6 +76,8 @@ class BasicSummarizer:
         # Define the variables and custom color palette
         value_vars = ["median_score", "median_threshold"]
         custom_palette = {"median_score": "#7FB7BE", "median_threshold": "#F25F5C"}
+        
+        df=df[df["protocol"]=="TCP"]
         
         # Melt the DataFrame
         df_melted = df.melt(id_vars=id_vars, value_vars=value_vars,
@@ -83,9 +90,11 @@ class BasicSummarizer:
             hue="variable",
             kind="line",
             data=df_melted,
-            aspect=2,
+            aspect=1.6,
+            height=2,
             col=self.col,
             palette=custom_palette,
+            legend=False,
             facet_kws={"sharey": False},
         )
         
@@ -117,11 +126,12 @@ class BasicSummarizer:
                 fill_quartiles(ax, col_data)
                 add_pool_size_spans(ax, col_data)
 
-        # Set y-axis to symmetrical logarithmic scale
-        g.set(yscale="symlog")
+        g.set(yscale="log")
+        g.set_axis_labels("Batch Number", "Anomaly Score")       
+        g.set_titles("")
         
         # Save the plot to the specified path
-        path = Path(f"{dataset}/{self.fe_name}/plots/{file}/{filename[:-4]}_scores.png")
+        path = Path(f"{dataset}/{self.fe_name}/plots/{file}/{filename[:-4]}_scores.pdf")
         path.parent.mkdir(exist_ok=True, parents=True)
         g.savefig(path)
         print(f"Score plot saved to {path}")
@@ -174,6 +184,9 @@ class BasicSummarizer:
                 df = pd.read_csv(f)
 
                 df.reset_index(inplace=True)
+                
+                if self.add_dummy_col:
+                    df["protocol"]="All"
 
                 self.plot_scores(df, dataset, file, filename)
                 self.plot_metrics(df, dataset, file, filename)
@@ -231,6 +244,9 @@ class BasicSummarizer:
                     df = pd.read_csv(f)
                     print(f"processing {f}")
                     
+                    if self.add_dummy_col:
+                        df["protocol"]="All"
+                    
                     # measure difference magnitude
                     prev_df=df.shift(1)
                     eps=df["median_score"]-prev_df["median_score"]
@@ -258,10 +274,7 @@ class BasicSummarizer:
                     
                     df = df.replace([np.inf, -np.inf], np.nan)
 
-                    if self.add_dummy_col:
-                        # add dummy column 
-                        df["protocol"]="All"
-                        
+                   
                     df_summary = df.groupby(self.col).agg(agg_funcs)
                     df_summary.reset_index(inplace=True)
                     # else:
@@ -326,6 +339,7 @@ class BasicSummarizer:
                         data["min_kl_div"].append(np.min(kl_divs)) 
                         
                         
+                        
                         data["hmean_1_acc"].append(
                             weighted_hmean(mean_ben, mean_mal, beta=1)
                         )
@@ -336,6 +350,7 @@ class BasicSummarizer:
                             weighted_hmean(mean_ben, mean_mal, beta=2)
                         )
                         data["time"].append(group["time_mean"].median())
+                        data["threshold"].append(group["median_threshold_mean"].median())
                         
                 
                 for (pipeline, col), group in all_df.groupby(
@@ -383,6 +398,7 @@ class BasicSummarizer:
                         weighted_hmean(mean_ben, mean_mal, beta=2)
                     )
                     data["time"].append(group["time_mean"].median())
+                    data["threshold"].append(group["median_threshold_mean"].median())
 
                 summary_df = pd.DataFrame(data)
 

@@ -79,7 +79,7 @@ def fig_to_array(fig):
     data = data.reshape(fig.canvas.get_width_height()[::-1] + (3,))
     return data.transpose(2, 0, 1)  # Convert to [C, H, W] format
 
-def draw_graph(G, fig, ax, threshold, node_as, relative_as, title, mac_to_device_map, idx_to_mac_map):
+def draw_graph(G, fig, ax, threshold, node_as, relative_as, title, mac_to_device_map, idx_to_mac_map, cmap=plt.cm.Blues):
     # convert attributes
     for node, attrs in G.nodes(data=True):
         for attr in attrs:
@@ -90,7 +90,7 @@ def draw_graph(G, fig, ax, threshold, node_as, relative_as, title, mac_to_device
     
     pos=nx.circular_layout(G)
     
-    ax.margins(x=0.2, y=0.2)
+    ax.margins(x=0.2, y=0.3)
     ax.set_title(title)
 
     if relative_as:
@@ -106,7 +106,7 @@ def draw_graph(G, fig, ax, threshold, node_as, relative_as, title, mac_to_device
 
         node_sm = ScalarMappable(
             norm=Normalize(vmin=min(0,np.min(node_as)), vmax=np.max(node_as)),
-            cmap=plt.cm.Blues,
+            cmap=cmap,
         )
 
     nx.draw_networkx_nodes(
@@ -135,16 +135,25 @@ def draw_graph(G, fig, ax, threshold, node_as, relative_as, title, mac_to_device
             idx_to_mac_map.get(label, label), idx_to_mac_map.get(label, label)
         )
 
-        node_label="\n".join(textwrap.wrap(str(node_label), width=8))
-        fc = "red" if G.nodes[node]["updated"] else "white"
+        # node_label="\n".join(textwrap.wrap(str(node_label), width=16))
+        
+        
+        fc = "white" if G.nodes[node]["updated"] else "green"
+        
+        if pos[node][1]>0.5:
+            direction=1
+        else:
+            direction=-1
+        
         text = ax.text(
             pos[node][0],
-            pos[node][1],
+            pos[node][1]+0.35*direction,
             s=node_label,
             fontsize=8,
             ha="center",
             va="center",
-            bbox={"ec": "k", "fc": fc, "alpha": 0.7},
+            fontweight=700,
+            bbox={"ec": "k", "fc": fc, "alpha": 0.5},
             wrap=True
         )
         texts.append(text)
@@ -156,13 +165,6 @@ def draw_graph(G, fig, ax, threshold, node_as, relative_as, title, mac_to_device
     ax.set_yticks([])
     ax.set_xticks([])
     
-    # Adjust the text to avoid overlap
-    # adjust_text(
-    #     texts,
-    #     only_move={"points": "xy", "texts": "xy"},
-    #     autoalign="xy",
-    #     ax=ax,
-    # )
 
     node_cbar = fig.colorbar(node_sm, location="right", ax=ax)
     node_cbar.ax.set_ylabel("Node Anomaly Score", rotation=90)

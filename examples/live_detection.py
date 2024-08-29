@@ -142,14 +142,18 @@ def uq_benign_boxplot():
     evaluator = BaseEvaluator(
         [
             "detection_rate",
-            "median_score",
-            "median_threshold",
-            "pos_count",
-            "batch_size",
+    "lower_quartile_score",
+    "upper_quartile_score",
+    "soft_min_score",
+    "soft_max_score",
+    "median_score",
+    "median_threshold",
+    "pos_count",
+    "batch_size",
         ],
         log_to_tensorboard=True,
         save_results=True,
-        draw_graph_rep_interval=100,
+        draw_graph_rep_interval=0,
     )
 
     dataset_name = "../datasets/UQ_IoT_IDS21"
@@ -174,14 +178,18 @@ def uq_malicious_boxplot():
     evaluator = BaseEvaluator(
         [
             "detection_rate",
-            "median_score",
-            "median_threshold",
-            "pos_count",
-            "batch_size",
+    "lower_quartile_score",
+    "upper_quartile_score",
+    "soft_min_score",
+    "soft_max_score",
+    "median_score",
+    "median_threshold",
+    "pos_count",
+    "batch_size",
         ],
         log_to_tensorboard=True,
         save_results=True,
-        draw_graph_rep_interval=100,
+        draw_graph_rep_interval=0,
     )
 
     attacks = [
@@ -228,33 +236,33 @@ if __name__ == "__main__":
 
 
     # evaluate models
-    model_names = ["AE", "VAE", "GOAD", "ICL", "Kitsune", "SLAD"] 
+    model_names = ["AE"] #"VAE", "GOAD", "ICL", "Kitsune", "SLAD"
     
     # #vanilla models 
-    # with warnings.catch_warnings():
-    #     warnings.filterwarnings("error", category=RuntimeWarning)
-    #     for model_name in model_names:
-            
-    #         pipeline_desc={"fe_cls": "AfterImage", "model_name": model_name}
-    #         uq_benign(pipeline_desc, pipeline_componenets=["detection"])
-    #         uq_malicious(pipeline_desc,pipeline_componenets=["detection"])
-
-    # # graph models
-    node_encoders = ["LinearNodeEncoder","GCNNodeEncoder", "GATNodeEncoder"] #"LinearNodeEncoder",
-    distribution = "log-normal"
-
     with warnings.catch_warnings():
         warnings.filterwarnings("error", category=RuntimeWarning)
-        for node_encoder, model_name in itertools.product(node_encoders, model_names):
-            if not (node_encoder=="LinearNodeEncoder" and model_name != "SLAD"):
-                continue 
-            pipeline_desc={"fe_cls": "AfterImageGraph", 
-                            "model_name": model_name,
-                       "node_encoder":node_encoder,
-                       "distribution":distribution}
+        for model_name in model_names:
             
-            uq_benign(pipeline_desc)
-            uq_malicious(pipeline_desc)
+            pipeline_desc={"fe_cls": "AfterImage", "model_name": model_name}
+            uq_benign(pipeline_desc, pipeline_componenets=["detection"])
+            uq_malicious(pipeline_desc,pipeline_componenets=["detection"])
+
+    # # graph models
+    # node_encoders = ["LinearNodeEncoder","GCNNodeEncoder", "GATNodeEncoder"] #"LinearNodeEncoder",
+    # distribution = "log-normal"
+
+    # with warnings.catch_warnings():
+    #     warnings.filterwarnings("error", category=RuntimeWarning)
+    #     for node_encoder, model_name in itertools.product(node_encoders, model_names):
+    #         if not (node_encoder=="LinearNodeEncoder" and model_name != "SLAD"):
+    #             continue 
+    #         pipeline_desc={"fe_cls": "AfterImageGraph", 
+    #                         "model_name": model_name,
+    #                    "node_encoder":node_encoder,
+    #                    "distribution":distribution}
+            
+    #         uq_benign(pipeline_desc)
+    #         uq_malicious(pipeline_desc)
 
     # # concept drift models
     # cdd=["DriftSense"] #"ARCUS",

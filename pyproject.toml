@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "ANIDSC"
-version = "0.0.1"
+version = "0.1.0"
 authors = [
-  { name="Ke He", email="khe429@aucklanduni.ac.nz" },
+  { name="Ke He", email="kh695640204@gmail.com" },
 ]
 description = "Adversarial testing framework for NIDS"
 readme = "README.md"
