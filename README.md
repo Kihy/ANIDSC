@@ -18,6 +18,8 @@ go to code folder
 `cd /workspace/ANIDSC`
 and add code there.
 
+The ANIDSC package should already be installed, just need to import.
+
 # Running the code
 The examples folder include example scripts to run this package:
 * adv_gen.py shows how to conduct adversarial attack, still under development
