@@ -19,7 +19,7 @@ def uq_feature_extraction(fe_type="vanilla"):
     
     offline_reader = PacketReader(dataset_name, benign_file)
     
-    pipeline=get_pipeline(None, ["fe", fe_type])
+    pipeline=get_pipeline(["feature_extraction"], {"fe_cls":"AfterImage"})
     offline_reader >> pipeline
     offline_reader.start()
 
@@ -53,7 +53,7 @@ def uq_feature_extraction(fe_type="vanilla"):
         else:
             fe_name = "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
         
-        pipeline=get_pipeline(None, ["fe", fe_type], load_existing=[dataset_name, fe_name, benign_file])
+        pipeline=get_pipeline(["feature_extraction"], {"fe_cls":"AfterImage"}, load_existing=[dataset_name, fe_name, benign_file])
         offline_reader >> pipeline
         offline_reader.start()
 

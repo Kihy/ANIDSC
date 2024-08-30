@@ -1,2 +1,2 @@
-docker run --gpus all -it --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --rm -v "D:\ANIDSC":/workspace/ANIDSC -v "D:\datasets":/workspace/datasets -v "D:\models":/workspace/models kihy/nids_framework
+docker run --gpus all -it --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --rm -v "D:\ANIDSC":/workspace/ANIDSC -v "D:\datasets":/workspace/datasets -v kihy/nids_framework
 
