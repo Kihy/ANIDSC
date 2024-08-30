@@ -14,6 +14,8 @@ install docker
 run
 `docker run --gpus all -it --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --rm -v "path/to/this/folder":/workspace/ANIDSC -v "path/to/datasets":/workspace/datasets kihy/nids_framework`
 
+if gpu is not set up you can remove --gpus all 
+
 go to code folder 
 `cd /workspace/ANIDSC`
 and add code there.
