@@ -2,7 +2,7 @@ import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster, to_tree
 from scipy.stats import norm
 
-from ANIDSC.base_files.model import BaseOnlineODModel
+from ANIDSC.models.base_model import BaseOnlineODModel
 
 
 np.seterr(all="ignore")
@@ -60,9 +60,7 @@ class KitNET(BaseOnlineODModel):
         self.num_trained+=1
         
         # update scaler
-        context=self.get_context()
-        if "scaler" in context.keys():
-            context["scaler"].update_current()
+        
         
         return np.array(loss) 
     

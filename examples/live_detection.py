@@ -4,15 +4,17 @@ import torch
 
 
 from ANIDSC import cdd_frameworks, models
-from ANIDSC.data_source import LiveSniffer, PacketReader, CSVReader
-from ANIDSC.base_files import Processor, FeatureBuffer
+from ANIDSC.data_sources import LiveSniffer, PacketReader, CSVReader
+
 from ANIDSC.feature_extractors import AfterImageGraph, AfterImage, FrequencyExtractor
-from ANIDSC.base_files import BaseEvaluator
+from ANIDSC.evaluations import BaseEvaluator
 
 import warnings
 from ANIDSC.templates import get_pipeline
 
 def uq_feature_extraction(fe_type="vanilla"):
+
+    
     # benign
     dataset_name = "../datasets/UQ_IoT_IDS21"
     benign_file = "benign/whole_week"
@@ -43,16 +45,14 @@ def uq_feature_extraction(fe_type="vanilla"):
         "Smartphone_2",
     ]
 
+    if fe_type=="vanilla":
+        fe_name="AfterImage"
+    else:
+        fe_name = "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
+    
     for d, a in itertools.product(devices, attacks):
         file_name = f"malicious/{d}/{a}"
-        
         offline_reader = PacketReader(dataset_name, file_name)
-
-        if fe_type=="vanilla":
-            fe_name="AfterImage"
-        else:
-            fe_name = "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
-        
         pipeline=get_pipeline(["feature_extraction"], {"fe_cls":"AfterImage"}, load_existing=[dataset_name, fe_name, benign_file])
         offline_reader >> pipeline
         offline_reader.start()

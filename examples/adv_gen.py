@@ -1,8 +1,8 @@
 from ANIDSC import models
 from ANIDSC.adversarial_attacks.liuer_mihou import LiuerMihouAttack, PcapSaver
-from ANIDSC.base_files.evaluator import BaseEvaluator
-from ANIDSC.base_files.feature_extractor import FeatureBuffer
-from ANIDSC.data_source.offline_sources import PacketReader
+from ANIDSC.evaluations.evaluator import BaseEvaluator
+from ANIDSC.feature_extractors.feature_extractor import TabularFeatureBuffer
+from ANIDSC.data_sources.offline_sources import PacketReader
 from ANIDSC.feature_extractors.after_image import AfterImage
 from ANIDSC.normalizer.t_digest import LivePercentile
 
@@ -35,7 +35,7 @@ if __name__=="__main__":
             "scalers", dataset_name, fe_name, benign_file, "LivePercentile"
     )
     
-    feature_buffer = FeatureBuffer(buffer_size=256)
+    feature_buffer = TabularFeatureBuffer(buffer_size=256)
     
     pcap_saver=PcapSaver()
     

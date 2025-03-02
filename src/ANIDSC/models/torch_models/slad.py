@@ -1,21 +1,18 @@
-from deepod.core.networks.base_networks import MLPnet, LinearBlock
 import numpy as np
 import torch.nn.functional as F
 import torch
 
-from ANIDSC.base_files.model import BaseOnlineODModel
+from .base_torch_model import BaseTorchModel
 
+from .base_networks import MLPnet, LinearBlock
 
-
-class SLAD(BaseOnlineODModel,torch.nn.Module):
+class SLAD(BaseTorchModel):
     """
     Fascinating Supervisory Signals and Where to Find Them:
     Deep Anomaly Detection with Scale Learning (ICML'23)
     """
-    def __init__(self, **kwargs):
+    def __init__(self,*args, **kwargs):
         
-        BaseOnlineODModel.__init__(self, **kwargs)
-        torch.nn.Module.__init__(self)
         
         self.hidden_dims = 8
         self.distribution_size = 10
@@ -30,11 +27,12 @@ class SLAD(BaseOnlineODModel,torch.nn.Module):
 
         self.affine_network_lst = {}
         self.subspace_indices_lst = []
+        super().__init__(*args, **kwargs)
 
-    def init_model(self, context):
-        self.f_weight = torch.ones(context["output_features"])
+    def init_model(self):
+        self.f_weight = torch.ones(self.context["output_features"])
         
-        self.max_subspace_len = context["output_features"]
+        self.max_subspace_len = self.context["output_features"]
 
         if self.subspace_pool_size is None:
             self.subspace_pool_size = min(self.max_subspace_len, 256)
@@ -71,9 +69,9 @@ class SLAD(BaseOnlineODModel,torch.nn.Module):
         # random transformations to transform data
         rng = np.random.RandomState()
         for i in range(self.n_slad_ensemble):
-            replace = True if context["output_features"] <= 10 else False
+            replace = True if self.context["output_features"] <= 10 else False
             subspace_indices = [
-                rng.choice(np.arange(context["output_features"]), rng.choice(self.len_pool, 1), replace=replace)
+                rng.choice(np.arange(self.context["output_features"]), rng.choice(self.len_pool, 1), replace=replace)
                 for _ in range(self.distribution_size)
             ]
             self.subspace_indices_lst.append(subspace_indices)

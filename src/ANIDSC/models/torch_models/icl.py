@@ -1,55 +1,54 @@
 import torch.nn.functional as F
 import torch
 import numpy as np
-from deepod.core.networks.base_networks import MLPnet
+from .base_networks import MLPnet
+from .base_torch_model import BaseTorchModel
 
-from ANIDSC.base_files.model import BaseOnlineODModel
 
-
-class ICL(BaseOnlineODModel,torch.nn.Module):
+class ICL(BaseTorchModel):
     """
     Anomaly Detection for Tabular Data with Internal Contrastive Learning
      (ICLR'22)
     """
     
-    def __init__(self, **kwargs):
-        
-        BaseOnlineODModel.__init__(self, **kwargs)
-        torch.nn.Module.__init__(self)
-
+    def __init__(self, *args, **kwargs):
         self.hidden_dims = '16,4'
         self.rep_dim = 32
 
         
         self.tau = 0.01
         self.max_negatives = 1000
+        
+        super().__init__(*args, **kwargs)
 
         
-
-    def init_model(self, context):
-        if context['output_features'] <= 40:
+    def init_model(self):
+    
+        if self.context['output_features'] <= 40:
             self.kernel_size = 2
-        elif 40 < context['output_features'] <= 160:
+        elif 40 < self.context['output_features'] <= 160:
             self.kernel_size = 10
 
-        elif 160 < context['output_features'] <= 240:
-            self.kernel_size = context['output_features'] - 150
-        elif 240 < context['output_features'] <= 480:
-            self.kernel_size = context['output_features'] - 200
+        elif 160 < self.context['output_features'] <= 240:
+            self.kernel_size = self.context['output_features'] - 150
+        elif 240 < self.context['output_features'] <= 480:
+            self.kernel_size = self.context['output_features'] - 200
         else:
-            self.kernel_size = context['output_features'] - 400
+            self.kernel_size = self.context['output_features'] - 400
 
-        if context['output_features'] < 3:
+        if self.context['output_features'] < 3:
             raise ValueError('ICL model cannot handle the data that have less than three features.')
 
         self.net = ICLNet(
-            n_features=context['output_features'],
+            n_features=self.context['output_features'],
             kernel_size=self.kernel_size,
             hidden_dims=self.hidden_dims,
             rep_dim=self.rep_dim,
             activation='LeakyReLU',
             bias=False
         ).to(self.device)
+        
+        
 
         self.criterion = torch.nn.CrossEntropyLoss(reduction='none')
         
@@ -57,6 +56,9 @@ class ICL(BaseOnlineODModel,torch.nn.Module):
                                             lr=1e-3,
                                             weight_decay=1e-5)
     
+     
+        
+        
     def forward(self, X, inference=False):
         
         positives, query = self.net(X)

@@ -6,8 +6,8 @@ import numpy as np
 import torch
 import torch.nn as nn
 from scipy.cluster.hierarchy import ClusterNode, linkage, to_tree
+from .base_torch_model import BaseTorchModel
 
-from ANIDSC.base_files.model import BaseOnlineODModel
 
 
 class FeatureMapper:
@@ -252,25 +252,26 @@ class RMSELoss(torch.nn.Module):
         return torch.sqrt(self.criterion(inputs, targets) + 1e-7)
 
 
-class Kitsune(BaseOnlineODModel, nn.Module):
+class Kitsune(BaseTorchModel):
 
-    def __init__(self, **kwargs) -> None:
-        BaseOnlineODModel.__init__(self, **kwargs)
-        nn.Module.__init__(self)
-
+    def __init__(self, *args, **kwargs) -> None:
         self.compression_rate = 0.75
         self.dropout_rate = 0
         self.max_features_per_cluster = 10
         self.grace_period=40
-        self.mse = RMSELoss(reduction="none")
+        
         self.optimizer=None
+        self.head = None
+        
+        super().__init__(*args, **kwargs)
         
 
-    def init_model(self, context):
+    def init_model(self):
         self.fm = FeatureMapper(
-            context["output_features"], self.max_features_per_cluster
+            self.context["output_features"], self.max_features_per_cluster
         , self.grace_period)
-        self.head = None
+
+        self.mse = RMSELoss(reduction="none")
 
     def _build_tails(
         self, compression_rate: float, dropout_rate: float
@@ -295,7 +296,6 @@ class Kitsune(BaseOnlineODModel, nn.Module):
             if not inference:
                 self.fm.parital_fit(x)
                 
-                
             return None, None
         else:
             if self.head is None:
@@ -312,7 +312,7 @@ class Kitsune(BaseOnlineODModel, nn.Module):
         
         tails_losses = torch.empty(x.shape[0], len(self.tails), device=self.device)
         for i, (feat, tail) in enumerate(zip(split_feat, self.tails)):
-            feat = self.to_device(self.to_float_tensor(feat))
+            feat = self.to_device(self.to_tensor(feat))
         
             reconstructed_feat = tail(feat)
             tails_losses[:, i] = self.mse(reconstructed_feat, feat).mean(-1)

@@ -6,9 +6,10 @@ from socket import getservbyport
 from itertools import product
 from typing import List, Dict, Any
 from numpy.typing import NDArray
-from ..base_files import PickleSaveMixin, BaseTrafficFeatureExtractor
+from .feature_extractor import BaseTrafficFeatureExtractor
+from ..save_mixin.pickle import PickleSaveMixin
 
-class AfterImage(BaseTrafficFeatureExtractor, PickleSaveMixin):
+class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
     def __init__(self, decay_factors:List[float]=[5, 3, 1, 0.1, 0.01], **kwargs):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
@@ -515,7 +516,7 @@ class IncStat1D:
         self.last_timestamp = t
             
 
-    def decay(self, decay_factors:NDArray[np.float_], t:float):
+    def decay(self, decay_factors:NDArray[np.float64], t:float):
         """decays the incremental statistics according to t
 
         Args:
@@ -527,7 +528,7 @@ class IncStat1D:
             factor = 2.0 ** (-decay_factors * time_diff)
             self.incremental_statistics *= factor
 
-    def is_outdated(self, decay_factors:NDArray[np.float_], t:float):
+    def is_outdated(self, decay_factors:NDArray[np.float64], t:float):
         """checks if incstat is outdated.
         if the weights in all time windows are lower than the weight threshold after
         decaying the record, return True
@@ -633,7 +634,7 @@ class IncStat2D:
             )
             self.last_timestamp = t
 
-    def decay(self,decay_factors:NDArray[np.float_], t:float):
+    def decay(self,decay_factors:NDArray[np.float64], t:float):
         """decays the residual product. ignores if time diff is negative
 
         Args:

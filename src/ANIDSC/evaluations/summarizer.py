@@ -2,11 +2,13 @@ from collections import defaultdict
 from itertools import product
 import os
 from pathlib import Path
+import matplotlib
+matplotlib.use('Agg')
 from matplotlib import pyplot as plt
 import pandas as pd
 import numpy as np
 import seaborn as sns
-from scipy.stats import hmean   
+
 import networkx as nx 
 
 import scienceplots
@@ -60,14 +62,14 @@ class BasicSummarizer:
         self.calc_f1 = calc_f1
         self.col = col
         if self.col is None:
+            
             self.add_dummy_col=True 
-            self.col="protocol"
         else:
             self.add_dummy_col=False
         self.batch_size = 256
         
     def plot_scores(self, df, dataset, file, filename):
-        id_vars = ["index", self.col]
+        id_vars = ["index"]
         
         # Sample data if it exceeds 1000 rows
         if len(df) > 1000:
@@ -77,7 +79,7 @@ class BasicSummarizer:
         value_vars = ["median_score", "median_threshold"]
         custom_palette = {"median_score": "#7FB7BE", "median_threshold": "#F25F5C"}
         
-        df=df[df["protocol"]=="TCP"]
+        
         
         # Melt the DataFrame
         df_melted = df.melt(id_vars=id_vars, value_vars=value_vars,
@@ -233,6 +235,7 @@ class BasicSummarizer:
         )
 
     def gen_summary(self):
+        self.col="protocol"
         for dataset in self.datasets:
             dataframes = []
 
@@ -275,7 +278,7 @@ class BasicSummarizer:
                     df = df.replace([np.inf, -np.inf], np.nan)
 
                    
-                    df_summary = df.groupby(self.col).agg(agg_funcs)
+                    df_summary = df.groupby(by=self.col).agg(agg_funcs)
                     df_summary.reset_index(inplace=True)
                     # else:
                     #     df_summary = pd.DataFrame(df.agg(agg_funcs)).T

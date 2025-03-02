@@ -1,24 +1,27 @@
 from behave import given, when, then
 from ANIDSC import models
-from ANIDSC.base_files.evaluator import BaseEvaluator
-from ANIDSC.base_files.feature_extractor import FeatureBuffer
+from ANIDSC.evaluations.evaluator import BaseEvaluator
+from ANIDSC.feature_buffers.tabular import TabularFeatureBuffer
 
 
-from ANIDSC.data_source.offline_sources import CSVReader, PacketReader
-from ANIDSC.feature_extractors import FrequencyExtractor
+from ANIDSC.data_sources.offline_sources import CSVReader, PacketReader
+from ANIDSC.feature_extractors.after_image import AfterImage
+from ANIDSC.feature_extractors.frequency import FrequencyExtractor
 
 from shutil import rmtree
 import os
 import glob
-from ANIDSC.templates import get_pipeline, METRICS
+from ANIDSC.models.base_model import BaseOnlineODModel
+from ANIDSC.normalizer.t_digest import LivePercentile
+from ANIDSC.templates import METRICS
 
 
 @given('a PacketReader initialized with dataset "{dataset}" and {file}')
 def step_given_packet_reader(context, dataset, file):
     # limit to 5e5 so it doesnt take too long
-    context.data_source = PacketReader(dataset, file, max_pkts=1e5)
+    context.data_source = PacketReader(dataset, file, max_records=1e5)
     context.dataset = dataset
-    context.file = file
+    context.file_name = file
 
 
 
@@ -27,7 +30,7 @@ def step_given_packet_reader(context, dataset, file):
 def step_given_feature_extraction_with_frequency_analysis(context):
     feature_extractor = FrequencyExtractor()
     context.fe_name = "FrequencyExtractor"
-    feature_buffer = FeatureBuffer(buffer_size=256)
+    feature_buffer = TabularFeatureBuffer(buffer_size=256)
     context.pipeline = feature_extractor | feature_buffer
 
 
@@ -60,13 +63,13 @@ def step_given_output_folder_is_empty(context):
 
 
 @given(
-    'a csv file initialized with dataset "{dataset}", file "{file}", and feature extractor AfterImage'
+    'a csv file initialized with dataset "{dataset}", file "{file_name}", and feature extractor AfterImage'
 )
-def step_given_csv_file(context, dataset, file):
+def step_given_csv_file(context, dataset, file_name):
     fe_name = "AfterImage"
-    context.data_source = CSVReader(dataset, fe_name, fe_name, file)
+    context.data_source = CSVReader(fe_name, fe_name, dataset_name=dataset, file_name=file_name)
     context.dataset = dataset
-    context.file = file
+    context.file_name = file_name
     context.fe_name = fe_name
     context.pipeline_components = ["detection"]
     context.benign_file="benign_lenovo_bulb"
@@ -74,15 +77,21 @@ def step_given_csv_file(context, dataset, file):
 @given("a {state} basic pipeline with {model_name}")
 def step_given_basic_NIDS_model_with_AE(context,state, model_name):
     if state == "new":
-        load_existing=False 
+        scaler=LivePercentile()
+        detector=BaseOnlineODModel(f"ANIDSC.models.{model_name}")
+        evaluator=BaseEvaluator(METRICS)
+        
+        context.pipeline = scaler|detector|evaluator
     else:
-        load_existing=[context.dataset, context.fe_name, context.benign_file]
+        scaler=LivePercentile.load(context.dataset, context.fe_name, context.benign_file, "LivePercentile")
+        detector=BaseOnlineODModel.load(context.dataset, context.fe_name, context.benign_file, "BaseOnlineODModel")
+        evaluator=BaseEvaluator(METRICS)
+        
+        context.pipeline = scaler|detector|evaluator
     
-    context.pipeline = get_pipeline(
-        pipeline_components=context.pipeline_components,
-        pipeline_desc={"fe_cls": "AfterImage", "model_name": model_name},
-        load_existing=load_existing
-    )
+    
+
+    
 
     context.model_name = model_name
 
@@ -102,33 +111,33 @@ def step_then_data_processed_correctly(context):
 @then("the components are saved")
 def step_then_components_are_saved(context):
     for component in context.pipeline.components:
-        print(component)
+        print("checking:", component)
         if component.component_type != "":
-            path = f"{context.dataset}/{context.fe_name}/{component.component_type}/{context.file}/{component.name}.pkl"
+            path = f"{context.dataset}/{context.fe_name}/{component.component_type}/{context.file_name}/{component.component_name}.pkl"
             assert glob.glob(path)
 
-            loaded_component = component.__class__.load_pickle(
+            loaded_component = component.__class__.load(
                 component.component_type,
                 context.dataset,
                 context.fe_name,
-                context.file,
-                component.name,
+                context.file_name,
+                component.component_name,
             )
-            assert str(loaded_component) == str(component)
+            assert loaded_component == component
 
 
 @then("the results are logged")
 def step_then_results_logged(context):
-    feature_path = f"{context.dataset}/{context.fe_name}/features/{context.file}.csv"
+    feature_path = f"{context.dataset}/{context.fe_name}/features/{context.file_name}.csv"
     assert os.path.isfile(feature_path)
 
-    meta_path = f"{context.dataset}/{context.fe_name}/metadata/{context.file}.csv"
+    meta_path = f"{context.dataset}/{context.fe_name}/metadata/{context.file_name}.csv"
     assert os.path.isfile(meta_path)
 
-    result_path = f"{context.dataset}/{context.fe_name}/results/{context.file}/{context.pipeline}.csv"
+    result_path = f"{context.dataset}/{context.fe_name}/results/{context.file_name}/{context.pipeline}.csv"
     assert os.path.isfile(result_path)
 
     tensorboard_path = (
-        f"{context.dataset}/{context.fe_name}/runs/{context.file}/{context.pipeline}"
+        f"{context.dataset}/{context.fe_name}/runs/{context.file_name}/{context.pipeline}"
     )
     assert os.path.isdir(tensorboard_path)

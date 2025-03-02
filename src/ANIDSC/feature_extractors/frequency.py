@@ -1,7 +1,7 @@
 from collections import deque
 
 import numpy as np
-from ..base_files import BaseTrafficFeatureExtractor
+from .feature_extractor import BaseTrafficFeatureExtractor
 
 class FrequencyState:
     def __init__(self, time_window):

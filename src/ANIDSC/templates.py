@@ -1,6 +1,7 @@
 
+from .feature_buffers.tabular import TabularFeatureBuffer
 from . import cdd_frameworks, models, feature_extractors
-from .base_files import BaseEvaluator, CollateEvaluator, FeatureBuffer, MultilayerSplitter
+from .evaluations import BaseEvaluator, CollateEvaluator, MultilayerSplitter
 
 from .models.gnnids import HomoGraphRepresentation, NodeEncoderWrapper
 from .normalizer import LivePercentile
@@ -38,7 +39,7 @@ def get_pipeline(
     if "feature_extraction" in pipeline_components:
         extractor_class = getattr(feature_extractors, pipeline_desc["fe_cls"])
         feature_extractor = load_or_create(extractor_class, "feature_extractors")
-        feature_buffer = FeatureBuffer(buffer_size=256)
+        feature_buffer = TabularFeatureBuffer(buffer_size=256, save_meta=False)
         pipeline = feature_extractor | feature_buffer
     else:
         pipeline = None

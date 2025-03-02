@@ -1,20 +1,16 @@
-import json
-from pathlib import Path
-from io import TextIOWrapper
+
+
 import numpy as np 
 import torch 
-import pickle
+
 import scipy
-from pytdigest import TDigest
-from abc import ABC, abstractmethod
+
 import pandas as pd
 import networkx as nx
 from matplotlib.cm import ScalarMappable
 from matplotlib.colors import Normalize, TwoSlopeNorm
-import os
-from adjustText import adjust_text
-import textwrap
-from datetime import datetime, timedelta, time
+
+from datetime import datetime
 import pytz
 import matplotlib.pyplot as plt
 import matplotlib
@@ -173,33 +169,7 @@ def draw_graph(G, fig, ax, threshold, node_as, relative_as, title, mac_to_device
         node_cbar.ax.axhline(threshold, c='r')
 
 
-def calc_quantile(x, p, dist="lognorm"):
-    if dist=="lognorm":
-        eps=1e-6
-        x=np.log(np.array(x)+eps)
-        mean=np.mean(x) 
-        std=np.std(x)
-        quantile=np.exp(mean+np.sqrt(2)*std*scipy.special.erfinv(2*p-1))
-    elif dist=="norm":
-        mean=np.mean(x) 
-        std=np.std(x)
-        quantile=mean+np.sqrt(2)*std*scipy.special.erfinv(2*p-1)
-        
-        
-    return quantile
 
-def is_stable(x, p=0.95, return_quantile=False):
-    if len(x)!=x.maxlen:
-        stability=False
-        quantile=0.
-    else:
-        quantile=calc_quantile(x, p)
-        stability=np.mean(np.array(x)<quantile)<p
-        
-    if return_quantile:
-        return stability, quantile
-    else:
-        return stability
 
 def uniqueXT(x, sorted=True, return_index=False, return_inverse=False, return_counts=False,
              occur_last=False, dim=None):

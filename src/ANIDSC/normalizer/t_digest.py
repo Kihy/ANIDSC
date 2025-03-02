@@ -1,11 +1,13 @@
 from typing import List
-from ..base_files import BaseOnlineNormalizer
+
+from ..save_mixin.pickle import PickleSaveMixin
+from .normalizer import BaseOnlineNormalizer
 from pytdigest import TDigest
 import numpy as np
 
 
 
-class LivePercentile(BaseOnlineNormalizer):
+class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
     def __init__(self, p:List[float]=[0.25, 0.5, 0.75],  **kwargs):
         """normalizes input with percentile calculations with tdigest
 
@@ -16,12 +18,17 @@ class LivePercentile(BaseOnlineNormalizer):
         self.p = p
         self.count = 0
         self.dims=[]
+        self.preprocessors=[self.to_numpy]
         
-        self.current_X=None
+        
+
+    def to_numpy(self,X):
+        return np.array(X)
+        
         
     def setup(self):
         super().setup()
-        self.parent.context["scaler"]=self
+        self.context["scaler"]=self
         if not self.loaded_from_file:
             self.dims=[TDigest() for _ in range(self.ndim-self.skip)]
     
@@ -29,15 +36,18 @@ class LivePercentile(BaseOnlineNormalizer):
         super().teardown()
         
 
-    def add(self, X):
+    def update(self, X):
         """Adds another datum"""
         
         for i, n in enumerate(X.T):
             self.dims[i].update(n)
 
         self.count += 1
+        
+    
 
     def process(self, X):
+        self.current_batch=X
         percentiles = self.quantiles()
 
         no_scale=X[:,:self.skip]
@@ -51,13 +61,8 @@ class LivePercentile(BaseOnlineNormalizer):
             scaled_features, nan=0.0, posinf=0.0, neginf=0.0
         )
 
-        self.current_X=scale 
-
         return np.hstack((no_scale, scaled_features))
 
-    def update_current(self):
-        self.add(self.current_X)
-    
     def reset(self):
         self.dims = [TDigest() for _ in range(self.ndim-self.skip)]
         self.count = 0

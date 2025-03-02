@@ -4,8 +4,8 @@ import copy
 from typing import Any, Dict, List
 
 import numpy as np
-from ANIDSC.base_files.model import BaseOnlineODModel
-from ANIDSC.base_files.pipeline import PipelineComponent
+from ANIDSC.models.base_model import BaseOnlineODModel
+from ..components.pipeline_component import PipelineComponent
 
 
 class DriftSense(PipelineComponent):

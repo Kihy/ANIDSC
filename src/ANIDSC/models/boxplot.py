@@ -1,5 +1,5 @@
 import numpy as np
-from ..base_files import BaseOnlineODModel
+from ..evaluations import BaseOnlineODModel
 from pytdigest import TDigest
 
 

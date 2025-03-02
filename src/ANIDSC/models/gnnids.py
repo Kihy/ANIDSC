@@ -2,11 +2,11 @@ from abc import ABC, abstractmethod
 from typing import Any, Dict, List, Tuple
 
 from ..cdd_frameworks.drift_sense import DriftSense
-from ..base_files.model import BaseOnlineODModel
+from .base_model import BaseOnlineODModel
 import torch
 import numpy as np
 
-from ..base_files.pipeline import PipelineComponent
+from ..components.pipeline_component import PipelineComponent
 from torch_geometric.data import Data
 from collections import defaultdict
 import torch.nn.functional as F
@@ -17,9 +17,9 @@ import pickle
 
 from scipy import integrate
 
-from ..base_files.save_mixin import TorchSaveMixin
+from ..save_mixin.torch import TorchSaveMixin
 from ..normalizer.t_digest import LivePercentile
-from ..utils import uniqueXT
+from ..utils2 import uniqueXT
 
 torch.set_printoptions(precision=4)
 
@@ -597,8 +597,8 @@ class NodeEncoderWrapper(PipelineComponent, torch.nn.Module):
         return f"NodeEncoderWrapper({self.node_encoder}-{self.model})"
 
     def setup(self):
-        context=self.get_context()
-        self.node_encoder.setup(context["fe_features"])
+        
+        self.node_encoder.setup(self.context["fe_features"])
         self.context["output_features"] = self.node_encoder.node_latent_dim
         self.model.setup()
         self.optimizer = torch.optim.Adam(params=self.parameters())
@@ -700,8 +700,8 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         return torch.from_numpy(X).float()
 
     def teardown(self):
-        context = self.get_context()
-        self.save(suffix=context.get("protocol", ""))
+        
+        self.save(suffix=self.context.get("protocol", ""))
 
     def setup(self):
         super().setup()
@@ -828,10 +828,10 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
         srcIDs = x[:, 1].long()
         dstIDs = x[:, 2].long()
 
-        context = self.get_context()
+
         src_features = x[:, 4:19].float()
         dst_features = x[:, 19:34].float()
-        edge_features = x[:, 34 : 34 + context["l_features"]].float()
+        edge_features = x[:, 34 : 34 + self.context["l_features"]].float()
 
         return srcIDs, dstIDs, src_features, dst_features, edge_features
 

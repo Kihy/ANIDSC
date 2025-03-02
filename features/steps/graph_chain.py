@@ -1,6 +1,6 @@
 from behave import given, when, then
 
-from ANIDSC.data_source.offline_sources import CSVReader
+from ANIDSC.data_sources.offline_sources import CSVReader
 from ANIDSC.templates import get_pipeline
 
 
