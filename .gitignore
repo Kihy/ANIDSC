@@ -159,7 +159,8 @@ runs
 logs
 .vscode
 datasets/*
+!datasets/test_data/
+datasets/test_data/*
 !datasets/test_data/pcap/
-!datasets/test_data/pcap/**
 *.code_workspace
 *.toml
