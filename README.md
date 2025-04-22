@@ -6,6 +6,11 @@ It is recommended to have two folders, one for dataset and one for actual code.
 
 The dataset folder structure should be something like ./datasets/{dataset_name}/pcap/{filename}
 
+Any pcap file should work, the main dataset used for testing is the UQ-IoT-IDS dataset: https://espace.library.uq.edu.au/view/UQ:17b44bb
+Some test data are also available in ./datasets/test_data/pcap folder
+
+
+
 There is no restriction on code structure 
 
 # Setting Up environment
