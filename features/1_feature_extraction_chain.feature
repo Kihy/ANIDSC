@@ -1,6 +1,6 @@
 Feature: Feature extraction pipelines
     Scenario Outline: Process packets from an offline pcap reader
-        Given a PacketReader initialized with dataset "datasets/Test_Data" and <file>
+        Given a PacketReader initialized with dataset "test_data" and <file>
             And a feature extraction pipeline with AfterImage
         When the PacketReader starts
         Then the pipeline should not fail
@@ -13,7 +13,7 @@ Feature: Feature extraction pipelines
         | malicious_Port_Scanning     |
 
     # Scenario Outline: Process packets from an offline pcap reader
-    #     Given a PacketReader initialized with dataset "datasets/Test_Data" and <file>
+    #     Given a PacketReader initialized with dataset "test_data" and <file>
     #         And a feature extraction pipeline with AfterImageGraph
     #     When the PacketReader starts
     #     Then the pipeline should not fail

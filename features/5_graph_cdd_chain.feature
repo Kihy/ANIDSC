@@ -2,7 +2,7 @@
 Feature: NIDS Chain with Graph Representation and concept drift detection
 
     Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "../datasets/Test_Data", file "benign_lenovo_bulb", and feature extractor AfterImageGraph
+        Given a csv file initialized with dataset "test_data", file "benign_lenovo_bulb", and feature extractor AfterImageGraph
             And a new cdd graph pipeline with <model> and <cdd_framework>
         When the PacketReader starts
         Then the pipeline should not fail
@@ -24,7 +24,7 @@ Feature: NIDS Chain with Graph Representation and concept drift detection
         | VAE     | DriftSense    |
 
     Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "../datasets/Test_Data", file "<file>", and feature extractor AfterImageGraph
+        Given a csv file initialized with dataset "test_data", file "<file>", and feature extractor AfterImageGraph
             And a loaded cdd graph pipeline with <model> and <cdd_framework>
         When the PacketReader starts
         Then the pipeline should not fail

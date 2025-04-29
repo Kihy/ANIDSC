@@ -17,9 +17,12 @@ There is no restriction on code structure
 install docker
 
 run
-`docker run --gpus all -it --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --rm -v "path/to/this/folder":/workspace/ANIDSC -v "path/to/datasets":/workspace/datasets kihy/nids_framework`
+`docker run --gpus all -it --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --rm -v "/path/to/datasets":/workspace/intrusion_detection/datasets -v /path/to/experiment/scripts:/workspace/intrusion_detection/experiment -v kihy/anidsc_image`
 
 if gpu is not set up you can remove --gpus all 
+
+alternatively, you can build docker image from scratch, run from top level directory:
+`docker build --pull -t kihy/anidsc_image -f docker_root/Dockerfile .`
 
 go to code folder 
 `cd /workspace/ANIDSC`

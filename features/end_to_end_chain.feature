@@ -1,6 +1,6 @@
 Feature: End to End chaining from PCAP readers
     Scenario: Process packets directly from an offline pcap reader with basic pipeline
-        Given a PacketReader initialized with dataset "../datasets/Test_Data" and benign_lenovo_bulb
+        Given a PacketReader initialized with dataset "test_data" and benign_lenovo_bulb
             And a feature extraction pipeline with AfterImage
             And a new basic pipeline with AE
         When the PacketReader starts
@@ -9,7 +9,7 @@ Feature: End to End chaining from PCAP readers
             And the results are logged
 
     Scenario: Process packets with boxplot
-        Given a PacketReader initialized with dataset "../datasets/Test_Data" and benign_lenovo_bulb
+        Given a PacketReader initialized with dataset "test_data" and benign_lenovo_bulb
             And a feature extraction pipeline with frequency analysis
             And a basic boxplot model
         When the PacketReader starts
@@ -18,7 +18,7 @@ Feature: End to End chaining from PCAP readers
             And the results are logged
 
     Scenario Outline: Process packets from an offline pcap reader
-        Given a PacketReader initialized with dataset "../datasets/Test_Data" and <file>
+        Given a PacketReader initialized with dataset "test_data" and <file>
             And a feature extraction pipeline with AfterImage
             And a new CDD pipeline with ARCUS over AE
         When the PacketReader starts

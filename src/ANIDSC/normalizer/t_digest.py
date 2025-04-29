@@ -32,8 +32,7 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         if not self.loaded_from_file:
             self.dims=[TDigest() for _ in range(self.ndim-self.skip)]
     
-    def teardown(self):
-        super().teardown()
+   
         
 
     def update(self, X):

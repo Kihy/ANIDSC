@@ -1,7 +1,7 @@
 @core
 Feature: Evaluate results of chains
     Scenario: Draw detection rate and anomaly scores of all models
-        Given a Summarizer initialized with dataset "datasets/Test_Data" and feature extractor AfterImage and files:
+        Given a Summarizer initialized with dataset "test_data" and feature extractor AfterImage and files:
             | file                        |
             | benign_lenovo_bulb          |
             | malicious_ACK_Flooding      |
@@ -11,7 +11,7 @@ Feature: Evaluate results of chains
         Then the pipeline should not fail
 
     # Scenario: Draw detection rate and anomaly scores of all models
-    #     Given a Summarizer initialized with dataset "../datasets/Test_Data" and feature extractor AfterImageGraph and files:
+    #     Given a Summarizer initialized with dataset "test_data" and feature extractor AfterImageGraph and files:
     #         | file                        |
     #         | benign_lenovo_bulb          |
     #         | malicious_Port_Scanning     |

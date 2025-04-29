@@ -153,15 +153,4 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 
-trained_models/*
-code/data_info.json
-runs
-logs
-.vscode
-datasets/*
-!datasets/test_data/
-datasets/test_data/*
-!datasets/test_data/pcap/
-*.code_workspace
-*.toml
-dev_commands
+

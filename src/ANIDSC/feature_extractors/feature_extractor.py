@@ -121,5 +121,5 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         print(
             f"skipped: {self.skipped} processed: {self.processed+self.skipped} written: {self.processed}"
         )
-        super().teardown()
+        return super().teardown()
     

@@ -1,7 +1,7 @@
 @core
 Feature: Chaining of components with Concept Drift Detection
     Scenario Outline: Process packets from an offline csv reader with ARCUS
-        Given a csv file initialized with dataset "../datasets/Test_Data", file "benign_lenovo_bulb", and feature extractor AfterImage
+        Given a csv file initialized with dataset "test_data", file "benign_lenovo_bulb", and feature extractor AfterImage
             And a new CDD pipeline with <cdd_framework> over <model>
         When the PacketReader starts
         Then the pipeline should not fail
@@ -23,7 +23,7 @@ Feature: Chaining of components with Concept Drift Detection
         | AE      | DriftSense    |
 
     Scenario Outline: Process packets from an offline csv reader with saved ARCUS
-        Given a csv file initialized with dataset "../datasets/Test_Data", file "<file>", and feature extractor AfterImage
+        Given a csv file initialized with dataset "test_data", file "<file>", and feature extractor AfterImage
             And a loaded CDD pipeline with <cdd_framework> over <model>
         When the PacketReader starts
         Then the pipeline should not fail
