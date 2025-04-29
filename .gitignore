@@ -166,3 +166,4 @@ test_data/*
 *.toml
 dev_commands
 ANIDSC.code-workspace 
+docs/*
