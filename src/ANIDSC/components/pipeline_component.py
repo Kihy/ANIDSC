@@ -1,5 +1,6 @@
 
 from abc import ABC, abstractmethod
+import datetime
 from pathlib import Path
 import time
 from typing import Callable, Dict, Any, List, Union
@@ -90,7 +91,7 @@ class PipelineComponent(ABC):
         """saves the pipeline
         """        
         if self.component_type!="":
-            self.save()
+            return self.save()
 
     def __or__(self, other:'PipelineComponent')->'Pipeline':
         """attaches pipeline component together
@@ -108,6 +109,9 @@ class PipelineComponent(ABC):
     
     def __eq__(self, other):
         same_class=self.__class__==other.__class__ 
+        if not same_class:
+            return False
+        
         # Create copies of the __dict__ to avoid modifying the original attributes
         self_attrs = self.__dict__.copy()
         other_attrs = other.__dict__.copy()
@@ -116,15 +120,11 @@ class PipelineComponent(ABC):
             self_attrs.pop(i, None)       # Ignore KeyError if attribute is missing
             other_attrs.pop(i, None)
 
-        diff_key=compare_dicts(self_attrs, other_attrs)        
-        if  diff_key != True:
-            print(f"different {diff_key}")
-            return False
-        else:
-            return same_class            
+        return compare_dicts(self_attrs, other_attrs)        
+              
 
 class Pipeline:
-    def __init__(self, components: List[PipelineComponent]):
+    def __init__(self, components: List[PipelineComponent], context:Dict={}):
         """A full pipeline that can be extended with |
 
         Args:
@@ -133,6 +133,7 @@ class Pipeline:
         super().__init__()
         self.components = components
         
+        self.context=context
 
     def set_context(self, context):
         self.context=context
@@ -165,19 +166,47 @@ class Pipeline:
     def teardown(self):
         """iteratively calls the teardown function of each pipeline
         """        
-        for component in self.components:
-            component.teardown()
-            
-        # save context
-        context_file = Path(
-                f"{self.context['dataset_name']}/{self.context['fe_name']}/contexts/{self.context['file_name']}.json"
-            )
         
         #remove unnecessary stuff
         self.context.pop("scaler",None)
         
-        context_file.parent.mkdir(parents=True, exist_ok=True)
-        json.dump(self.context, open(context_file, "w"))
+        manifest={"context":self.context, "components":[]}
+        
+        # save individual components
+        for component in self.components:
+            save_path=component.teardown()
+
+            #add components to manifest
+            manifest["components"].append({
+            "type": component.component_type,
+            "class": component.__class__.__name__,
+            "file": save_path
+        })
+            
+        # save context
+        manifest_path = Path(
+                f"{self.context['dataset_name']}/{self.context['fe_name']}/manifest/{str(self)}.json"
+            )
+        
+        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        
+        with open(manifest_path, "w") as out_file:
+            json.dump(manifest, out_file, indent=4)
+        
+    @classmethod
+    def load_pipeline(cls, dataset_name, fe_name, pipeline_name):
+        manifest_path = Path(
+                f"{dataset_name}/{fe_name}/manifest/{pipeline_name}.json"
+            )
+        with open(manifest_path) as f:
+            manifest = json.load(f)
+            
+        components=[]
+        for meta in manifest["components"]:
+            cls = meta["class"]
+            comp = cls.load(meta["file"])
+            components.append(comp)
+        return Pipeline(components, manifest["context"])
 
     def __or__(self, other: Union[PipelineComponent, 'Pipeline'])->'Pipeline':
         """extends the pipeline
@@ -195,7 +224,6 @@ class Pipeline:
         else:
             raise ValueError("Unknown pipe type")
 
-    
-
     def __str__(self):
-        return "-".join([str(component) for component in self.components])
+        file_name=self.context.get("file_name","None")
+        return f"{file_name}>>"+"->".join([str(component) for component in self.components])

@@ -1,7 +1,7 @@
 @core
 Feature: NIDS Chain with Graph Representation
     Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "../datasets/Test_Data", file "benign_lenovo_bulb", and feature extractor AfterImageGraph
+        Given a csv file initialized with dataset "test_data", file "benign_lenovo_bulb", and feature extractor AfterImageGraph
             And a new graph pipeline with <model>
         When the PacketReader starts
         Then the pipeline should not fail
@@ -17,7 +17,7 @@ Feature: NIDS Chain with Graph Representation
         | VAE     |
 
     Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "../datasets/Test_Data", file "<file>", and feature extractor AfterImageGraph
+        Given a csv file initialized with dataset "test_data", file "<file>", and feature extractor AfterImageGraph
             And a loaded graph pipeline with <model>
         When the PacketReader starts
         Then the pipeline should not fail

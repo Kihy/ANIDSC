@@ -26,7 +26,7 @@ class PipelineSource(ABC):
 
     
     def on_end(self):
-        self.other.teardown()
+        return self.other.teardown()
 
 
     def start(self):

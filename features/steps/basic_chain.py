@@ -116,13 +116,7 @@ def step_then_components_are_saved(context):
             path = f"{context.dataset}/{context.fe_name}/{component.component_type}/{context.file_name}/{component.component_name}.pkl"
             assert glob.glob(path)
 
-            loaded_component = component.__class__.load(
-                component.component_type,
-                context.dataset,
-                context.fe_name,
-                context.file_name,
-                component.component_name,
-            )
+            loaded_component = component.__class__.load(path)
             assert loaded_component == component
 
 

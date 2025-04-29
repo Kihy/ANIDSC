@@ -8,6 +8,7 @@ from typing import List, Dict, Any
 from numpy.typing import NDArray
 from .feature_extractor import BaseTrafficFeatureExtractor
 from ..save_mixin.pickle import PickleSaveMixin
+from ..utils.helper import compare_dicts
 
 class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
     def __init__(self, decay_factors:List[float]=[5, 3, 1, 0.1, 0.01], **kwargs):
@@ -595,6 +596,13 @@ class IncStat1D:
             array: [weight, mean, std]
         """
         return np.hstack([self.weight(), self.mean(), self.std()])
+    
+    def __eq__(self, other):
+        # 1) Ensure same type
+        if not isinstance(other, IncStat1D):
+            return NotImplemented
+        # 2) Compare attribute dictionaries
+        return compare_dicts(self.__dict__, other.__dict__)
 
 
     
@@ -685,6 +693,14 @@ class IncStat2D:
 
     def __repr__(self):
         return pformat(vars(self))
+    
+    
+    def __eq__(self, other):
+        # 1) Ensure same type
+        if not isinstance(other, IncStat2D):
+            return NotImplemented
+        # 2) Compare attribute dictionaries
+        return compare_dicts(self.__dict__, other.__dict__)
 
 class IncStatDB:
     def __init__(self, decay_factors:List[float], last_timestamp:float=None, limit:int=1e5, mac_to_idx_map:Dict[str, int]={}):
@@ -817,4 +833,9 @@ class IncStatDB:
                 removed += 1
         return removed, removed_keys
 
-    
+    def __eq__(self, other):
+        # 1) Ensure same type
+        if not isinstance(other, IncStatDB):
+            return NotImplemented
+        # 2) Compare attribute dictionaries
+        return compare_dicts(self.__dict__, other.__dict__)

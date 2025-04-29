@@ -701,7 +701,7 @@ class HomoGraphRepresentation(PipelineComponent, torch.nn.Module, TorchSaveMixin
 
     def teardown(self):
         
-        self.save(suffix=self.context.get("protocol", ""))
+        return self.save(suffix=self.context.get("protocol", ""))
 
     def setup(self):
         super().setup()

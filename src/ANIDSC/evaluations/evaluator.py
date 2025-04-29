@@ -62,6 +62,7 @@ class CollateEvaluator(PipelineComponent):
     def teardown(self):
         self.output_file.close()
         print("results file saved at", self.output_file.name)
+        return self.output_file.name
     
     def process(self, results:Dict[str, Dict[str, Any]]):
         """process the results dictionary

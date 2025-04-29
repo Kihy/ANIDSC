@@ -1,7 +1,7 @@
 @core
 Feature: Basic chaining from CSV files
     Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "datasets/Test_Data", file "benign_lenovo_bulb", and feature extractor AfterImage
+        Given a csv file initialized with dataset "test_data", file "benign_lenovo_bulb", and feature extractor AfterImage
         And a new basic pipeline with <model>
         When the PacketReader starts
         Then the pipeline should not fail
@@ -17,7 +17,7 @@ Feature: Basic chaining from CSV files
             | torch_models.autoencoder.VAE       |
 
     Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "datasets/Test_Data", file "<file>", and feature extractor AfterImage
+        Given a csv file initialized with dataset "test_data", file "<file>", and feature extractor AfterImage
         And a loaded basic pipeline with <model>
         When the PacketReader starts
         Then the pipeline should not fail

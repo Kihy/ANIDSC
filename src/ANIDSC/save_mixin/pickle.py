@@ -18,10 +18,11 @@ class PickleSaveMixin:
 
         with open(str(save_path), 'wb') as file:
             pickle.dump(self, file)
-        print(f"{self.component_type} component saved to {save_path}")
+        
+        return str(save_path)
     
     @classmethod
-    def load(cls, dataset_name:str, fe_name:str, file_name:str, name:str, suffix:str=''):
+    def load(cls, path): # dataset_name:str, fe_name:str, file_name:str, name:str, suffix:str=''
         """Load an object from a file using pickle
 
         Args:
@@ -32,9 +33,7 @@ class PickleSaveMixin:
             name (str): name of component
             suffix (str, optional): any suffix. Defaults to ''.
         """        
-        file_path = Path(
-        f"{dataset_name}/{fe_name}/{cls.component_type}/{file_name}/{name}{f'-{suffix}' if suffix !='' else ''}.pkl"
-    )   
+        file_path = Path(path)   
         if not file_path.exists():
             return None
         

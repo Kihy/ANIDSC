@@ -434,4 +434,4 @@ class PyFlowMeter(BaseTrafficFeatureExtractor):
         
         self._save_batch_flow(self.state["flows"].keys())
         
-        super().teardown()
+        return super().teardown()
