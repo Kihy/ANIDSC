@@ -7,6 +7,7 @@ from collections import deque
 def compare_dicts(dict1, dict2):
     # Check if keys are the same
     if dict1.keys() != dict2.keys():
+        print("different number of keys")
         return False
 
     is_same=True
@@ -58,5 +59,7 @@ def compare_dicts(dict1, dict2):
 
     if not is_same:
         print(f"different {key}")
+        print(f"val1: {val1}")
+        print(f"val2: {val2}")
         
     return is_same 

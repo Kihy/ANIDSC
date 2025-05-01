@@ -1,9 +1,10 @@
 class NullSaveMixin:
     def save(self):
-        print("didn't save")
+        super().save()
+        print(f"skipping save for {str(self)}")
         
     @classmethod
-    def load(cls, folder, dataset_name, fe_name, file_name, name, suffix=''):
+    def load(cls, path):
         """Load an object from a file using pickle."""
         
         print("didn't load")

@@ -1,17 +1,18 @@
+from ANIDSC.component.pipeline_component import Pipeline
 from behave import given, when, then
-from ANIDSC import models
-from ANIDSC.evaluations.evaluator import BaseEvaluator
-from ANIDSC.feature_buffers.tabular import TabularFeatureBuffer
+from ANIDSC import model
+from ANIDSC.component.evaluator import BaseEvaluator
+from ANIDSC.feature_buffer.tabular import TabularFeatureBuffer
 
 
-from ANIDSC.data_sources.offline_sources import CSVReader, PacketReader
-from ANIDSC.feature_extractors.after_image import AfterImage
-from ANIDSC.feature_extractors.frequency import FrequencyExtractor
+from ANIDSC.data_source.offline_sources import CSVReader, PacketReader
+from ANIDSC.feature_extractor.after_image import AfterImage
+from ANIDSC.feature_extractor.frequency import FrequencyExtractor
 
 from shutil import rmtree
 import os
 import glob
-from ANIDSC.models.base_model import BaseOnlineODModel
+from ANIDSC.component.model import BaseOnlineODModel
 from ANIDSC.normalizer.t_digest import LivePercentile
 from ANIDSC.templates import METRICS
 
@@ -36,7 +37,7 @@ def step_given_feature_extraction_with_frequency_analysis(context):
 
 @given("a basic boxplot model")
 def step_given_basic_boxplot_model(context):
-    model = getattr(models, "BoxPlot")()
+    model = getattr(model, "BoxPlot")()
 
     evaluator = BaseEvaluator(
         METRICS,
@@ -99,7 +100,8 @@ def step_given_basic_NIDS_model_with_AE(context,state, model_name):
 @when("the PacketReader starts")
 def step_when_packet_reader_starts(context):
     context.data_source >> context.pipeline
-    context.data_source.start()
+    context.pipeline.start()
+
 
 
 @then("the pipeline should not fail")
@@ -110,14 +112,13 @@ def step_then_data_processed_correctly(context):
 
 @then("the components are saved")
 def step_then_components_are_saved(context):
-    for component in context.pipeline.components:
-        print("checking:", component)
-        if component.component_type != "":
-            path = f"{context.dataset}/{context.fe_name}/{component.component_type}/{context.file_name}/{component.component_name}.pkl"
-            assert glob.glob(path)
-
-            loaded_component = component.__class__.load(path)
-            assert loaded_component == component
+    manifest_path=context.pipeline.get_save_path("yaml")
+    
+    loaded_pipeline=Pipeline.load(manifest_path)
+    
+    assert loaded_pipeline==context.pipeline
+    
+    
 
 
 @then("the results are logged")

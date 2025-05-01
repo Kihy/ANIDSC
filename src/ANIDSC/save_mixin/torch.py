@@ -13,7 +13,7 @@ class TorchSaveMixin:
         Args:
             suffix (str, optional): suffix of model. Defaults to "".
         """        
-
+        super().save()
         checkpoint = {
             "model_state_dict": self.state_dict(),
         }

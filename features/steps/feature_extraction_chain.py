@@ -1,25 +1,25 @@
 from behave import given, when, then
+import yaml
+from ANIDSC.component.pipeline_component import Pipeline
+from ANIDSC.templates import get_template
 
-from ANIDSC.feature_buffers.tabular import TabularFeatureBuffer
-from ANIDSC.feature_extractors.after_image import AfterImage
-from ANIDSC.templates import get_pipeline
+@given("a new afterimage feature extraction pipeline initialized with test_data dataset and file {file}")
+def step_given_afterimage_and_file(context, file):
+    template=get_template("feature_extraction")
+    context.pipeline=Pipeline.load(template.format("test_data",file))
+    
+@given("a loaded afterimage feature extraction pipeline initialized with test_data dataset and file {file}")
+def step_given_afterimage_and_file(context, file):
+    saved_file=f"test_data/AfterImage/manifest/benign_lenovo_bulb/PacketReader->AfterImage->TabularFeatureBuffer(256).yaml"
+    
+    with open(saved_file) as f:
+        manifest = yaml.safe_load(f)
+        
+    manifest["components"]["data_source"]["file_name"]=file
+    
+    
+    context.pipeline=Pipeline.load(manifest)
 
-
-@given("a feature extraction pipeline with AfterImage")
-def step_given_feature_extraction_pipeline_with_AfterImage(context):
-    
-    feature_extractor=AfterImage()
-    feature_buffer=TabularFeatureBuffer()
-    context.pipeline=feature_extractor|feature_buffer
-    context.fe_name = "AfterImage"
-    context.pipeline_components = ["feature_extraction", "detection"]
-    
-@given("a feature extraction pipeline with AfterImageGraph")
-def step_given_feature_extraction_pipeline_with_AfterImageGraph(context):
-    context.protocols = ["TCP","UDP","ARP","ICMP"]
-    context.fe_name = "AfterImageGraph(TCP,UDP,ARP,ICMP,Other)"
-    
-    context.pipeline = get_pipeline(pipeline_components=["feature_extraction"],
-                                    pipeline_desc={"fe_cls": "AfterImageGraph"})
-    
-    
+@when("the pipeline starts")
+def step_when_pipeline_starts(context):
+    context.pipeline.process()

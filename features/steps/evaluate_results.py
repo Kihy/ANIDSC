@@ -1,6 +1,6 @@
 from behave import given, when, then
 
-from ANIDSC.evaluations.summarizer import BasicSummarizer
+from ANIDSC.evaluation.summarizer import BasicSummarizer
 
 @given('a Summarizer initialized with dataset "{dataset}" and feature extractor AfterImage and files')
 def step_given_summarizer(context, dataset):

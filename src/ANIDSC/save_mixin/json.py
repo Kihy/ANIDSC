@@ -6,6 +6,7 @@ import numpy as np
 
 class JSONSaveMixin:
     def save(self):
+        super().save()
         save_path = Path(
             f"{self.context['dataset_name']}/{self.context['fe_name']}/{self.component_type}/{self.context['file_name']}/{self.component_name}{f'-{self.suffix}' if self.suffix !='' else ''}.pkl"
         )

@@ -7,14 +7,12 @@ import pickle
 class PickleSaveMixin:
     def save(self):
         """Save the object to a file using pickle.
-        """        
+        """ 
+        super().save()
         save_path = Path(
-            f"{self.context['dataset_name']}/{self.context['fe_name']}/{self.component_type}/{self.context['file_name']}/{self.__str__()}{f'-'.join(self.suffix)}.pkl"
+            self.get_save_path("pkl")
         )
         save_path.parent.mkdir(parents=True, exist_ok=True)
-        
-        # no need parent reference
-        self.parent=None
 
         with open(str(save_path), 'wb') as file:
             pickle.dump(self, file)
@@ -42,7 +40,6 @@ class PickleSaveMixin:
         if not isinstance(obj, cls):
             raise TypeError(f"Loaded object is not of type {cls.__name__}")
         
-        obj.loaded_from_file=True
         print(f"Object loaded from {file_path}")
         return obj
 

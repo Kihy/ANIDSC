@@ -1,7 +1,7 @@
 from typing import List
 
 from ..save_mixin.pickle import PickleSaveMixin
-from .normalizer import BaseOnlineNormalizer
+from ..component.normalizer import BaseOnlineNormalizer
 from pytdigest import TDigest
 import numpy as np
 

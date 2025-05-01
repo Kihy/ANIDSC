@@ -21,7 +21,7 @@ run
 
 if gpu is not set up you can remove --gpus all 
 
-alternatively, you can build docker image from scratch, run from top level directory:
+alternatively, you can build docker image from scratch, run from top level directory (same level as the top level ANIDSC file):
 `docker build --pull -t kihy/anidsc_image -f docker_root/Dockerfile .`
 
 go to code folder 
