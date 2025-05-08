@@ -8,29 +8,16 @@ import os
 
 class YamlSaveMixin:
     def save(self):
-        manifest = {"components": {}}
-
         # save individual components
         for key, component in self.components.items():
-            save_path = component.save()
-
-            comp_dict = {
-                "class": component.component_name,
-                "attrs": component.get_save_attr(),
-            }
-            if save_path:
-                comp_dict["file"] = save_path
-
-            # add components to manifest
-            manifest["components"][key]=comp_dict
+            component.save()
 
         # save manifest
-        manifest_path = Path(self.get_save_path("yaml"))
-
+        manifest_path = Path(self.get_save_path())
         manifest_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(manifest_path, "w") as out_file:
-            yaml.safe_dump(manifest, out_file, indent=4, sort_keys=False)
+            yaml.safe_dump(self.to_dict(), out_file, indent=4, sort_keys=False)
 
     @classmethod
     def load(cls, input_data):
@@ -46,14 +33,5 @@ class YamlSaveMixin:
         else:
             raise TypeError("Unknown input_data format")
         
-        components = {}
-        for type, meta in manifest["components"].items():
-            module = importlib.import_module(f"ANIDSC.{type}")
-            component_cls = getattr(module, meta["class"])
-            if meta.get("file", False):
-                file_path = meta["file"]
-                comp = component_cls.load(file_path)
-            else:
-                comp = component_cls(**meta.get("attrs", {}))
-            components[type] = comp
-        return cls(components)
+        
+        return cls(**manifest["attrs"])

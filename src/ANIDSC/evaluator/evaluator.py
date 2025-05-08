@@ -4,13 +4,16 @@ import networkx as nx
 import numpy as np
 
 from ..save_mixin.null import NullSaveMixin
-from .pipeline_component import PipelineComponent
-from ..evaluation import od_metrics 
+from ..component.pipeline_component import PipelineComponent
+from . import od_metrics 
 from pathlib import Path
 import time
 from ..utils2 import draw_graph, fig_to_array
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
+
+from ..templates import METRICS
+
 
 class CollateEvaluator(PipelineComponent):
     def __init__(self, log_to_tensorboard:bool=True, save_results:bool=True):
@@ -111,7 +114,7 @@ class CollateEvaluator(PipelineComponent):
                 )     
         
 class BaseEvaluator(NullSaveMixin, PipelineComponent): 
-    def __init__(self, metric_list:List[str], log_to_tensorboard:bool=True, save_results:bool=True):
+    def __init__(self, metric_list:List[str]=METRICS, log_to_tensorboard:bool=True, save_results:bool=True):
         """base evaluator that evaluates the output of a single model
         Args:
             metric_list (List[str]): list of metric names in string format
@@ -125,30 +128,40 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         self.log_to_tensorboard=log_to_tensorboard
         self.save_results=save_results
         self.write_header=True
+        self.comparable=False
         
     def setup(self):
         super().setup()
+
+        dataset_name=self.request_attr("data_source","dataset_name")
+        fe_name=self.request_attr("data_source","fe_name")
+        file_name=self.request_attr("data_source","file_name")
+        pipeline_name=str(self.parent_pipeline)
         
-        self.context["metric_list"]=self.metric_list
+        file_template=f"{dataset_name}/{fe_name}/{{}}/{file_name}/{pipeline_name}"
         
         if self.save_results:
             # file to store outputs
             scores_and_thresholds_path = Path(
-                f"{self.context['dataset_name']}/{self.context['fe_name']}/results/{self.context['file_name']}/{self.context['pipeline_name']}.csv"
+                file_template.format("results")+".csv"
             )
             scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
             self.output_file = open(str(scores_and_thresholds_path), "w")
             
         if self.log_to_tensorboard:
-            log_dir=f"{self.context['dataset_name']}/{self.context['fe_name']}/runs/{self.context['file_name']}/{self.context['pipeline_name']}"
+            log_dir=file_template.format("runs")
             self.writer = SummaryWriter(
                 log_dir=log_dir
                 )
             print("tensorboard logging to", log_dir)
             
         self.prev_timestamp = time.time()
+    
+    def on_load(self):
+        self.setup()
         
-    def teardown(self):
+        
+    def save(self):
         if self.save_results:
             self.output_file.close()
             print("results file saved at", self.output_file.name)
@@ -166,12 +179,12 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         # records time
 
         current_time=time.time()
-        duration=current_time - self.context["start_time"]
+        duration=current_time - self.parent_pipeline.start_time
         
-        result_dict={"time":duration}
+        result_dict={"time":duration, "batch_num":results["batch_num"]}
         
-        header=["time"]
-        values=[str(duration)]
+        
+        
         for metric_name, metric in zip(self.metric_list, self.metrics):
             result_dict[metric_name]=metric(results)
             
@@ -182,16 +195,10 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
                                 results['batch_num'],
                             )
     
-            if self.save_results:
-                if self.write_header:
-                    header.append(metric_name)
-                values.append(str(result_dict[metric_name]))
-    
         if self.save_results:
             if self.write_header:
-                self.output_file.write(",".join(header) + "\n")
+                self.output_file.write(",".join(result_dict.keys()) + "\n")
                 self.write_header=False
-            self.output_file.write(",".join(values) + "\n")
+            self.output_file.write(",".join(map(str, result_dict.values())) + "\n")
         
-        result_dict['batch_num']=results['batch_num']
-        return result_dict
+        

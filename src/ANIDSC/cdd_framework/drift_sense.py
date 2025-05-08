@@ -4,7 +4,7 @@ import copy
 from typing import Any, Dict, List
 
 import numpy as np
-from ANIDSC.component.model import BaseOnlineODModel
+from ANIDSC.model.model import BaseOnlineODModel
 from ..component.pipeline_component import PipelineComponent
 
 

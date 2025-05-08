@@ -13,7 +13,7 @@ import json
 
         
 class BaseTrafficFeatureExtractor(PipelineComponent):
-    def __init__(self, offset_time:Union[int, str]="auto", skip:int=0, **kwargs):
+    def __init__(self, skip:int=0, offset_time:Union[int, str]="auto", **kwargs):
         """base interface for feature extractor
 
         Args:
@@ -25,7 +25,7 @@ class BaseTrafficFeatureExtractor(PipelineComponent):
         self.offset_time=offset_time
         self.skip=skip
         
-        self.save_attr.extend(['offset_time','skip'])
+        self.save_attr.extend(['skip','offset_time'])
         
   
     def setup(self):

@@ -1,5 +1,6 @@
 
 from abc import abstractmethod
+import os
 from pathlib import Path
 
 import numpy as np
@@ -11,7 +12,7 @@ from numpy.typing import NDArray
 
 
 class BaseFeatureBuffer(PipelineComponent):
-    def __init__(self, buffer_size:int=256, save_features:bool=True, save_meta:bool=True, **kwargs):
+    def __init__(self, buffer_size:int=256, save_features:bool=True, **kwargs):
         """feature buffer to buffer results in batches to speed up detection. It drops remaining features that does not make a batch
 
         Args:
@@ -25,7 +26,7 @@ class BaseFeatureBuffer(PipelineComponent):
         self.component_type="feature_buffer"
         self.buffer_size=buffer_size
         self.save_features=save_features
-        self.save_meta=save_meta
+        
         
         
         self.feature_file=None 
@@ -36,14 +37,14 @@ class BaseFeatureBuffer(PipelineComponent):
         self.size=0
         
         self.unpickleable.extend(['feature_list','meta_list'])
-        self.save_attr.extend(['buffer_size','save_features','save_meta'])
+        self.save_attr.extend(['buffer_size','save_features'])
     
     def setup(self):
         super().setup()
         if self.save_features:
             # setup files
             dataset_name=self.request_attr('data_source','dataset_name')
-            fe_name=self.request_attr('feature_extractor','component_name')
+            fe_name=self.request_action('feature_extractor','__str__')
             file_name=self.request_attr('data_source','file_name')
             
             feature_path =f"{dataset_name}/{fe_name}/features/{file_name}.csv"
@@ -53,11 +54,16 @@ class BaseFeatureBuffer(PipelineComponent):
             
             Path(meta_path).parent.mkdir(parents=True, exist_ok=True)
 
-            self.feature_file = open(feature_path, "w")
-            self.meta_file = open(meta_path, "w")
+            self.feature_file = open(feature_path, "a")
+            self.meta_file = open(meta_path, "a")
             
-            self.feature_file.write(",".join(self.request_attr('feature_extractor',"feature_names")) + "\n")
-            self.meta_file.write(",".join(self.request_attr('feature_extractor',"meta_names")) + "\n")
+            
+            # write header when file is not empty
+            if os.stat(feature_path).st_size==0:            
+                self.feature_file.write(",".join(self.request_attr('feature_extractor',"feature_names")) + "\n")
+                
+            if os.stat(meta_path).st_size==0:            
+                self.meta_file.write(",".join(self.request_attr('feature_extractor',"meta_names")) + "\n")
             
             
             
@@ -87,8 +93,8 @@ class BaseFeatureBuffer(PipelineComponent):
         pass
     
     def save(self):
-        if self.save_features:
-            self.save_buffer()
+        
+        self.save_buffer()
         
         self.meta_file.close()
         self.feature_file.close()

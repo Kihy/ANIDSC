@@ -3,6 +3,8 @@ from pytdigest import TDigest
 import torch
 from collections import deque
 
+import torch_geometric
+
 
 def compare_dicts(dict1, dict2):
     # Check if keys are the same
@@ -40,22 +42,43 @@ def compare_dicts(dict1, dict2):
                 if isinstance(v1, np.ndarray) or isinstance(v2, np.ndarray):
                     if not (np.array_equal(v1, v2)):
                         is_same=False
+                        val1=v1
+                        val2=v2
                         break
-                else:
-                    if str(v1)!=str(v2):
+                elif callable(v1):
+                    if v1.__qualname__ != v2.__qualname__:
                         is_same=False
+                        val1=v1
+                        val2=v2
                         break
+                elif str(v1)!=str(v2):
+                    is_same=False
+                    val1=v1
+                    val2=v2
+                    break
                 
-
         # Default comparison for non-array types
-        elif isinstance(val1, torch.nn.Module) and isinstance(val2, torch.nn.Module):
-            if str(v1)!=str(v2):
-                is_same=False
-                break
-        else:
-            if val1 != val2:
-                is_same=False
-                break
+        elif isinstance(val1, torch.nn.Module):
+            sdA = val1.state_dict()
+            sdB = val2.state_dict()
+            for i in sdA:
+                if not torch.isclose(sdA[i], sdB[i], equal_nan=True).all():
+                    is_same=False 
+                    val1=sdA[i]
+                    val2=sdB[i]
+                    break
+            if not is_same:
+                break 
+      
+        elif isinstance(val1, torch_geometric.data.Data):
+            compare_dicts(val1.to_dict(), val2.to_dict())
+            
+        elif isinstance(val1, torch.Tensor):
+            torch.allclose(val1, val2)
+            
+        elif val1 != val2:
+            is_same=False
+            break
 
     if not is_same:
         print(f"different {key}")

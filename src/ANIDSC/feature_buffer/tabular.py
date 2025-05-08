@@ -28,7 +28,7 @@ class TabularFeatureBuffer(NullSaveMixin, BaseFeatureBuffer):
                     fmt="%s",
                 )
             
-        if self.save_meta:
+        
             np.savetxt(
                 self.meta_file, np.vstack(self.meta_list), delimiter=",", fmt="%s"
             )

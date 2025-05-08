@@ -16,7 +16,7 @@ class AE(BaseTorchModel):
     def init_model(self):
 
         self.encoder = torch.nn.Sequential(
-            torch.nn.Linear(self.context["output_features"], 8),
+            torch.nn.Linear(self.input_dims, 8),
             torch.nn.ReLU(),
             torch.nn.Linear(8, 2),
         ).to(self.device)
@@ -24,7 +24,7 @@ class AE(BaseTorchModel):
         self.decoder = torch.nn.Sequential(
             torch.nn.Linear(2, 8),
             torch.nn.ReLU(),
-            torch.nn.Linear(8, self.context["output_features"]),
+            torch.nn.Linear(8, self.input_dims),
         ).to(self.device)
 
         self.criterion = torch.nn.MSELoss(reduction="none").to(self.device)
@@ -52,7 +52,7 @@ class VAE(BaseTorchModel):
 
     def init_model(self):
         self.encoder = torch.nn.Sequential(
-            torch.nn.Linear(self.context["output_features"], 8),
+            torch.nn.Linear(self.input_dims, 8),
             torch.nn.ReLU(),
         ).to(self.device)
 
@@ -62,7 +62,7 @@ class VAE(BaseTorchModel):
         self.decoder = torch.nn.Sequential(
             torch.nn.Linear(2, 8),
             torch.nn.ReLU(),
-            torch.nn.Linear(8, self.context["output_features"]),
+            torch.nn.Linear(8, self.input_dims),
         ).to(self.device)
 
         self.mse = torch.nn.MSELoss(reduction="none").to(self.device)

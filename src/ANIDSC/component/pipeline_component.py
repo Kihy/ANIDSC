@@ -4,6 +4,10 @@ from abc import ABC, abstractmethod
 from pathlib import Path
 import time
 from typing import Callable, Dict, Any, List, Union
+
+from ANIDSC.save_mixin.null import NullSaveMixin
+from ANIDSC.save_mixin.pickle import PickleSaveMixin
+from ANIDSC.save_mixin.torch import TorchSaveMixin
 from ANIDSC.save_mixin.yaml import YamlSaveMixin
 from tqdm import tqdm
 import yaml
@@ -18,25 +22,29 @@ class PipelineComponent(ABC):
             component_type (str, optional): type of component for saving. If '', the component is stateless and will not be saved. Defaults to "".
            
         """                
-        self.component_name = self.__class__.__name__
+
         self.component_type=component_type
         
-        self.parent:Pipeline = self  # Reference to parent pipeline
+        self.parent_pipeline = None  # Reference to parent pipeline
         self.preprocessors=[]
         self.postprocessors=[]
         
         self.comparable=True
         
         # used for saving
-        self.unpickleable=["parent"]
+        self.unpickleable=["parent_pipeline"]
         
         # used for saving config
         self.save_attr=[]
         
     def get_save_attr(self):
         save_state={}
-        for i in self.save_attr: 
-            save_state[i]=self.__dict__[i]
+        for i in self.save_attr:
+            if i=="manifest": #special case for components
+                value={k: v.to_dict() for k, v in self.__dict__["components"].items()}
+            else:
+                value=self.__dict__[i]
+            save_state[i]=value
             
         return save_state
     
@@ -68,14 +76,20 @@ class PipelineComponent(ABC):
                 X = p(X)
         return X
     
-    def request_attr(self, component, attr):
+    def request_attr(self, component, attr, default=None):
         """finds the current component's context by recursively adding parent's context to self if it does not exist
 
         Returns:
             Dict[str, Any]: the overall context dictionary
         """
-        return self.parent.get_attr(component, attr)
-        
+        return self.parent_pipeline.get_attr(component, attr, default)
+    
+    def request_action(self, component, action):
+        return self.parent_pipeline.perform_action(component, action)
+    
+    def on_load(self):
+        pass
+    
     @abstractmethod
     def setup(self):
         pass
@@ -94,24 +108,27 @@ class PipelineComponent(ABC):
     def load(cls, path):
         pass 
     
-
-
-    def __or__(self, other:'PipelineComponent')->'Pipeline':
-        """attaches pipeline component together
-
-        Args:
-            other (PipelineComponent): another pipeline component to attach to
-
-        Returns:
-            Pipeline: pipeline
-        """        
-        return Pipeline([self, other])
-
     def __str__(self):
-        return self.component_name
+        return self.__class__.__name__
     
-    def get_save_path(self, extension):
-        return self.parent.get_save_path_template().format(self.component_type, self.component_name, extension)
+    def to_dict(self):
+        comp_dict = {
+            "class": self.__class__.__name__,
+            "attrs": self.get_save_attr(),
+            "file": self.get_save_path()
+        }
+        return comp_dict
+
+    
+    def get_save_path(self):
+        if isinstance(self, NullSaveMixin):
+            return False
+        elif isinstance(self, YamlSaveMixin):
+            return self.get_save_path_template().format(self.component_type, str(self), "yaml")
+        elif isinstance(self, PickleSaveMixin):
+            return self.parent_pipeline.get_save_path_template().format(self.component_type, str(self), "pkl")
+        elif isinstance(self, TorchSaveMixin):
+            return self.parent_pipeline.get_save_path_template().format(self.component_type, str(self), "pth")
     
     def __getstate__(self):
         state = self.__dict__.copy()
@@ -132,69 +149,3 @@ class PipelineComponent(ABC):
 
         return compare_dicts(self_attrs, other_attrs)        
               
-
-class Pipeline(YamlSaveMixin, PipelineComponent):
-    def __init__(self, components: Dict[str, PipelineComponent]):
-        """A full pipeline that can be extended with |
-
-        Args:
-            components (PipelineComponent): the component of pipeline
-        """        
-        super().__init__(component_type="manifest")
-        self.components = components
-        self.component_name=str(self)
-        self.start_time=None
-        
-    
-    def setup(self):
-        for _, component in self.components.items():
-            component.parent=self
-            component.setup()
-    
-    def get_attr(self, comp_type, attr):
-        return getattr(self.components[comp_type], attr)
-
-    
-    
-    def process(self, data=None):
-        """sequentially process data over each component
-
-        Args:
-            data (_type_): the input data
-
-        Returns:
-            _type_: output data
-        """
-        self.start_time=time.time()
-        
-        self.setup()
-        
-        pbar = tqdm()
-        
-        while True:
-            for comp_type, component in self.components.items():
-                data = component.preprocess(data)
-                data = component.process(data)
-                data = component.postprocess(data)
-                if data is None: 
-                    break
-            pbar.update(1)
-            if comp_type=="data_source":
-                break # end of input
-        
-        self.save()
-            
-    def get_save_path_template(self):
-        return f"{self.get_attr('data_source','dataset_name')}/{self.get_attr('feature_extractor', 'component_name')}/{{}}/{self.get_attr('data_source','file_name')}/{{}}.{{}}"
-
-            
-    def __eq__(self, other: 'Pipeline'):
-        same_class=self.__class__==other.__class__ 
-        if not same_class:
-            return False
-        
-        return self.components==other.components
-
-    def __str__(self):
-        return "->".join([str(component) for _, component in self.components.items()])
-    

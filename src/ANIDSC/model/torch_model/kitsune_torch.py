@@ -268,7 +268,7 @@ class Kitsune(BaseTorchModel):
 
     def init_model(self):
         self.fm = FeatureMapper(
-            self.context["output_features"], self.max_features_per_cluster
+            self.input_dims, self.max_features_per_cluster
         , self.grace_period)
 
         self.mse = RMSELoss(reduction="none")

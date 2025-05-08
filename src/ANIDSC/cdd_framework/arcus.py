@@ -6,7 +6,7 @@ import torch
 import math
 import torch.nn as nn
 import torch.optim as optim
-from ..component.model import BaseOnlineODModel
+from ..model.model import BaseOnlineODModel
 
 
 def centering(K):

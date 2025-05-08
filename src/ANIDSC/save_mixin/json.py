@@ -8,7 +8,7 @@ class JSONSaveMixin:
     def save(self):
         super().save()
         save_path = Path(
-            f"{self.context['dataset_name']}/{self.context['fe_name']}/{self.component_type}/{self.context['file_name']}/{self.component_name}{f'-{self.suffix}' if self.suffix !='' else ''}.pkl"
+            f"{self.context['dataset_name']}/{self.context['fe_name']}/{self.component_type}/{self.context['file_name']}/{str(self)}{f'-{self.suffix}' if self.suffix !='' else ''}.pkl"
         )
         save_path.parent.mkdir(parents=True, exist_ok=True)
 

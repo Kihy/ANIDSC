@@ -24,23 +24,23 @@ class ICL(BaseTorchModel):
         
     def init_model(self):
     
-        if self.context['output_features'] <= 40:
+        if self.input_dims <= 40:
             self.kernel_size = 2
-        elif 40 < self.context['output_features'] <= 160:
+        elif 40 < self.input_dims <= 160:
             self.kernel_size = 10
 
-        elif 160 < self.context['output_features'] <= 240:
-            self.kernel_size = self.context['output_features'] - 150
-        elif 240 < self.context['output_features'] <= 480:
-            self.kernel_size = self.context['output_features'] - 200
+        elif 160 < self.input_dims <= 240:
+            self.kernel_size = self.input_dims - 150
+        elif 240 < self.input_dims <= 480:
+            self.kernel_size = self.input_dims - 200
         else:
-            self.kernel_size = self.context['output_features'] - 400
+            self.kernel_size = self.input_dims - 400
 
-        if self.context['output_features'] < 3:
+        if self.input_dims < 3:
             raise ValueError('ICL model cannot handle the data that have less than three features.')
 
         self.net = ICLNet(
-            n_features=self.context['output_features'],
+            n_features=self.input_dims,
             kernel_size=self.kernel_size,
             hidden_dims=self.hidden_dims,
             rep_dim=self.rep_dim,

@@ -4,13 +4,13 @@ import torch
 
 
 class BaseTorchModel(torch.nn.Module):
-    def __init__(self, context, device="cuda", **kwargs):
+    def __init__(self, input_dims, device="cuda", **kwargs):
         torch.nn.Module.__init__(self)
         self.preprocessors = [self.to_tensor, self.to_device]
-
         self.device = device
         self.optimizer = None
-        self.context = context
+        self.input_dims=input_dims
+
         
         self.init_model()
 
@@ -44,7 +44,9 @@ class BaseTorchModel(torch.nn.Module):
         return X.to(self.device)
 
     def to_tensor(self, X):
-        return torch.from_numpy(X).float()
+        if not isinstance(X, torch.Tensor):
+            X=torch.tensor(X)
+        return X.float()
 
     def to_numpy(self, X: torch.Tensor):
         return X.detach().cpu().numpy()

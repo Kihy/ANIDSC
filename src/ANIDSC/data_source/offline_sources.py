@@ -1,4 +1,5 @@
 import json
+from typing import Any, Dict
 import numpy as np
 from scapy.all import PcapReader
 from ..component.pipeline_source import PipelineSource
@@ -24,7 +25,7 @@ class PacketReader(NullSaveMixin,PipelineSource):
         
 
 class CSVReader(NullSaveMixin, PipelineSource):
-    def __init__(self, fe_name: str, **kwargs):
+    def __init__(self, fe_name: str, fe_attrs:Dict[str, Any]={}, **kwargs):
         """reads data from CSV file
 
         Args:
@@ -34,8 +35,20 @@ class CSVReader(NullSaveMixin, PipelineSource):
         """
         super().__init__(**kwargs)
 
-        self.fe_name = fe_name
+        # set fe_attrs to self 
+        self.fe_name=fe_name
+        self.save_attr.append("fe_name")
+        
+        # set fe_attrs to self
+        self.fe_attrs=fe_attrs
+        self.save_attr.append("fe_attrs")
+        
         self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.csv"
         self.iter = pd.read_csv(
-            self.path, chunksize=self.batch_size, nrows=self.max_records, skiprows=1
+            self.path, chunksize=self.batch_size, nrows=self.max_records, header=0
         )
+        self.feature_names=self.iter._engine.names
+        self.ndim=len(self.feature_names)
+        
+    def __getattr__(self, name):
+        return self.fe_attrs[name]

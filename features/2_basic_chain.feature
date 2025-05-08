@@ -1,49 +1,35 @@
-@core
 Feature: Basic chaining from CSV files
     Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "test_data", file "benign_lenovo_bulb", and feature extractor AfterImage
-        And a new basic pipeline with <model>
-        When the PacketReader starts
+        Given a <state> basic pipeline with input from csv file initialized with dataset test_data, file <file>, feature extractor <fe_name> and model <model>
+        When the pipeline starts
         Then the pipeline should not fail
         And the components are saved
-        And the results are logged
         Examples:
-            | model                              |
-            | torch_models.autoencoder.AE        |
-            | torch_models.icl.ICL               |
-            | torch_models.kitsune_torch.Kitsune |
-            | torch_models.goad.GOAD             |
-            | torch_models.slad.SLAD             |
-            | torch_models.autoencoder.VAE       |
+            | state  | model               | file                        | fe_name    |
+            | new    | torch_model.AE      | benign_lenovo_bulb          | AfterImage |
+            | new    | torch_model.ICL     | benign_lenovo_bulb          | AfterImage |
+            | new    | torch_model.Kitsune | benign_lenovo_bulb          | AfterImage |
+            | new    | torch_model.GOAD    | benign_lenovo_bulb          | AfterImage |
+            | new    | torch_model.SLAD    | benign_lenovo_bulb          | AfterImage |
+            | new    | torch_model.VAE     | benign_lenovo_bulb          | AfterImage |
+            | loaded | torch_model.ICL     | malicious_Service_Detection | AfterImage |
+            | loaded | torch_model.AE      | malicious_Service_Detection | AfterImage |
+            | loaded | torch_model.GOAD    | malicious_Service_Detection | AfterImage |
+            | loaded | torch_model.SLAD    | malicious_Service_Detection | AfterImage |
+            | loaded | torch_model.VAE     | malicious_Service_Detection | AfterImage |
+            | loaded | torch_model.Kitsune | malicious_Service_Detection | AfterImage |
+            | loaded | torch_model.ICL     | malicious_Port_Scanning     | AfterImage |
+            | loaded | torch_model.AE      | malicious_Port_Scanning     | AfterImage |
+            | loaded | torch_model.GOAD    | malicious_Port_Scanning     | AfterImage |
+            | loaded | torch_model.SLAD    | malicious_Port_Scanning     | AfterImage |
+            | loaded | torch_model.VAE     | malicious_Port_Scanning     | AfterImage |
+            | loaded | torch_model.Kitsune | malicious_Port_Scanning     | AfterImage |
+            | loaded | torch_model.ICL     | malicious_ACK_Flooding      | AfterImage |
+            | loaded | torch_model.AE      | malicious_ACK_Flooding      | AfterImage |
+            | loaded | torch_model.GOAD    | malicious_ACK_Flooding      | AfterImage |
+            | loaded | torch_model.SLAD    | malicious_ACK_Flooding      | AfterImage |
+            | loaded | torch_model.VAE     | malicious_ACK_Flooding      | AfterImage |
+            | loaded | torch_model.Kitsune | malicious_ACK_Flooding      | AfterImage |
 
-    Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "test_data", file "<file>", and feature extractor AfterImage
-        And a loaded basic pipeline with <model>
-        When the PacketReader starts
-        Then the pipeline should not fail
-        And the components are saved
-        And the results are logged
-        Examples:
-            | model                              | file                        |
-            | torch_models.icl.ICL               | malicious_Service_Detection |
-            | torch_models.autoencoder.AE        | malicious_Service_Detection |
-            | torch_models.goad.GOAD             | malicious_Service_Detection |
-            | torch_models.slad.SLAD             | malicious_Service_Detection |
-            | torch_models.autoencoder.VAE       | malicious_Service_Detection |
-            | torch_models.kitsune_torch.Kitsune | malicious_Service_Detection |
-            | torch_models.icl.ICL               | malicious_Port_Scanning     |
-            | torch_models.autoencoder.AE        | malicious_Port_Scanning     |
-            | torch_models.goad.GOAD             | malicious_Port_Scanning     |
-            | torch_models.slad.SLAD             | malicious_Port_Scanning     |
-            | torch_models.autoencoder.VAE       | malicious_Port_Scanning     |
-            | torch_models.kitsune_torch.Kitsune | malicious_Port_Scanning     |
-            | torch_models.icl.ICL               | malicious_ACK_Flooding      |
-            | torch_models.autoencoder.AE        | malicious_ACK_Flooding      |
-            | torch_models.goad.GOAD             | malicious_ACK_Flooding      |
-            | torch_models.slad.SLAD             | malicious_ACK_Flooding      |
-            | torch_models.autoencoder.VAE       | malicious_ACK_Flooding      |
-            | torch_models.kitsune_torch.Kitsune | malicious_ACK_Flooding      |
-
-
-
+    
 

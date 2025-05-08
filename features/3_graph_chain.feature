@@ -1,46 +1,36 @@
-@core
-Feature: NIDS Chain with Graph Representation
-    Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "test_data", file "benign_lenovo_bulb", and feature extractor AfterImageGraph
-            And a new graph pipeline with <model>
-        When the PacketReader starts
+Feature: Run pipeline with graph features
+    Scenario Outline: Process packets from an offline csv reader with LAGER
+        Given a <state> graph pipeline with input from csv file initialized with dataset test_data, file <file>, feature extractor <fe_name>, model <model>, node encoder <node_encoder>
+        When the pipeline starts
         Then the pipeline should not fail
-            And the components are saved
-            And the results are logged
-    Examples:
-        | model   |
-        | ICL     |
-        | AE      |
-        | Kitsune |
-        | GOAD    |
-        | SLAD    |
-        | VAE     |
+        And the components are saved
+        Examples:
+            | state  | node_encoder   | model               | file                        | fe_name         |
+            | new    | GCNNodeEncoder | torch_model.AE      | benign_lenovo_bulb          | AfterImageGraph |
+            | new    | GCNNodeEncoder | torch_model.ICL     | benign_lenovo_bulb          | AfterImageGraph |
+            | new    | GCNNodeEncoder | torch_model.Kitsune | benign_lenovo_bulb          | AfterImageGraph |
+            | new    | GCNNodeEncoder | torch_model.GOAD    | benign_lenovo_bulb          | AfterImageGraph |
+            | new    | GCNNodeEncoder | torch_model.SLAD    | benign_lenovo_bulb          | AfterImageGraph |
+            | new    | GCNNodeEncoder | torch_model.VAE     | benign_lenovo_bulb          | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.ICL     | malicious_Service_Detection | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.AE      | malicious_Service_Detection | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.GOAD    | malicious_Service_Detection | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.SLAD    | malicious_Service_Detection | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.VAE     | malicious_Service_Detection | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.Kitsune | malicious_Service_Detection | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.ICL     | malicious_Port_Scanning     | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.AE      | malicious_Port_Scanning     | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.GOAD    | malicious_Port_Scanning     | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.SLAD    | malicious_Port_Scanning     | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.VAE     | malicious_Port_Scanning     | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.Kitsune | malicious_Port_Scanning     | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.ICL     | malicious_ACK_Flooding      | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.AE      | malicious_ACK_Flooding      | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.GOAD    | malicious_ACK_Flooding      | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.SLAD    | malicious_ACK_Flooding      | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.VAE     | malicious_ACK_Flooding      | AfterImageGraph |
+            | loaded | GCNNodeEncoder | torch_model.Kitsune | malicious_ACK_Flooding      | AfterImageGraph |
 
-    Scenario Outline: Process packets from an offline csv reader
-        Given a csv file initialized with dataset "test_data", file "<file>", and feature extractor AfterImageGraph
-            And a loaded graph pipeline with <model>
-        When the PacketReader starts
-        Then the pipeline should not fail
-            And the components are saved
-            And the results are logged
-    Examples:
-        | model   | file                        |
-        | ICL     | malicious_Service_Detection |
-        | AE      | malicious_Service_Detection |
-        | Kitsune | malicious_Service_Detection |
-        | GOAD    | malicious_Service_Detection |
-        | SLAD    | malicious_Service_Detection |
-        | VAE     | malicious_Service_Detection |
-        | ICL     | malicious_ACK_Flooding      |
-        | AE      | malicious_ACK_Flooding      |
-        | Kitsune | malicious_ACK_Flooding      |
-        | GOAD    | malicious_ACK_Flooding      |
-        | SLAD    | malicious_ACK_Flooding      |
-        | VAE     | malicious_ACK_Flooding      |
-        | ICL     | malicious_Port_Scanning     |
-        | AE      | malicious_Port_Scanning     |
-        | Kitsune | malicious_Port_Scanning     |
-        | GOAD    | malicious_Port_Scanning     |
-        | SLAD    | malicious_Port_Scanning     |
-        | VAE     | malicious_Port_Scanning     |
+
+
 

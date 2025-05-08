@@ -10,14 +10,15 @@ class PickleSaveMixin:
         """ 
         super().save()
         save_path = Path(
-            self.get_save_path("pkl")
+            self.get_save_path()
         )
         save_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(str(save_path), 'wb') as file:
             pickle.dump(self, file)
         
-        return str(save_path)
+        
+                
     
     @classmethod
     def load(cls, path): # dataset_name:str, fe_name:str, file_name:str, name:str, suffix:str=''

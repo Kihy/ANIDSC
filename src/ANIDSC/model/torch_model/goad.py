@@ -31,7 +31,7 @@ class GOAD(BaseTorchModel):
         self.affine_weights = (
             torch.from_numpy(
                 np.random.randn(
-                    self.n_trans, self.context["output_features"], self.trans_dim
+                    self.n_trans, self.input_dims, self.trans_dim
                 )
             )
             .float()

@@ -2,7 +2,7 @@ import numpy as np
 from scipy.cluster.hierarchy import linkage, fcluster, to_tree
 from scipy.stats import norm
 
-from ANIDSC.component.model import BaseOnlineODModel
+from ANIDSC.model.model import BaseOnlineODModel
 
 
 np.seterr(all="ignore")

@@ -1,16 +1,10 @@
-import gc
-from typing import Any, Dict, List
 
 from ..save_mixin.pickle import PickleSaveMixin
-from .pipeline_component import PipelineComponent
-from .splitter import SplitterComponent
+from ..component.pipeline_component import PipelineComponent
 from collections import deque
 
 from abc import abstractmethod
 import numpy as np
-import torch
-import copy
-from numpy.typing import NDArray
 from ..utils import quantiles
 
 
@@ -19,7 +13,7 @@ import importlib
 class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def __init__(
         self,
-        model_str,
+        model_name,
         queue_len=10000,
         percentile=0.95,
         warmup=1000,
@@ -36,7 +30,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         """
         super().__init__(component_type="model", **kwargs)
         
-        
+        self.model_name=model_name
         self.loss_queue = deque(maxlen=queue_len)
         
         self.warmup = warmup
@@ -46,13 +40,22 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         self.batch_trained = 0
         self.batch_evaluated = 0
         
-        self.module_path, self.class_name = model_str.rsplit(".", 1)
-        module = importlib.import_module(self.module_path)
-        self.model_cls=getattr(module, self.class_name)
+        if "." in model_name:
+            sub_module, class_name = model_name.rsplit(".", 1)
+            module_path=f"ANIDSC.model.{sub_module}"
+        else:
+            module_path="ANIDSC.model"
+            class_name=model_name
+        module = importlib.import_module(module_path)
+        self.model_cls=getattr(module, class_name)
         
     def setup(self):
         super().setup()
-        self.model=self.model_cls(self.context)
+        # request from graph_rep first
+        ndim=self.request_attr("graph_rep","n_features")
+        if not ndim:
+            ndim=self.request_attr("data_source","ndim")
+        self.model=self.model_cls(ndim)
         
 
     def process(self, X):
@@ -75,9 +78,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         return {"threshold": threshold, "score": score, "batch_num": self.batch_evaluated}
 
     def update_scaler(self):
-        scaler=self.context.get("scaler",None)
-        if scaler:
-            scaler.update_current()
+        self.request_action("scaler","update_current")
     
     def get_threshold(self) -> float:
         """gets the current threshold value based on previous recorded loss value. By default it is 95th percentile
@@ -93,44 +94,5 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
 
     
     def __str__(self):
-        return f"OnlineOD({self.class_name})"
+        return f"OnlineOD({self.model_name})"
 
-
-class MultilayerSplitter(SplitterComponent):
-    def __init__(self, **kwargs):
-        """splits the input into different layers based on protocol. each layer is attached to a new pipeline"""
-        super().__init__(component_type="model", **kwargs)
-        self.name = f"MultlayerSplitter({self.pipeline})"
-
-    def setup(self):
-        self.parent.context["model_name"] = self.name
-
-        if not self.loaded_from_file:
-            
-
-            for proto in self.context["protocols"].keys():
-                self.pipelines[proto] = copy.deepcopy(self.pipeline)
-                self.pipelines[proto].context["protocol"] = proto
-                self.pipelines[proto].parent = self
-                self.pipelines[proto].setup()
-
-    def __str__(self):
-        return self.name
-
-    def split_function(self, data) -> Dict[str, Any]:
-        """splits the input data
-
-        Args:
-            data (_type_): the input data
-
-        Returns:
-            Dict[str, Any]: dictionary of splits
-        """
-        all_results = {}
-        
-        for proto_name, proto_id in self.context["protocols"].items():
-            selected = data[data[:, 3] == proto_id]
-            if selected.size > 0:
-                all_results[proto_name] = data[data[:, 3] == proto_id]
-
-        return all_results

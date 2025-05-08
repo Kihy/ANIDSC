@@ -95,7 +95,7 @@ class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
         fake_db.num_updated = self.state.num_updated
         fake_db.num_entries = self.state.num_entries
         fake_db.last_timestamp=self.state.last_timestamp
-        fake_db.mac_to_idx_map=self.state.mac_to_idx_map
+
         
         vectors = []
         for tv in traffic_vectors:
@@ -272,7 +272,7 @@ class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
 
 
 class AfterImageGraph(AfterImage):
-    def __init__(self, protocols:List[str]=["TCP", "UDP", "ARP", "ICMP"], **kwargs):
+    def __init__(self, protocol_map:Dict[str, int]={"TCP":0,"UDP":1,"ICMP":2,"ARP":3, "Other":4}, mac_to_idx_map: Dict[str, int]={},**kwargs):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
         Args:
@@ -280,16 +280,19 @@ class AfterImageGraph(AfterImage):
             decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
         """
         super().__init__(skip=4,**kwargs)
-        protocols+=["Other"]
-        self.protocol_map={p:i for i,p in enumerate(protocols)}
-        self.name=self.__str__()
+        
+
+        self.protocol_map=protocol_map
+        self.mac_to_idx_map=mac_to_idx_map
+        
+        self.save_attr.extend(["protocol_map", "mac_to_idx_map"])
     
-    def __str__(self):
-        return f"AfterImageGraph({','.join(self.protocol_map.keys())})"
+    # def __str__(self):
+    #     return f"AfterImageGraph({','.join(self.protocol_map.keys())})"
     
     def setup(self):
         super().setup()
-        self.parent.context['protocols']=self.protocol_map
+        
         
 
     def peek(self, traffic_vectors:List[Dict[str, Any]]):
@@ -337,13 +340,13 @@ class AfterImageGraph(AfterImage):
         self.state.num_updated += 1
 
         #encode ID and traffic_vector 
-        srcID=self.state.mac_to_idx_map.setdefault(srcMAC, len(self.state.mac_to_idx_map))
-        dstID=self.state.mac_to_idx_map.setdefault(dstMAC, len(self.state.mac_to_idx_map))
+        srcID=self.mac_to_idx_map.setdefault(srcMAC, len(self.mac_to_idx_map))
+        dstID=self.mac_to_idx_map.setdefault(dstMAC, len(self.mac_to_idx_map))
         
         feature=np.hstack([1, srcID, dstID, protocol, src_stat, dst_stat, jitter_stat, link_stat])
         
         self.state.last_timestamp=traffic_vector["timestamp"]
-        self.parent.context['mac_to_idx_map']=self.state.mac_to_idx_map
+        
         
         # clean our records
         if self.state.num_updated % self.clean_up_round == 0:
@@ -353,7 +356,7 @@ class AfterImageGraph(AfterImage):
                 src, dst=key.split("->")
                 srcIP=src.split("/")[0]
                 dstIP, protocol=dst.split("/")
-                all_records.append([0,self.state.mac_to_idx_map[srcIP],self.state.mac_to_idx_map[dstIP],int(protocol)]+[0 for _ in range(65)])
+                all_records.append([0,self.mac_to_idx_map[srcIP],self.mac_to_idx_map[dstIP],int(protocol)]+[0 for _ in range(65)])
 
             return np.vstack(all_records)
         else:
@@ -707,7 +710,7 @@ class IncStat2D:
         return compare_dicts(self.__dict__, other.__dict__)
 
 class IncStatDB:
-    def __init__(self, decay_factors:List[float], last_timestamp:float=None, limit:int=1e5, mac_to_idx_map:Dict[str, int]={}):
+    def __init__(self, decay_factors:List[float], last_timestamp:float=None, limit:int=1e5):
         """database to store all incstats
 
         Args:
@@ -728,7 +731,7 @@ class IncStatDB:
         # number of pkts updated
         self.num_updated = 0
         self.last_timestamp=last_timestamp
-        self.mac_to_idx_map=mac_to_idx_map
+
     
     def __repr__(self):
         return pformat(vars(self))

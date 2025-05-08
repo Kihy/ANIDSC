@@ -30,9 +30,9 @@ class SLAD(BaseTorchModel):
         super().__init__(*args, **kwargs)
 
     def init_model(self):
-        self.f_weight = torch.ones(self.context["output_features"])
+        self.f_weight = torch.ones(self.input_dims)
         
-        self.max_subspace_len = self.context["output_features"]
+        self.max_subspace_len = self.input_dims
 
         if self.subspace_pool_size is None:
             self.subspace_pool_size = min(self.max_subspace_len, 256)
@@ -69,9 +69,9 @@ class SLAD(BaseTorchModel):
         # random transformations to transform data
         rng = np.random.RandomState()
         for i in range(self.n_slad_ensemble):
-            replace = True if self.context["output_features"] <= 10 else False
+            replace = True if self.input_dims <= 10 else False
             subspace_indices = [
-                rng.choice(np.arange(self.context["output_features"]), rng.choice(self.len_pool, 1), replace=replace)
+                rng.choice(np.arange(self.input_dims), rng.choice(self.len_pool, 1), replace=replace)
                 for _ in range(self.distribution_size)
             ]
             self.subspace_indices_lst.append(subspace_indices)
