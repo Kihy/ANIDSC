@@ -62,6 +62,9 @@ class BasicSummarizer:
 
     def _list_dirs(self, path: Path, overrides: List[str]) -> List[str]:
         return overrides or [p.name for p in path.iterdir()]
+    
+    def _list_pipeline(self, path: Path, overrides: List[str]) -> List[str]:
+        return overrides or [str(p.relative_to(path)) for p in path.rglob('*') if p.is_file()]
 
     def _extract_model_name(self, name):
         m = re.search(r'OnlineOD\(([^)]+)\)', name)
@@ -78,9 +81,13 @@ class BasicSummarizer:
                 res_dir = dataset / fe / "results"
                 for file_name in self._list_dirs(res_dir, self.files):
                     file_dir = res_dir / file_name
-                    for pipeline in self._list_dirs(file_dir, self.pipelines):
+                    for pipeline in self._list_pipeline(file_dir, self.pipelines):
                         csv_path = file_dir / pipeline
                         df = pd.read_csv(csv_path)
+                        
+                        if len(df)==0:
+                            continue
+                        
                         df = df.replace([np.inf, -np.inf], np.nan)
                         
                         df = df.assign(
@@ -167,8 +174,15 @@ class BasicSummarizer:
             mask = df["file"].str.startswith(label)
             stats[f"pos_{label}"] = df.loc[mask, "pos_count"].sum()
             stats[f"total_{label}"] = df.loc[mask, "batch_size"].sum()
-        stats["acc_benign"] = 1 - stats["pos_benign"] / stats["total_benign"]
-        stats["acc_malicious"] = stats["pos_malicious"] / stats["total_malicious"]
+        if stats["total_benign"]==0:
+            stats["acc_benign"] = 0
+        else:
+            stats["acc_benign"] = 1 - stats["pos_benign"] / stats["total_benign"]
+        
+        if stats["total_malicious"]==0:
+            stats["acc_malicious"]=0
+        else:
+            stats["acc_malicious"] = stats["pos_malicious"] / stats["total_malicious"]
         stats["f1"] = f_beta(stats["pos_malicious"], stats["total_malicious"] - stats["pos_malicious"], stats["pos_benign"])
         for b in (0.5, 1, 2):
             stats[f"hmean_{b}_acc"] = weighted_hmean(stats["acc_benign"], stats["acc_malicious"], beta=b)

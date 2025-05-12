@@ -5,7 +5,7 @@ from ANIDSC.evaluator.summarizer import BasicSummarizer
 @given('a Summarizer initialized with dataset {dataset} and feature extractor AfterImage')
 def step_given_summarizer(context, dataset):
     
-    summarizer=BasicSummarizer([dataset], ["AfterImage"])
+    summarizer=BasicSummarizer([dataset], ["AfterImageGraph","AfterImage"])
     context.summarizer=summarizer 
 
 @when('we plot the results')

@@ -86,3 +86,46 @@ def compare_dicts(dict1, dict2):
         print(f"val2: {val2}")
         
     return is_same 
+
+
+
+
+def uniqueXT(x, sorted=True, return_index=False, return_inverse=False, return_counts=False,
+             occur_last=False, dim=None):
+    if return_index or (not sorted and dim is not None):
+        unique, inverse, counts = torch.unique(x, sorted=True,
+            return_inverse=True, return_counts=True, dim=dim)
+        inv_sorted, inv_argsort = inverse.flatten().sort(stable=True)
+
+        if occur_last and return_index:
+            tot_counts = (inverse.numel() - 1 - 
+                torch.cat((counts.new_zeros(1),
+                counts.flip(dims=[0]).cumsum(dim=0)))[:-1].flip(dims=[0]))
+        else:
+            tot_counts = torch.cat((counts.new_zeros(1), counts.cumsum(dim=0)))[:-1]
+        
+        index = inv_argsort[tot_counts]
+        
+        if not sorted:
+            index, idx_argsort = index.sort()
+            unique = (unique[idx_argsort] if dim is None else
+                torch.index_select(unique, dim, idx_argsort))
+            if return_inverse:
+                idx_tmp = idx_argsort.argsort()
+                inverse.flatten().index_put_((inv_argsort,), idx_tmp[inv_sorted])
+            if return_counts:
+                counts = counts[idx_argsort]
+
+        ret = (unique,)
+        if return_index:
+            ret += (index,)
+        if return_inverse:
+            ret += (inverse,)
+        if return_counts:
+            ret += (counts,)
+        return ret if len(ret)>1 else ret[0]
+    
+    else:
+        return torch.unique(x, sorted=sorted, return_inverse=return_inverse,
+            return_counts=return_counts, dim=dim)
+

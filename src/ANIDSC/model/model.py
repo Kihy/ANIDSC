@@ -52,7 +52,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def setup(self):
         super().setup()
         # request from graph_rep first
-        ndim=self.request_attr("graph_rep","n_features")
+        ndim=self.request_attr("graph_rep","n_features", None)
         if not ndim:
             ndim=self.request_attr("data_source","ndim")
         self.model=self.model_cls(ndim)

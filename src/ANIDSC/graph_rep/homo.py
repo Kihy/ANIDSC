@@ -7,7 +7,9 @@ import numpy as np
 import torch
 from torch_geometric.data import Data
 from torch_geometric.utils import k_hop_subgraph, to_networkx, remove_isolated_nodes
-from ..utils2 import uniqueXT
+from ..utils.helper import uniqueXT
+
+
 
 def find_edge_indices(edges, srcID, dstID):
     search_edges = torch.vstack([srcID, dstID])
@@ -170,12 +172,6 @@ class HomoGraphRepresentation(TorchSaveMixin, PipelineComponent, torch.nn.Module
             self.G.edge_attr = torch.vstack(
                 [self.G.edge_attr, edge_feature[~existing_edge_idx]]
             )
-
-    def get_graph_representation(self):
-        G = to_networkx(
-            self.G, node_attrs=["idx", "updated","x"], edge_attrs=['edge_attr'], to_undirected=False, to_multi=False
-        )
-        return G
 
     def split_data(self, x):
         """splits input data into different parts

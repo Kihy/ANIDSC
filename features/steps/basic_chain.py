@@ -20,6 +20,7 @@ def step_given_new_csv_afterimage_model(context, file, fe_name, model):
     template=get_template("detection", dataset_name="test_data", file_name=file, model_name=model, fe_name=fe_name, fe_attrs=fe_attrs)
     
     context.pipeline=Pipeline.load(template)
+    context.pipeline.setup()
     
     
 @given("a loaded basic pipeline with input from csv file initialized with dataset test_data, file {file}, feature extractor {fe_name} and model {model}")
@@ -32,6 +33,7 @@ def step_given_loaded_csv_afterimage_model(context, file, fe_name, model):
     manifest["attrs"]["manifest"]["data_source"]["attrs"]["file_name"]=file
     
     context.pipeline=Pipeline.load(manifest)
+    context.pipeline.on_load()
     
 
 

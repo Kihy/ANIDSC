@@ -1,3 +1,5 @@
+import json
+import os
 from typing import Any, Dict, List
 from networkx.drawing.nx_pydot import write_dot
 import networkx as nx
@@ -5,169 +7,80 @@ import numpy as np
 
 from ..save_mixin.null import NullSaveMixin
 from ..component.pipeline_component import PipelineComponent
-from . import od_metrics 
+from . import od_metrics
 from pathlib import Path
 import time
 from ..utils2 import draw_graph, fig_to_array
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
-
+from torch_geometric.utils import to_networkx
+import plotly.graph_objects as go
 from ..templates import METRICS
 
 
-class CollateEvaluator(PipelineComponent):
-    def __init__(self, log_to_tensorboard:bool=True, save_results:bool=True):
-        """Evaluator to aggregate results from multiple base evaluators
-
-        Args:
-            log_to_tensorboard (bool, optional): whether to log results in tensorboard. Defaults to True.
-            save_results (bool, optional): whether to save results in CSV file. Defaults to True.
-        """        
-        super().__init__()
-        self.log_to_tensorboard=log_to_tensorboard
-        self.save_results=save_results
-        
-        
-    def setup(self):
-        
-        if self.save_results:
-            # file to store outputs
-            layerwise_path = Path(
-                f"{self.context['dataset_name']}/{self.context['fe_name']}/results/{self.context['file_name']}/{self.context['pipeline_name']}.csv"
-            )
-            layerwise_path.parent.mkdir(parents=True, exist_ok=True)
-            self.output_file = open(str(layerwise_path), "w")
-            self.write_output_header=True 
-            
-            
-            # folder to dot folder
-            self.dot_folder=Path(f"{self.context['dataset_name']}/{self.context['fe_name']}/dot/{self.context['file_name']}/{self.context['pipeline_name']}")
-            self.dot_folder.mkdir(parents=True, exist_ok=True)
-            print(f"dot folder {str(self.dot_folder)}")
-            
-            
-        if self.log_to_tensorboard:
-            log_dir=f"{self.context['dataset_name']}/{self.context['fe_name']}/runs/{self.context['file_name']}/{self.context['pipeline_name']}"
-            self.writer = SummaryWriter(
-                log_dir=log_dir
-                )
-            print("tensorboard logging to", log_dir)
-            
-            # custom layout for score and threshold in each layer
-            layout = {
-                "decision": {
-                    protocol: ["Multiline", [f"median_score/{protocol}", f"median_threshold/{protocol}"]]
-                for protocol in self.context['protocols'].keys()},
-            }
-
-            self.writer.add_custom_scalars(layout)
-    
-    def teardown(self):
-        self.output_file.close()
-        print("results file saved at", self.output_file.name)
-        return self.output_file.name
-    
-    def process(self, results:Dict[str, Dict[str, Any]]):
-        """process the results dictionary
-
-        Args:
-            results (Dict[str, Dict[str, Any]]): layer: results pairs for each layer
-        """        
-        
-        #layerwise results
-        for protocol, result_dict in results.items():
-            if result_dict is None:
-                continue
-            
-            if self.log_to_tensorboard:
-                for name, value in list(result_dict.items()):
-                    if name=="batch_num":
-                        continue 
-                    
-                    elif name=="graph_rep":
-                        self.writer.add_image(
-                           protocol, value, global_step=result_dict['batch_num'])
-                        del result_dict["graph_rep"]    
-                    elif isinstance(value, (int, float, np.generic)):       
-                        self.writer.add_scalar(
-                                        f"{name}/{protocol}",
-                                        value,
-                                        result_dict['batch_num'],
-                                    )
-                
-                    
-            if self.save_results:
-                if "G" in result_dict.keys():
-                    write_dot(result_dict["G"], f"{str(self.dot_folder)}/{protocol}_{result_dict['batch_num']}.dot")
-                    del result_dict["G"]
-                    
-                    
-                result_dict["protocol"]=protocol
-                
-                if self.write_output_header:
-                    self.output_file.write(",".join(result_dict.keys()) + "\n")
-                    self.write_output_header=False
-                    
-                
-                self.output_file.write(
-                    ",".join(list(map(str, result_dict.values()))) + "\n"
-                )     
-        
-class BaseEvaluator(NullSaveMixin, PipelineComponent): 
-    def __init__(self, metric_list:List[str]=METRICS, log_to_tensorboard:bool=True, save_results:bool=True):
+class BaseEvaluator(NullSaveMixin, PipelineComponent):
+    def __init__(
+        self,
+        metric_list: List[str] = METRICS,
+        log_to_tensorboard: bool = True,
+        plot_graph=True,
+    ):
         """base evaluator that evaluates the output of a single model
         Args:
             metric_list (List[str]): list of metric names in string format
             log_to_tensorboard (bool, optional): whether to write to tensorboard. if there is a collate evaluatr, it is better to delegate it to collate evaluator. Defaults to True.
             save_results (bool, optional): whether to save results in CSV file. if there is a collate evaluatr, it is better to delegate it to collate evaluator. Defaults to True.
             draw_graph_rep_interval (bool, optional): whether to draw the graph representation. only available if pipeline contains graph representation. Defaults to False.
-        """        
+        """
         super().__init__()
-        self.metrics=[getattr(od_metrics, m) for m in metric_list]
-        self.metric_list=metric_list
-        self.log_to_tensorboard=log_to_tensorboard
-        self.save_results=save_results
-        self.write_header=True
-        self.comparable=False
-        
+        self.metrics = [getattr(od_metrics, m) for m in metric_list]
+        self.metric_list = metric_list
+        self.log_to_tensorboard = log_to_tensorboard
+        self.plot_graph = plot_graph
+        self.comparable = False
+
     def setup(self):
         super().setup()
 
-        dataset_name=self.request_attr("data_source","dataset_name")
-        fe_name=self.request_attr("data_source","fe_name")
-        file_name=self.request_attr("data_source","file_name")
-        pipeline_name=str(self.parent_pipeline)
+        dataset_name = self.request_attr("data_source", "dataset_name")
+        fe_name = self.request_attr("data_source", "fe_name")
+        file_name = self.request_attr("data_source", "file_name")
+        pipeline_name = str(self.parent_pipeline)
+
+        self.file_template = (
+            f"{dataset_name}/{fe_name}/{{}}/{file_name}/{pipeline_name}"
+        )
         
-        file_template=f"{dataset_name}/{fe_name}/{{}}/{file_name}/{pipeline_name}"
-        
-        if self.save_results:
-            # file to store outputs
-            scores_and_thresholds_path = Path(
-                file_template.format("results")+".csv"
+        if self.plot_graph:
+            graph_plot_path = Path(self.file_template.format("graphs"))
+            graph_plot_path.mkdir(parents=True, exist_ok=True)
+
+        # file to store outputs
+        scores_and_thresholds_path = Path(self.file_template.format("results") + ".csv")
+        scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
+        self.output_file = open(str(scores_and_thresholds_path), "a")
+        if os.stat(scores_and_thresholds_path).st_size == 0:
+            self.output_file.write(
+                ",".join(["time", "batch_num"] + self.metric_list) + "\n"
             )
-            scores_and_thresholds_path.parent.mkdir(parents=True, exist_ok=True)
-            self.output_file = open(str(scores_and_thresholds_path), "w")
-            
+
         if self.log_to_tensorboard:
-            log_dir=file_template.format("runs")
-            self.writer = SummaryWriter(
-                log_dir=log_dir
-                )
+            log_dir = self.file_template.format("runs")
+            self.writer = SummaryWriter(log_dir=log_dir)
             print("tensorboard logging to", log_dir)
-            
+
         self.prev_timestamp = time.time()
-    
+
     def on_load(self):
         self.setup()
-        
-        
+
     def save(self):
-        if self.save_results:
-            self.output_file.close()
-            print("results file saved at", self.output_file.name)
-            self.write_header=True
-    
-    def process(self, results:Dict[str, Any])->Dict[str, Any]:
+
+        self.output_file.close()
+        print("results file saved at", self.output_file.name)
+        self.write_header = True
+
+    def process(self, results: Dict[str, Any]) -> Dict[str, Any]:
         """processes results and log them accordingly
 
         Args:
@@ -175,30 +88,50 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
 
         Returns:
             Dict[str, Any]: dictionary of metric, value pair
-        """        
+        """
         # records time
 
-        current_time=time.time()
-        duration=current_time - self.parent_pipeline.start_time
-        
-        result_dict={"time":duration, "batch_num":results["batch_num"]}
-        
-        
-        
+        current_time = time.time()
+        duration = current_time - self.parent_pipeline.start_time
+
+        result_dict = {"time": duration, "batch_num": results["batch_num"]}
+
         for metric_name, metric in zip(self.metric_list, self.metrics):
-            result_dict[metric_name]=metric(results)
-            
+            result_dict[metric_name] = metric(results)
+
             if self.log_to_tensorboard:
                 self.writer.add_scalar(
-                                metric_name,
-                                result_dict[metric_name],
-                                results['batch_num'],
-                            )
-    
-        if self.save_results:
-            if self.write_header:
-                self.output_file.write(",".join(result_dict.keys()) + "\n")
-                self.write_header=False
-            self.output_file.write(",".join(map(str, result_dict.values())) + "\n")
-        
-        
+                    metric_name,
+                    result_dict[metric_name],
+                    results["batch_num"],
+                )
+
+        self.output_file.write(",".join(map(str, result_dict.values())) + "\n")
+
+        # plot graph every 10 batches
+        if self.plot_graph and results["batch_num"] % 10 == 0:
+
+            G = self.request_attr("graph_rep", "G", None)
+            G = to_networkx(
+                G, node_attrs=["x", "idx", "updated"], edge_attrs=["edge_attr"]
+            )
+            
+            # get mac_to_idx_map
+            mac_to_idx_map=self.request_attr("data_source","fe_attrs")["mac_to_idx_map"]
+            idx_to_max_map={v:k for k,v in mac_to_idx_map.items()}
+            nx.set_node_attributes(G, idx_to_max_map, "mac_address")
+            
+            # get threshold
+            G.graph["threshold"]=results["threshold"]
+            
+            # add anomaly score
+            if results["score"] is None:
+                nx.set_node_attributes(G, float("inf"), "node_as")
+            else:
+                # assign edge nodes
+                score_map={i:v for i,v in enumerate(results["score"].tolist())}
+                nx.set_node_attributes(G, score_map, "node_as")
+            
+            with open(self.file_template.format("graphs")+f"/{results['batch_num']}.json", "w") as f:
+                json.dump(nx.cytoscape_data(G), f)
+           

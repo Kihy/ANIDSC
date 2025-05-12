@@ -65,7 +65,8 @@ class BaseFeatureBuffer(PipelineComponent):
             if os.stat(meta_path).st_size==0:            
                 self.meta_file.write(",".join(self.request_attr('feature_extractor',"meta_names")) + "\n")
             
-            
+    def on_load(self):
+        return self.setup()
             
             
     def process(self, data: Tuple[List[Any], List[Any]])->Union[None, NDArray]:

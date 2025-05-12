@@ -11,6 +11,7 @@ def step_given_new_afterimage_and_file(context, fe_class, file):
     template=get_template("feature_extraction", dataset_name="test_data", file_name=file, fe_class=fe_class, save_buffer=True)
         
     context.pipeline=Pipeline.load(template)
+    context.pipeline.setup()
 
 @given("a loaded {fe_class} feature extraction pipeline initialized with test_data dataset and file {file}")
 def step_given_loaded_afterimage_and_file(context, fe_class, file):
@@ -23,6 +24,7 @@ def step_given_loaded_afterimage_and_file(context, fe_class, file):
     
     
     context.pipeline=Pipeline.load(manifest)
+    context.pipeline.on_load()
 
 @when("the pipeline starts")
 def step_when_pipeline_starts(context):

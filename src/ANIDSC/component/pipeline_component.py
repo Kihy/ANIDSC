@@ -82,7 +82,10 @@ class PipelineComponent(ABC):
         Returns:
             Dict[str, Any]: the overall context dictionary
         """
-        return self.parent_pipeline.get_attr(component, attr, default)
+        if self.parent_pipeline is None:
+            return default
+        else:
+            return self.parent_pipeline.get_attr(component, attr, default)
     
     def request_action(self, component, action):
         return self.parent_pipeline.perform_action(component, action)

@@ -19,7 +19,7 @@ from scipy import integrate
 
 from ..save_mixin.torch import TorchSaveMixin
 from ..scaler.t_digest import LivePercentile
-from ..utils2 import uniqueXT
+from ..utils.helper import uniqueXT
 
 torch.set_printoptions(precision=4)
 

@@ -15,21 +15,19 @@ class MultilayerSplitter(Pipeline):
         for proto, pipeline in self.manifest.items():
             components=Pipeline.load(pipeline)
             components.parent_pipeline=self
-            components.setup()
             components.add_prefix(proto)
+            components.setup()
+
             self.components[proto] = components
             
-        
- 
-    
     def on_load(self):
         self.components={}
         # copy pipeline and attach to each protocol layer
         for proto, pipeline in self.manifest.items():
             components=Pipeline.load(pipeline)
             components.parent_pipeline=self
-            components.on_load()
             components.add_prefix(proto)
+            components.on_load()
             self.components[proto] = components  
         
     def process(self, data):
