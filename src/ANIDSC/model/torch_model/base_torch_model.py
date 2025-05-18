@@ -90,23 +90,7 @@ class BaseTorchModel(torch.nn.Module):
     def __str__(self):
         return self.__class__.__name__
     
-    # def __getstate__(self):
-    #     state = self.__dict__.copy()
-        
-    #     state["state_dict"]={}
-    #     for i in self.layers:
-    #         state["state_dict"][i] = getattr(self, i).state_dict()
-    #         del state["_modules"][i]
-        
-    #     return state
-    
-    # def __setstate__(self, state):
-    #     # Reconstruct the PyTorch model from state_dict
-    #     state_dict=state.pop("state_dict")
-    #     self.__dict__.update(state)
-    #     for i in self.layers:
-    #         getattr(self,i).load_state_dict(state_dict[i])
-    
+
     def __getstate__(self):
         state = self.__dict__.copy()
         # Save the model's full state_dict (includes all parameters/buffers)

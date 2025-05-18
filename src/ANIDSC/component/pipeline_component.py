@@ -139,6 +139,9 @@ class PipelineComponent(ABC):
             state.pop(i,None)
         return state
     
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+    
     def __eq__(self, other: 'PipelineComponent'):
         same_class=self.__class__==other.__class__ 
         if not same_class:
@@ -146,6 +149,7 @@ class PipelineComponent(ABC):
         
         if not self.comparable:
             return True
+        
         # Create copies of the __dict__ to avoid modifying the original attributes
         self_attrs = self.__getstate__().copy()
         other_attrs = other.__getstate__().copy()

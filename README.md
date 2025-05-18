@@ -21,11 +21,6 @@ run
 
 if gpu is not set up you can remove --gpus all 
 
-alternatively, you can build docker image from scratch, run from top level directory (same level as the top level ANIDSC file):
-`docker build --pull -t kihy/anidsc_image -f docker_root/Dockerfile .`
-
-verify gpu is intalled correctly via:
-`docker run --rm --gpus all -it kihy/anidsc_image python -c "import torch; print(torch.cuda.device_count(), torch.cuda.get_device_name(0))"`
 
 go to code folder 
 `cd /workspace/ANIDSC`

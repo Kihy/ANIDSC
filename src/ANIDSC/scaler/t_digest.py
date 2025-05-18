@@ -85,4 +85,4 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
 
     def __setstate__(self, state):
         state["dims"] = self.of_centroids(state["dims"])
-        self.__dict__.update(state)
+        super().__setstate__(state)

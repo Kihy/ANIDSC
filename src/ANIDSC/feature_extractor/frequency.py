@@ -1,5 +1,8 @@
 from collections import deque
 
+from ..utils.helper import compare_dicts
+
+from ..save_mixin.pickle import PickleSaveMixin
 import numpy as np
 from ..component.feature_extractor import BaseTrafficFeatureExtractor
 
@@ -15,8 +18,15 @@ class FrequencyState:
         while (self.sliding_window[-1]-self.sliding_window[0])>self.time_window:
             self.sliding_window.popleft()
         return np.array([[len(self.sliding_window)]])
+    
+    def __eq__(self, other):
+        # 1) Ensure same type
+        if not isinstance(other, FrequencyState):
+            return NotImplemented
+        # 2) Compare attribute dictionaries
+        return compare_dicts(self.__dict__, other.__dict__)
 
-class FrequencyExtractor(BaseTrafficFeatureExtractor):
+class FrequencyExtractor(PickleSaveMixin, BaseTrafficFeatureExtractor):
     def __init__(self, time_window=10, **kwargs):
         """simple frequency feature extractor based on time windows
 

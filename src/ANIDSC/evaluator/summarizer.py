@@ -59,6 +59,9 @@ class BasicSummarizer:
         self.pipelines = pipelines
         self.fig_ext = fig_ext
         self.max_samples=max_samples
+        
+        self.benign_prefix=["benign"]
+        self.malicious_prefix=["malicious","attack"]
 
     def _list_dirs(self, path: Path, overrides: List[str]) -> List[str]:
         return overrides or [p.name for p in path.iterdir()]
@@ -170,10 +173,19 @@ class BasicSummarizer:
     def calc_stats(self, df: pd.DataFrame) -> pd.DataFrame:
         """Calculate accuracy and F-measure statistics for each pipeline."""
         stats = {}
-        for label in ("benign", "malicious"):
+        for label in self.benign_prefix:
             mask = df["file"].str.startswith(label)
-            stats[f"pos_{label}"] = df.loc[mask, "pos_count"].sum()
-            stats[f"total_{label}"] = df.loc[mask, "batch_size"].sum()
+            stats[f"pos_benign"] = df.loc[mask, "pos_count"].sum()
+            stats[f"total_benign"] = df.loc[mask, "batch_size"].sum()
+            
+            
+        for label in self.malicious_prefix:
+            mask = df["file"].str.startswith(label)
+            stats[f"pos_malicious"] = df.loc[mask, "pos_count"].sum()
+            stats[f"total_malicious"] = df.loc[mask, "batch_size"].sum()
+        
+            
+            
         if stats["total_benign"]==0:
             stats["acc_benign"] = 0
         else:

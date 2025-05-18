@@ -5,7 +5,7 @@ from collections import deque
 
 from abc import abstractmethod
 import numpy as np
-from ..utils import quantiles
+from ..utils import threshold_func
 
 
 import importlib
@@ -17,7 +17,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         queue_len=10000,
         percentile=0.95,
         warmup=1000,
-        quantile_func="log_normal_quantile",
+        t_func="log_normal_quantile",
         **kwargs,
     ):
         """base interface for online outlier detection model
@@ -35,7 +35,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         
         self.warmup = warmup
         self.percentile=percentile 
-        self.quantile_func=getattr(quantiles, quantile_func)
+        self.t_func=getattr(threshold_func, t_func)
                 
         self.batch_trained = 0
         self.batch_evaluated = 0
@@ -87,7 +87,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
             float: threshold value
         """
         if len(self.loss_queue) > self.warmup:
-            threshold = self.quantile_func(self.loss_queue, self.percentile)
+            threshold = self.t_func(self.loss_queue, self.percentile)
         else:
             threshold = np.inf
         return threshold

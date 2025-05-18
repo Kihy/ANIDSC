@@ -25,7 +25,11 @@ def step_given_new_csv_afterimage_model(context, file, fe_name, model):
     
 @given("a loaded basic pipeline with input from csv file initialized with dataset test_data, file {file}, feature extractor {fe_name} and model {model}")
 def step_given_loaded_csv_afterimage_model(context, file, fe_name, model):
-    saved_file=f"test_data/{fe_name}/saved_components/pipeline/benign_lenovo_bulb/CSVReader->LivePercentile->OnlineOD({model})->BaseEvaluator.yaml"
+    if model=="BoxPlot":
+        saved_file=f"test_data/{fe_name}/saved_components/pipeline/benign_lenovo_bulb/CSVReader->LivePercentile->{model}->BaseEvaluator.yaml"
+    
+    else:
+        saved_file=f"test_data/{fe_name}/saved_components/pipeline/benign_lenovo_bulb/CSVReader->LivePercentile->OnlineOD({model})->BaseEvaluator.yaml"
     
     with open(saved_file) as f:
         manifest = yaml.safe_load(f)
