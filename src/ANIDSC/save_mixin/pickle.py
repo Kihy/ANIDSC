@@ -1,22 +1,29 @@
 
 
+from abc import abstractmethod
 from pathlib import Path
 import pickle
 
+from ..save_mixin.basemixin import BaseSaveMixin
 
-class PickleSaveMixin:
+
+class PickleSaveMixin(BaseSaveMixin):
+
+    @property
+    def save_type(self):
+        return "pkl"
+    
     def save(self):
         """Save the object to a file using pickle.
         """ 
-        super().save()
-        save_path = Path(
-            self.get_save_path()
-        )
-        save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(str(save_path), 'wb') as file:
+        
+        self.save_path.parent.mkdir(parents=True, exist_ok=True)
+
+        with open(str(self.save_path), 'wb') as file:
             pickle.dump(self, file)
         
+        return str(self.save_path)
         
                 
     

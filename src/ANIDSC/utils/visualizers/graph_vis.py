@@ -1,7 +1,7 @@
 import os
 import json
 import networkx as nx
-from dash import Dash, html, dcc, Input, Output, State, ALL, ctx
+from dash import Dash, html, dcc, Input, Output, State, ALL, ctx, callback_context
 import dash_cytoscape as cyto
 import plotly.colors as pc
 
@@ -13,7 +13,6 @@ def get_plotly_color(colormap, data_values, threshold: float) -> str:
     """
     Return a hex color from a Plotly colorscale.
 
-
     - data_min/data_max: your data range (include threshold via min/max).
     - threshold: pivot point where the diverging scale should center.
     - value: the actual data value to map.
@@ -23,20 +22,24 @@ def get_plotly_color(colormap, data_values, threshold: float) -> str:
 
     data_max = max(data_values)
 
-    if threshold == float("inf"):
+    if threshold in [float("inf"), None]:
         zmax = data_max
-        threshold = data_max / 2
+        threshold = data_max / 2 if data_max > 0 else 0
     else:
         zmax = max(data_max, threshold)
 
     t = []
 
     for i in data_values:
-
-        if i < threshold:
-            t.append((i / threshold) * 0.5)
+        if i is None:
+            t.append(0)  # Map None values to 0
+        elif i < threshold:
+            t.append((i / threshold) * 0.5) if threshold > 0 else t.append(0)
         else:
-            t.append(((i - threshold) / (zmax - threshold)) * 0.5 + 0.5)
+            if (zmax - threshold) > 0:
+                t.append(((i - threshold) / (zmax - threshold)) * 0.5 + 0.5)
+            else:
+                t.append(0.5)
 
     # continuous: list of [pos, color] pairs
     return pc.sample_colorscale(colormap, t)
@@ -45,13 +48,14 @@ def get_plotly_color(colormap, data_values, threshold: float) -> str:
 def build_file_hierarchy(root_dir: str) -> dict:
     """
     Walk through root_dir and build a nested dict representing folder/file hierarchy.
-    JSON files are treated as leaf nodes.
+    NDJSON files are treated as leaf nodes.
     """
     hierarchy = {}
     for dirpath, dirnames, filenames in os.walk(root_dir):
         rel = os.path.relpath(dirpath, root_dir)
         node = hierarchy if rel == "." else _get_node(hierarchy, rel.split(os.sep))
-        for fname in sorted(f for f in filenames if f.endswith(".json")):
+        
+        for fname in sorted(f for f in filenames if f.endswith(".ndjson")):
             node[fname] = None
     return hierarchy
 
@@ -70,6 +74,18 @@ def get_options(tree: dict, path: list) -> list:
     for key in path:
         node = node.get(key, {})
     return sorted(node.keys()) if isinstance(node, dict) else []
+
+
+def load_ndjson_graphs(filepath: str) -> list:
+    """Load all graphs from an NDJSON file."""
+    graphs = []
+    with open(filepath, 'r') as f:
+        for line in f:
+            if line.strip():
+                data = json.loads(line)
+                G = nx.cytoscape_graph(data)
+                graphs.append(G)
+    return graphs
 
 
 def _make_dropdown(
@@ -122,7 +138,7 @@ def _default_graph() -> html.Div:
     return html.Div(
         [
             html.P(
-                "Select a JSON graph file to visualize",
+                "Select an NDJSON graph file to visualize",
                 style={"padding": "20px", "textAlign": "center"},
             ),
             cyto.Cytoscape(
@@ -176,20 +192,38 @@ def _edge_style() -> dict:
 
 def _nx_to_cyto(G: nx.Graph) -> list:
     """Convert NetworkX graph to Cytoscape element list with styled nodes."""
-    # Compute normalization values
-    as_values = [
-        float(d.get("node_as", 0)) for _, d in G.nodes(data=True) if "node_as" in d
-    ]
+    # Compute normalization values, handling None values
+    as_values = []
+    for _, d in G.nodes(data=True):
+        val = d.get("node_as", 0)
+        # Handle None values by converting to 0
+        if val is None:
+            as_values.append(0.0)
+        else:
+            try:
+                as_values.append(float(val))
+            except (TypeError, ValueError):
+                as_values.append(0.0)
 
     elements = []
-    colors = get_plotly_color(pc.diverging.balance, as_values, G.graph["threshold"])
+    
 
+    
+    # Get threshold from graph attributes, default to inf if not present
+    threshold = G.graph.get("threshold", float("inf"))
+    
+    colors = get_plotly_color(pc.diverging.balance, as_values, threshold)
+    
     for i, (node, data) in enumerate(G.nodes(data=True)):
-        data["color"] = colors[i]
+        
+        data["color"] = colors[i] if i < len(colors) else "#808080"
 
         elements.append(
             {"data": {**{k: str(v) for k, v in data.items()}, "id": str(node)}}
         )
+        
+        
+       
 
     for u, v, data in G.edges(data=True):
         edge = {
@@ -200,10 +234,11 @@ def _nx_to_cyto(G: nx.Graph) -> list:
             }
         }
         elements.append(edge)
+
     return elements
 
 
-def create_vis_app(root="test_data/AfterImageGraph/graphs"):
+def create_graph_vis_app(root="test_data/AfterImageGraph/graphs"):
 
     # Initialize Dash app
     app = Dash(__name__, suppress_callback_exceptions=True)
@@ -212,9 +247,13 @@ def create_vis_app(root="test_data/AfterImageGraph/graphs"):
     # Build hierarchy once
     file_hierarchy = build_file_hierarchy(root)
 
+    # Store for loaded graphs
     app.layout = html.Div(
         [
             html.H2("Interactive Graph Explorer"),
+            # Store for current graphs
+            dcc.Store(id="graphs-store"),
+            
             # Controls: dropdowns + load button
             html.Div(
                 [
@@ -223,10 +262,41 @@ def create_vis_app(root="test_data/AfterImageGraph/graphs"):
                         children=[_make_dropdown(0, [], file_hierarchy=file_hierarchy)],
                         style={"marginBottom": "10px"},
                     ),
-                    html.Button("Load Graph", id="load-graph-btn", n_clicks=0),
+                    html.Button("Load NDJSON File", id="load-file-btn", n_clicks=0),
                 ],
                 style={"marginBottom": "20px"},
             ),
+            
+            # Graph slider controls (initially hidden)
+            html.Div(
+                id="slider-container",
+                children=[
+                    html.Div(
+                        [
+                            html.Label("Graph Index:", style={"marginRight": "10px"}),
+                            dcc.Input(
+                                id="graph-index-input",
+                                type="number",
+                                min=0,
+                                step=1,
+                                style={"width": "80px", "marginRight": "20px"},
+                                debounce=True
+                            ),
+                            html.Span(id="graph-count-label", style={"marginLeft": "10px"}),
+                        ],
+                        style={"marginBottom": "10px", "display": "flex", "alignItems": "center"},
+                    ),
+                    dcc.Slider(
+                        id="graph-slider",
+                        min=0,
+                        step=1,
+                        marks=None,
+                        tooltip={"placement": "bottom", "always_visible": True},
+                    ),
+                ],
+                style={"marginBottom": "20px", "display": "none"},
+            ),
+            
             # Content
             html.Div(
                 [
@@ -263,31 +333,102 @@ def create_vis_app(root="test_data/AfterImageGraph/graphs"):
         return html.Div(dropdowns)
 
     @app.callback(
-        Output("graph-container", "children"),
-        Input("load-graph-btn", "n_clicks"),
+        [Output("graphs-store", "data"),
+         Output("slider-container", "style"),
+         Output("graph-slider", "max"),
+         Output("graph-slider", "value"),
+         Output("graph-index-input", "max"),
+         Output("graph-index-input", "value"),
+         Output("graph-count-label", "children")],
+        Input("load-file-btn", "n_clicks"),
         State({"type": "dynamic-dropdown", "level": ALL}, "value"),
     )
-    def display_graph(n_clicks, selected):
-        """Load selected JSON graph, convert to Cytoscape elements, and display."""
+    def load_ndjson_file(n_clicks, selected):
+        """Load NDJSON file and setup slider controls."""
         if n_clicks is None or n_clicks == 0:
-            return _default_graph()
+            return None, {"display": "none"}, 0, 0, 0, 0, ""
 
         vals = [v for v in selected if v]
-        if not vals or not vals[-1].endswith(".json"):
-            return _default_graph()
+        if not vals or not vals[-1].endswith(".ndjson"):
+            return None, {"display": "none"}, 0, 0, 0, 0, ""
 
         path = os.path.join(root, *vals)
+        
+        try:
+            graphs = load_ndjson_graphs(path)
+            if not graphs:
+                return None, {"display": "none"}, 0, 0, 0, 0, ""
+            
+            # Serialize graphs for storage
+            graphs_data = []
+            for G in graphs:
+                # Convert to cytoscape format for storage
+                cyto_data = nx.cytoscape_data(G)
+                graphs_data.append(cyto_data)
+            
+            max_idx = len(graphs) - 1
+            return (
+                graphs_data,
+                {"marginBottom": "20px"},  # Show slider
+                max_idx,
+                0,  # Start at first graph
+                max_idx,
+                0,
+                f"of {len(graphs)} graphs"
+            )
+        except Exception as e:
+            print(f"Error loading NDJSON: {e}")
+            return None, {"display": "none"}, 0, 0, 0, 0, ""
 
-        with open(path) as f:
-            data = json.load(f)
-        G = nx.cytoscape_graph(data)
+    @app.callback(
+        Output("graph-slider", "value", allow_duplicate=True),
+        Input("graph-index-input", "value"),
+        prevent_initial_call=True
+    )
+    def sync_input_to_slider(input_value):
+        """Sync input field value to slider."""
+        if input_value is not None:
+            return input_value
+        return 0
+
+    @app.callback(
+        Output("graph-index-input", "value", allow_duplicate=True),
+        Input("graph-slider", "value"),
+        prevent_initial_call=True
+    )
+    def sync_slider_to_input(slider_value):
+        """Sync slider value to input field."""
+        if slider_value is not None:
+            return slider_value
+        return 0
+
+    @app.callback(
+        Output("graph-container", "children"),
+        [Input("graph-slider", "value"),
+         Input("graphs-store", "data")],
+    )
+    def display_graph(slider_value, graphs_data):
+        """Display the selected graph from the NDJSON file."""
+        if not graphs_data or slider_value is None:
+            return _default_graph()
+        
+    
+        # Get the selected graph
+        cyto_data = graphs_data[slider_value]
+        G = nx.cytoscape_graph(cyto_data)
+    
+        
         elements = _nx_to_cyto(G)
+        
+        # Get threshold for display
+        threshold = G.graph.get('threshold', 'N/A')
+        
         stylesheet = [
             {
                 "selector": "node",
                 "style": {
                     "background-color": "data(color)",
-                    "label": "data(mac_address)",
+                    "label": "data(name)",
                     "text-valign": "center",
                     "text-halign": "center",
                     "font-size": "12px",
@@ -295,13 +436,15 @@ def create_vis_app(root="test_data/AfterImageGraph/graphs"):
             },
             _edge_style(),
         ]
+        
         return html.Div(
             [
                 html.H3(
-                    f"Threshold: {G.graph['threshold']}", style={"marginBottom": "15px"}
+                    f"Graph {slider_value + 1} - Threshold: {threshold}", 
+                    style={"marginBottom": "15px"}
                 ),
                 cyto.Cytoscape(
-                    id=f"cytoscape-graph",
+                    id="cytoscape-graph",
                     layout={"name": "cose"},
                     style={"width": "100%", "height": "500px"},
                     elements=elements,
@@ -310,6 +453,7 @@ def create_vis_app(root="test_data/AfterImageGraph/graphs"):
             ]
         )
 
+
     @app.callback(
         Output("element-info", "children"),
         Input("cytoscape-graph", "tapNodeData"),
@@ -317,7 +461,7 @@ def create_vis_app(root="test_data/AfterImageGraph/graphs"):
     )
     def display_element_info(node_data, edge_data):
         """Show attributes of clicked node or edge in a table."""
-        trigger = ctx.triggered[0]["prop_id"]
+        trigger = ctx.triggered[0]["prop_id"] if ctx.triggered else ""
 
         if node_data and trigger == "cytoscape-graph.tapNodeData":
             data = node_data
@@ -352,7 +496,5 @@ def create_vis_app(root="test_data/AfterImageGraph/graphs"):
 
 
 if __name__ == "__main__":
-
-    app = create_vis_app()
-
+    app = create_graph_vis_app("../test_data/NetworkAccessGraphExtractor/graphs")
     app.run(debug=True)

@@ -1,10 +1,12 @@
 from collections import deque
 
+from ANIDSC.feature_buffer.tabular import TabularFeatureBuffer
+
 from ..utils.helper import compare_dicts
 
 from ..save_mixin.pickle import PickleSaveMixin
 import numpy as np
-from ..component.feature_extractor import BaseTrafficFeatureExtractor
+from ..component.feature_extractor import BaseFeatureExtractor
 
 class FrequencyState:
     def __init__(self, time_window):
@@ -24,9 +26,9 @@ class FrequencyState:
         if not isinstance(other, FrequencyState):
             return NotImplemented
         # 2) Compare attribute dictionaries
-        return compare_dicts(self.__dict__, other.__dict__)
+        return compare_dicts(self.__dict__, other.__dict__, self.__class__)
 
-class FrequencyExtractor(PickleSaveMixin, BaseTrafficFeatureExtractor):
+class FrequencyExtractor(PickleSaveMixin, BaseFeatureExtractor):
     def __init__(self, time_window=10, **kwargs):
         """simple frequency feature extractor based on time windows
 
@@ -37,20 +39,16 @@ class FrequencyExtractor(PickleSaveMixin, BaseTrafficFeatureExtractor):
         self.time_window=time_window
         
         self.state=FrequencyState(self.time_window)     # collection of timestamps
+        
+        self.feature_buffer = TabularFeatureBuffer(buffer_size=256)
+        self.feature_buffer.attach_to(self)
     
     def peek(self, traffic_vectors):
         pass
     
-   
-         
-    def get_traffic_vector(self, packet):
-        return {"timestamp": float(packet[0].time)}
-    
     def get_headers(self):
         return ["frequency"]
 
-    def get_meta_headers(self):
-        return ["timestamp"]
     
     def update(self, traffic_vector):
         return self.state.update(traffic_vector)

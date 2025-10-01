@@ -1,3 +1,4 @@
+from ..feature_buffer.tabular import TabularFeatureBuffer
 import numpy as np
 from pprint import pformat
 import copy
@@ -6,34 +7,24 @@ from socket import getservbyport
 from itertools import product
 from typing import List, Dict, Any
 from numpy.typing import NDArray
-from ..component.feature_extractor import BaseTrafficFeatureExtractor
+from ..component.feature_extractor import BaseFeatureExtractor
 from ..save_mixin.pickle import PickleSaveMixin
 from ..utils.helper import compare_dicts
 
-class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
-    def __init__(self, decay_factors:List[float]=[5, 3, 1, 0.1, 0.01], **kwargs):
-        """initializes afterimage, a packet-based feature extractor used in Kitsune
 
-        Args:
-            decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
-        """
-        super().__init__(**kwargs)
-        
-        
-        self.decay_factors = decay_factors
-        self.clean_up_round=5000
-        
+
+class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
+    def __init__(self):
+
+        self.decay_factors = [5, 3, 1, 0.1, 0.01]
+        self.clean_up_round = 5000
+
         self.state = IncStatDB(
-                    decay_factors=self.decay_factors,
-                    limit=float("inf"),
-                )
-        
-        self.save_attr.extend(['decay_factors'])
-            
-        
-        
-    
-    def peek(self, traffic_vectors:List[Dict[str, Any]]):
+            decay_factors=self.decay_factors,
+            limit=float("inf"),
+        )
+
+    def peek(self, traffic_vectors: List[Dict[str, Any]]):
         """fake update. obtains a copy of existing database,
         applies the traffic vectors to it.
 
@@ -44,20 +35,28 @@ class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
             2d array: the corresponding features
         """
         if isinstance(traffic_vectors, dict):
-            traffic_vectors=[traffic_vectors]
-        
+            traffic_vectors = [traffic_vectors]
+
         fake_db = IncStatDB(self.decay_factors)
         for traffic_vector in traffic_vectors:
-            
+
             # srcMAC-IP
-            fake_db.stat1d[f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}"] = copy.deepcopy(
-                self.state.stat1d.get(f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}")
-            )  
-            
+            fake_db.stat1d[f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}"] = (
+                copy.deepcopy(
+                    self.state.stat1d.get(
+                        f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}"
+                    )
+                )
+            )
+
             # jitter
-            fake_db.stat1d[f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}"] = copy.deepcopy(
-                self.state.stat1d.get(f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}")
-            )  
+            fake_db.stat1d[f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}"] = (
+                copy.deepcopy(
+                    self.state.stat1d.get(
+                        f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}"
+                    )
+                )
+            )
 
             # channel
             fake_db.stat1d[f"{traffic_vector['srcIP']}"] = copy.deepcopy(
@@ -66,44 +65,62 @@ class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
             fake_db.stat1d[f"{traffic_vector['dstIP']}"] = copy.deepcopy(
                 self.state.stat1d.get(f"{traffic_vector['dstIP']}")
             )
-            fake_db.stat2d[f"{traffic_vector['srcIP']}->{traffic_vector['dstIP']}"] = copy.deepcopy(
-                self.state.stat2d.get(f"{traffic_vector['srcIP']}->{traffic_vector['dstIP']}")
+            fake_db.stat2d[f"{traffic_vector['srcIP']}->{traffic_vector['dstIP']}"] = (
+                copy.deepcopy(
+                    self.state.stat2d.get(
+                        f"{traffic_vector['srcIP']}->{traffic_vector['dstIP']}"
+                    )
+                )
             )
 
             # socket
-            if traffic_vector['srcport'] =="ARP":
+            if traffic_vector["srcport"] == "ARP":
                 fake_db.stat1d[f"{traffic_vector['srcMAC']}"] = copy.deepcopy(
                     self.state.stat1d.get(f"{traffic_vector['srcMAC']}")
                 )
                 fake_db.stat1d[f"{traffic_vector['dstMAC']}"] = copy.deepcopy(
                     self.state.stat1d.get(f"{traffic_vector['dstMAC']}")
                 )
-                fake_db.stat2d[f"{traffic_vector['srcMAC']}->{traffic_vector['dstMAC']}"] = copy.deepcopy(
-                    self.state.stat2d.get(f"{traffic_vector['srcMAC']}->{traffic_vector['dstMAC']}")
+                fake_db.stat2d[
+                    f"{traffic_vector['srcMAC']}->{traffic_vector['dstMAC']}"
+                ] = copy.deepcopy(
+                    self.state.stat2d.get(
+                        f"{traffic_vector['srcMAC']}->{traffic_vector['dstMAC']}"
+                    )
                 )
             else:
-                fake_db.stat1d[f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}"] = copy.deepcopy(
-                    self.state.stat1d.get(f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}")
+                fake_db.stat1d[
+                    f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}"
+                ] = copy.deepcopy(
+                    self.state.stat1d.get(
+                        f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}"
+                    )
                 )
-                fake_db.stat1d[f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}"] = copy.deepcopy(
-                    self.state.stat1d.get(f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}")
+                fake_db.stat1d[
+                    f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}"
+                ] = copy.deepcopy(
+                    self.state.stat1d.get(
+                        f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}"
+                    )
                 )
-                fake_db.stat2d[f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}->{traffic_vector['dstIP']}_{traffic_vector['dstport']}"] = copy.deepcopy(
-                    self.state.stat2d.get(f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}->{traffic_vector['dstIP']}_{traffic_vector['dstport']}")
+                fake_db.stat2d[
+                    f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}->{traffic_vector['dstIP']}_{traffic_vector['dstport']}"
+                ] = copy.deepcopy(
+                    self.state.stat2d.get(
+                        f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}->{traffic_vector['dstIP']}_{traffic_vector['dstport']}"
+                    )
                 )
 
         fake_db.num_updated = self.state.num_updated
         fake_db.num_entries = self.state.num_entries
-        fake_db.last_timestamp=self.state.last_timestamp
+        fake_db.last_timestamp = self.state.last_timestamp
 
-        
         vectors = []
         for tv in traffic_vectors:
             vectors.append(self.update(tv, fake_db))
         return np.vstack(vectors)
 
-
-    def update(self, traffic_vector:Dict[str, Any], state=None):
+    def update(self, traffic_vector: Dict[str, Any], state=None):
         """updates the internal state with traffic vector
 
         Args:
@@ -114,120 +131,57 @@ class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
             array: the extracted features
         """
         if state is None:
-            state=self.state
-        
+            state = self.state
+
         src_mac_ip = state.update_get_stats_1D(
-            f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}", traffic_vector['timestamp'], traffic_vector["packet_size"]
-        )  
-        
-         # jitter between channels
+            f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}",
+            traffic_vector["timestamp"],
+            traffic_vector["packet_size"],
+        )
+
+        # jitter between channels
         jitter = state.update_get_stats_1D(
-            f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}", traffic_vector['timestamp'], None
-        )  
-        
+            f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}",
+            traffic_vector["timestamp"],
+            None,
+        )
+
         # channel: sent between this packet’s source and destination IPs
         channel = state.update_get_stats_2D(
-            f"{traffic_vector['srcIP']}",f"{traffic_vector['dstIP']}", traffic_vector['timestamp'], traffic_vector["packet_size"]
-        )  
-        
+            f"{traffic_vector['srcIP']}",
+            f"{traffic_vector['dstIP']}",
+            traffic_vector["timestamp"],
+            traffic_vector["packet_size"],
+        )
 
         # Socket: sent between this packet’s source and destination TCP/UDP Socket
         # arp has no IP
-        if traffic_vector['srcport'] =="ARP":
+        if traffic_vector["srcport"] == "ARP":
             socket = state.update_get_stats_2D(
-                f"{traffic_vector['srcMAC']}", f"{traffic_vector['dstMAC']}", traffic_vector['timestamp'],
-                traffic_vector["packet_size"]
+                f"{traffic_vector['srcMAC']}",
+                f"{traffic_vector['dstMAC']}",
+                traffic_vector["timestamp"],
+                traffic_vector["packet_size"],
             )
         else:
             socket = state.update_get_stats_2D(
                 f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}",
                 f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}",
-                traffic_vector['timestamp'], traffic_vector["packet_size"]
+                traffic_vector["timestamp"],
+                traffic_vector["packet_size"],
             )
-        
-        state.num_updated+=1 
-        
-        state.last_timestamp=traffic_vector["timestamp"]
-        
-        feature=np.hstack([src_mac_ip, jitter, channel, socket])
-        
+
+        state.num_updated += 1
+
+        state.last_timestamp = traffic_vector["timestamp"]
+
+        feature = np.hstack([src_mac_ip, jitter, channel, socket])
+
         # clean our records
         if state.num_updated % self.clean_up_round == 0:
-            state.clean_records(traffic_vector['timestamp'])
+            state.clean_records(traffic_vector["timestamp"])
 
         return np.expand_dims(feature, axis=0)
-
-    def get_traffic_vector(self, packet:Packet):
-        """extracts the traffic vectors from packet
-
-        Args:
-            packet (scapy packet): input packet
-
-        Returns:
-            array: list of IPtype, srcMAC, dstMAC, srcIP, srcproto, dstIP, dstproto, time, packet size
-        """
-        packet = packet[0]
-
-        # only process IP packets and non broadcast/localhost or packet.dst in ["ff:ff:ff:ff:ff:ff","00:00:00:00:00:00"]
-        if not (packet.haslayer(IP) or packet.haslayer(IPv6) or packet.haslayer(ARP)):
-            return None
-
-        timestamp = packet.time
-        framelen = len(packet)
-        if packet.haslayer(IP):  # IPv4
-            srcIP = packet[IP].src
-            dstIP = packet[IP].dst
-        elif packet.haslayer(IPv6):  # ipv6
-            srcIP = packet[IPv6].src
-            dstIP = packet[IPv6].dst
-
-        else:
-            srcIP = ""
-            dstIP = ""
-
-        if packet.haslayer(TCP):
-            srcproto = str(packet[TCP].sport)
-            dstproto = str(packet[TCP].dport)
-        elif packet.haslayer(UDP):
-            srcproto = str(packet[UDP].sport)
-            dstproto = str(packet[UDP].dport)
-        else:
-            srcproto = ""
-            dstproto = ""
-
-        if packet.haslayer(ARP):
-            srcMAC = packet[ARP].hwsrc
-            dstMAC = packet[ARP].hwdst
-        else:
-            srcMAC = packet.src
-            dstMAC = packet.dst
-
-        if srcproto == "":  # it's a L2/L1 level protocol
-            if packet.haslayer(ARP):  # is ARP
-                srcproto = "arp"
-                dstproto = "arp"
-                srcIP = packet[ARP].psrc  # src IP (ARP)
-                dstIP = packet[ARP].pdst  # dst IP (ARP)
-
-            elif packet.haslayer(ICMP):  # is ICMP
-                srcproto = "icmp"
-                dstproto = "icmp"
-
-            elif srcIP + srcproto + dstIP + dstproto == "":  # some other protocol
-                srcIP = packet.src  # src MAC
-                dstIP = packet.dst  # dst MAC
-
-        
-        traffic_vector = {"srcMAC":srcMAC,
-                          "dstMAC":dstMAC,
-                            "srcIP":srcIP,
-                            "srcport":srcproto,
-                            "dstIP":dstIP,
-                            "dstport":dstproto,
-                            "timestamp":float(timestamp),
-                            "packet_size":int(framelen)}
-
-        return traffic_vector
 
     def get_headers(self):
         """returns the feature names
@@ -251,51 +205,40 @@ class AfterImage(PickleSaveMixin, BaseTrafficFeatureExtractor):
 
         return headers
 
-    def get_meta_headers(self):
-        """return the feature names of traffic vectors
-
-        Returns:
-            list: names of traffic vectors
-        """
-        return [
-            "ip_type",
-            "src_mac",
-            "dst_mac",
-            "scr_ip",
-            "src_protocol",
-            "dst_ip",
-            "dst_protocol",
-            "time_stamp",
-            "packet_size",
-        ]
-        
-
 
 class AfterImageGraph(AfterImage):
-    def __init__(self, protocol_map:Dict[str, int]={"TCP":0,"UDP":1,"ICMP":2,"ARP":3, "Other":4}, mac_to_idx_map: Dict[str, int]={},**kwargs):
+    def __init__(
+        self,
+        protocol_map: Dict[str, int] = {
+            "TCP": 0,
+            "UDP": 1,
+            "ICMP": 2,
+            "ARP": 3,
+            "Other": 4,
+        },
+        mac_to_idx_map: Dict[str, int] = {},
+        **kwargs,
+    ):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
         Args:
             limit (int, optional): maximum number of records. Defaults to 1e6.
             decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
         """
-        super().__init__(skip=4,**kwargs)
-        
+        super().__init__(skip=4, **kwargs)
 
-        self.protocol_map=protocol_map
-        self.mac_to_idx_map=mac_to_idx_map
-        
+        self.protocol_map = protocol_map
+        self.mac_to_idx_map = mac_to_idx_map
+
         self.save_attr.extend(["protocol_map", "mac_to_idx_map"])
-    
+
     # def __str__(self):
     #     return f"AfterImageGraph({','.join(self.protocol_map.keys())})"
-    
+
     def setup(self):
         super().setup()
-        
-        
 
-    def peek(self, traffic_vectors:List[Dict[str, Any]]):
+    def peek(self, traffic_vectors: List[Dict[str, Any]]):
         """fake update. obtains a copy of existing database,
         applies the traffic vectors to it.
 
@@ -307,8 +250,7 @@ class AfterImageGraph(AfterImage):
         """
         raise NotImplementedError
 
-
-    def update(self, traffic_vector:Dict[str,Any]):
+    def update(self, traffic_vector: Dict[str, Any]):
         """updates the internal state with traffic vector
 
         Args:
@@ -318,104 +260,73 @@ class AfterImageGraph(AfterImage):
         Returns:
             array: the extracted features
         """
-        srcMAC=f"{traffic_vector['srcMAC']}"
-        dstMAC=f"{traffic_vector['dstMAC']}"
-        
-        #get protocol
-        protocol=self.protocol_map.get(traffic_vector['protocol'], len(self.protocol_map)-1)
-               
-        #udpate link stats
-        srcID=f"{srcMAC}/{protocol}"
-        dstID=f"{dstMAC}/{protocol}"
+        srcMAC = f"{traffic_vector['srcMAC']}"
+        dstMAC = f"{traffic_vector['dstMAC']}"
 
-        
-        #update node stats
-        src_stat=self.state.update_get_stats_1D(srcID, traffic_vector['timestamp'], traffic_vector['packet_size'])
-        dst_stat=self.state.update_get_stats_1D(dstID, traffic_vector['timestamp'], -traffic_vector['packet_size'])
-        
-        #get link stats
-        link_stat=self.state.update_get_stats_2D(srcID, dstID, traffic_vector['timestamp'], traffic_vector['packet_size'], return_1d=False)
-        jitter_stat=self.state.update_get_stats_1D(f"{srcID}-{dstID}",traffic_vector['timestamp'], None)
-        
+        # get protocol
+        protocol = self.protocol_map.get(
+            traffic_vector["protocol"], len(self.protocol_map) - 1
+        )
+
+        # udpate link stats
+        srcID = f"{srcMAC}/{protocol}"
+        dstID = f"{dstMAC}/{protocol}"
+
+        # update node stats
+        src_stat = self.state.update_get_stats_1D(
+            srcID, traffic_vector["timestamp"], traffic_vector["packet_size"]
+        )
+        dst_stat = self.state.update_get_stats_1D(
+            dstID, traffic_vector["timestamp"], -traffic_vector["packet_size"]
+        )
+
+        # get link stats
+        link_stat = self.state.update_get_stats_2D(
+            srcID,
+            dstID,
+            traffic_vector["timestamp"],
+            traffic_vector["packet_size"],
+            return_1d=False,
+        )
+        jitter_stat = self.state.update_get_stats_1D(
+            f"{srcID}-{dstID}", traffic_vector["timestamp"], None
+        )
+
         self.state.num_updated += 1
 
-        #encode ID and traffic_vector 
-        srcID=self.mac_to_idx_map.setdefault(srcMAC, len(self.mac_to_idx_map))
-        dstID=self.mac_to_idx_map.setdefault(dstMAC, len(self.mac_to_idx_map))
-        
-        feature=np.hstack([1, srcID, dstID, protocol, src_stat, dst_stat, jitter_stat, link_stat])
-        
-        self.state.last_timestamp=traffic_vector["timestamp"]
-        
-        
+        # encode ID and traffic_vector
+        srcID = self.mac_to_idx_map.setdefault(srcMAC, len(self.mac_to_idx_map))
+        dstID = self.mac_to_idx_map.setdefault(dstMAC, len(self.mac_to_idx_map))
+
+        feature = np.hstack(
+            [1, srcID, dstID, protocol, src_stat, dst_stat, jitter_stat, link_stat]
+        )
+
+        self.state.last_timestamp = traffic_vector["timestamp"]
+
         # clean our records
         if self.state.num_updated % self.clean_up_round == 0:
-            n, keys=self.state.clean_records(traffic_vector['timestamp'])
-            all_records=[feature]
+            n, keys = self.state.clean_records(traffic_vector["timestamp"])
+            all_records = [feature]
             for key in keys:
-                src, dst=key.split("->")
-                srcIP=src.split("/")[0]
-                dstIP, protocol=dst.split("/")
-                all_records.append([0,self.mac_to_idx_map[srcIP],self.mac_to_idx_map[dstIP],int(protocol)]+[0 for _ in range(65)])
+                src, dst = key.split("->")
+                srcIP = src.split("/")[0]
+                dstIP, protocol = dst.split("/")
+                all_records.append(
+                    [
+                        0,
+                        self.mac_to_idx_map[srcIP],
+                        self.mac_to_idx_map[dstIP],
+                        int(protocol),
+                    ]
+                    + [0 for _ in range(65)]
+                )
 
             return np.vstack(all_records)
         else:
-            return np.expand_dims(feature,axis=0)
+            return np.expand_dims(feature, axis=0)
 
-    def get_traffic_vector(self, packet:Packet)->Dict[str, Any]:
-        """adds protocol name to traffic vector from after image
-
-        Args:
-            packet (scapy packet): input packet
-
-        Returns:
-            Dict[str, Any]: dictionary of traffic vector
-        """
-        traffic_vector=super().get_traffic_vector(packet)
-
-        if traffic_vector is None:
-            return None 
-        
-        if TCP in packet:
-            protocol=self.get_protocol_name(packet.sport, packet.dport, "tcp")
-        elif UDP in packet:
-            protocol=self.get_protocol_name(packet.sport, packet.dport, "udp")
-        elif ARP in packet:
-            protocol="ARP"
-        elif ICMP in packet:
-            protocol="ICMP"
-        else:
-            protocol="Other"
-        
-        traffic_vector["protocol"]= protocol
-
-        return traffic_vector
-
-    def get_protocol_name(self, src_port_num: int, dst_port_num:int , proto:str)->str:
-        """gets the protocol name associated with port number
-
-        Args:
-            src_port_num (int): source port number 
-            dst_port_num (int): destination port number
-            proto (str): protocol, either 'udp' or 'tcp'
-
-        Returns:
-            str: protocol string for the port
-        """        
-        try:
-            protocol=getservbyport(src_port_num,proto)
-        except OSError:
-            try:
-                protocol=getservbyport(dst_port_num,proto)
-            except OSError:
-                protocol=proto
-        
-        if protocol not in self.protocol_map.keys():
-            protocol=proto
-            
-        return protocol.upper()
-    
-    def get_headers(self)->List[str]:
+    def get_headers(self) -> List[str]:
         """returns the feature names
 
         Returns:
@@ -426,35 +337,18 @@ class AfterImageGraph(AfterImage):
 
         stat_2d = ["magnitude", "radius", "covariance", "pcc"]
         stream_1d = ["src", "dst", "jitter"]
-        headers = ["type","srcID","dstID","protocol"]
+        headers = ["type", "srcID", "dstID", "protocol"]
         for name, stat in product(stream_1d, stat_1d):
             for time in self.decay_factors:
                 headers.append(f"{name}_{time}_{stat}")
-        for name, stat in product(['link'], stat_2d):
+        for name, stat in product(["link"], stat_2d):
             for time in self.decay_factors:
                 headers.append(f"{name}_{time}_{stat}")
         return headers
+
     
-    def get_meta_headers(self)->List[str]:
-        """return the feature names of traffic vectors
 
-        Returns:
-            List[str]: names of traffic vectors
-        """
-        return [
-            "idx",
-            "srcMAC",
-            "dstMAC",
-            "srcIP",
-            "srcport",
-            "dstIP",
-            "dstport",
-            "protocol",
-            "timestamp",
-            "packet_size"
-        ]
-
-def magnitude(x:float, y:float):
+def magnitude(x: float, y: float):
     """the magnitude of a set of incStats, pass var instead of mean to get radius
 
     Args:
@@ -483,15 +377,14 @@ class IncStat1D:
             v (float, optional): value of this incstat. pass None to use jitter. Defaults to None.
         """
         self.weight_thresh = 1e-3
-        self.last_timestamp=None
-        self.incremental_statistics=None
-        self.len_factors=len_factors
+        self.last_timestamp = None
+        self.incremental_statistics = None
+        self.len_factors = len_factors
 
-    
     def __repr__(self):
         return pformat(vars(self))
-    
-    def insert(self, decay_factors, t:float, v =None):
+
+    def insert(self, decay_factors, t: float, v=None):
         """updates the incstat with value.
         decays the statistics and increments it.
 
@@ -500,31 +393,30 @@ class IncStat1D:
             v (float, optional): value of new information. use None to measure
             jitter. Defaults to None.
         """
-        
+
         if v is None:
             if self.last_timestamp is None:
-                v=0
+                v = 0
             else:
                 v = t - self.last_timestamp
-        
+
         if self.incremental_statistics is None:
-            
+
             self.incremental_statistics = np.tile(
                 np.expand_dims([1.0, v, v**2], axis=1), [1, self.len_factors]
             )  # each row corresponds to weight, linear sum, sum of squares
-        
-        else:    
+
+        else:
             self.decay(decay_factors, t)
 
             # update with v
             self.incremental_statistics += np.expand_dims(
                 [1.0, v, v**2], axis=1
             )  # broadcast to [3,1]
-        
-        self.last_timestamp = t
-            
 
-    def decay(self, decay_factors:NDArray[np.float64], t:float):
+        self.last_timestamp = t
+
+    def decay(self, decay_factors: NDArray[np.float64], t: float):
         """decays the incremental statistics according to t
 
         Args:
@@ -536,7 +428,7 @@ class IncStat1D:
             factor = 2.0 ** (-decay_factors * time_diff)
             self.incremental_statistics *= factor
 
-    def is_outdated(self, decay_factors:NDArray[np.float64], t:float):
+    def is_outdated(self, decay_factors: NDArray[np.float64], t: float):
         """checks if incstat is outdated.
         if the weights in all time windows are lower than the weight threshold after
         decaying the record, return True
@@ -603,18 +495,17 @@ class IncStat1D:
             array: [weight, mean, std]
         """
         return np.hstack([self.weight(), self.mean(), self.std()])
-    
+
     def __eq__(self, other):
         # 1) Ensure same type
         if not isinstance(other, IncStat1D):
             return NotImplemented
         # 2) Compare attribute dictionaries
-        return compare_dicts(self.__dict__, other.__dict__)
+        return compare_dicts(self.__dict__, other.__dict__, self.__class__)
 
 
-    
 class IncStat2D:
-    def __init__(self, len_factor:int):
+    def __init__(self, len_factor: int):
         """2 dimensional IncStat, stores the relationship between two
         1d inc stat. keeps track of the sum of residual products (A-uA)(B-uB)
 
@@ -628,7 +519,7 @@ class IncStat2D:
         self.eps = 2e-3
         self.last_timestamp = None
 
-    def update_cov(self, inc_stats1, inc_stats2, decay_factors, t:float, v:int):
+    def update_cov(self, inc_stats1, inc_stats2, decay_factors, t: float, v: int):
         """updates the covariance of the two streams.
         decays the residual then updates it.
 
@@ -636,20 +527,18 @@ class IncStat2D:
             t (float): current time
             v (float): the value to be updated
         """
-        
+
         if self.last_timestamp is None:
-            self.last_timestamp=t 
+            self.last_timestamp = t
         else:
             # Decay residules
             self.decay(decay_factors, t)
 
             # Compute and update residule
-            self.sum_of_residual += (v - inc_stats1.mean()) * (
-                v - inc_stats2.mean()
-            )
+            self.sum_of_residual += (v - inc_stats1.mean()) * (v - inc_stats2.mean())
             self.last_timestamp = t
 
-    def decay(self,decay_factors:NDArray[np.float64], t:float):
+    def decay(self, decay_factors: NDArray[np.float64], t: float):
         """decays the residual product. ignores if time diff is negative
 
         Args:
@@ -694,23 +583,29 @@ class IncStat2D:
         var1 = inc_stats1.var()
         var2 = inc_stats2.var()
         return np.hstack(
-            [magnitude(mean1, mean2), magnitude(var1, var2), self.cov(inc_stats1, inc_stats2), self.pcc(inc_stats1, inc_stats2)]
+            [
+                magnitude(mean1, mean2),
+                magnitude(var1, var2),
+                self.cov(inc_stats1, inc_stats2),
+                self.pcc(inc_stats1, inc_stats2),
+            ]
         )
-        
 
     def __repr__(self):
         return pformat(vars(self))
-    
-    
+
     def __eq__(self, other):
         # 1) Ensure same type
         if not isinstance(other, IncStat2D):
             return NotImplemented
         # 2) Compare attribute dictionaries
-        return compare_dicts(self.__dict__, other.__dict__)
+        return compare_dicts(self.__dict__, other.__dict__, self.__class__)
+
 
 class IncStatDB:
-    def __init__(self, decay_factors:List[float], last_timestamp:float=None, limit:int=1e5):
+    def __init__(
+        self, decay_factors: List[float], last_timestamp: float = None, limit: int = 1e5
+    ):
         """database to store all incstats
 
         Args:
@@ -719,10 +614,10 @@ class IncStatDB:
         """
         # list of dictionary to store 1d stats for each lambda, index matches lambda id
         self.stat1d = {}
-        
+
         # list of dict to store 2d stats for each lambda, index matches lambda id
         self.stat2d = {}
-        
+
         # limit for all lambdas combined
         self.limit = limit
         self.num_entries = 0
@@ -730,13 +625,12 @@ class IncStatDB:
 
         # number of pkts updated
         self.num_updated = 0
-        self.last_timestamp=last_timestamp
+        self.last_timestamp = last_timestamp
 
-    
     def __repr__(self):
         return pformat(vars(self))
-    
-    def get_stats_1D(self, ID:str):
+
+    def get_stats_1D(self, ID: str):
         if ID not in self.stat1d or self.stat1d[ID] is None:
             if self.num_entries + 1 > self.limit:
                 raise LookupError(
@@ -750,10 +644,10 @@ class IncStatDB:
             self.stat1d[ID] = IncStat1D(len(self.decay_factors))
 
             self.num_entries += 1
-        
+
         return self.stat1d[ID]
-            
-    def update_get_stats_1D(self, ID:str, t:float, v:int):
+
+    def update_get_stats_1D(self, ID: str, t: float, v: int):
         """Updates 1d incstat with ID given time and value.
         if ID does not exist, create it.
         Once updated, return the 1d features associated with it.
@@ -770,22 +664,19 @@ class IncStatDB:
             array: array of 1d stats
         """
         # not in our db
-        stat1d=self.get_stats_1D(ID)
+        stat1d = self.get_stats_1D(ID)
         stat1d.insert(self.decay_factors, t, v)
 
         return stat1d.all_stats_1D()
-    
-    def get_stats_2D(self, ID1:str, ID2:str ):
+
+    def get_stats_2D(self, ID1: str, ID2: str):
         # check for pre-exiting link
-        if (
-            f"{ID1}->{ID2}" not in self.stat2d
-            or self.stat2d[f"{ID1}->{ID2}"] is None
-        ):
+        if f"{ID1}->{ID2}" not in self.stat2d or self.stat2d[f"{ID1}->{ID2}"] is None:
             # Link incStats
             self.stat2d[f"{ID1}->{ID2}"] = IncStat2D(len(self.decay_factors))
         return self.stat2d[f"{ID1}->{ID2}"]
-    
-    def update_get_stats_2D(self, ID1:str, ID2:str, t:float, v:int, return_1d=True):
+
+    def update_get_stats_2D(self, ID1: str, ID2: str, t: float, v: int, return_1d=True):
         """updates incstat of ID1 with t, v and ID2 with t, -v.
         create 2d incstat if it doesnt exist and updates it.
         returns the 1d statistics associated with the sender and the 2d statistics
@@ -808,16 +699,16 @@ class IncStatDB:
             self.update_get_stats_1D(ID2, t, -v)
 
         # check for pre-exiting link
-        stat2d=self.get_stats_2D(ID1, ID2)
+        stat2d = self.get_stats_2D(ID1, ID2)
         stat2d.update_cov(self.stat1d[ID1], self.stat1d[ID2], self.decay_factors, t, v)
-        feature2d=stat2d.all_stats_2D(self.stat1d[ID1], self.stat1d[ID2])
+        feature2d = stat2d.all_stats_2D(self.stat1d[ID1], self.stat1d[ID2])
 
         if return_1d:
             return np.hstack([stats1d, feature2d])
         else:
             return feature2d
-        
-    def clean_records(self, t:float):
+
+    def clean_records(self, t: float):
         """cleans out records that have small weight
 
         Args:
@@ -827,7 +718,7 @@ class IncStatDB:
             int: number of removed records and records looked through
         """
         removed = 0
-        removed_keys=[]
+        removed_keys = []
         for key, inc_stat in dict(self.stat1d).items():
             if inc_stat.is_outdated(self.decay_factors, t):
                 # remove 2d links
@@ -845,4 +736,4 @@ class IncStatDB:
         if not isinstance(other, IncStatDB):
             return NotImplemented
         # 2) Compare attribute dictionaries
-        return compare_dicts(self.__dict__, other.__dict__)
+        return compare_dicts(self.__dict__, other.__dict__, self.__class__)

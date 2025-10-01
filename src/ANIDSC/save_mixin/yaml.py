@@ -5,23 +5,43 @@ import inspect
 import yaml
 import os
 
+from ..save_mixin.basemixin import BaseSaveMixin
 
-class YamlSaveMixin:
+
+def load_components(manifest):
+    components = {}
+    for type, meta in manifest.items():
+        module = importlib.import_module(f"ANIDSC.{type}")
+        component_cls = getattr(module, meta["class"])
+        if meta.get("file", False):
+            file_path = meta["file"]
+            comp = component_cls.load(file_path)
+
+        else:
+            comp = component_cls(**meta.get("attrs", {}))
+        components[type] = comp
+    return components
+
+
+class YamlSaveMixin(BaseSaveMixin):
+    @property
+    def save_type(self):
+        return "yaml"
+
     def save(self):
         # save individual components
         for key, component in self.components.items():
             component.save()
 
         # save manifest
-        manifest_path = Path(self.get_save_path())
-        manifest_path.parent.mkdir(parents=True, exist_ok=True)
+        self.save_path.parent.mkdir(parents=True, exist_ok=True)
 
-        with open(manifest_path, "w") as out_file:
+        with open(self.save_path, "w") as out_file:
             yaml.safe_dump(self.to_dict(), out_file, indent=4, sort_keys=False)
 
     @classmethod
     def load(cls, input_data):
-        if isinstance(input_data, str):    
+        if isinstance(input_data, str):
             if os.path.isfile(input_data):
                 with open(input_data) as file:
                     manifest = yaml.safe_load(file)
@@ -29,9 +49,8 @@ class YamlSaveMixin:
                 manifest = yaml.safe_load(input_data)
 
         elif isinstance(input_data, Dict):
-            manifest=input_data
+            manifest = input_data
         else:
             raise TypeError("Unknown input_data format")
-        
-        
-        return cls(**manifest["attrs"])
+
+        return cls(load_components(**manifest["attrs"]))

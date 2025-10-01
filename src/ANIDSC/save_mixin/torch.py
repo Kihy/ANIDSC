@@ -4,24 +4,22 @@ from pathlib import Path
 from typing import Any, Dict
 
 import torch
+from ..save_mixin.basemixin import BaseSaveMixin
 
-
-class TorchSaveMixin:
+class TorchSaveMixin(BaseSaveMixin):
+    @property
+    def save_type(self):
+        return "pth"
+    
     def save(self):
         """save model with torch, all torch models are saved in models folder
 
         Args:
             suffix (str, optional): suffix of model. Defaults to "".
         """        
-        super().save()
-        # checkpoint = {
-        #     "model_state_dict": self.state_dict(),
-        # }
-        # if hasattr(self, "optimizer"):
-        #     checkpoint["optimizer_state_dict"] = (self.optimizer.state_dict(),)
-        ckpt_path = Path(self.get_save_path())
-        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(self, str(ckpt_path))
+        
+        self.save_path.parent.mkdir(parents=True, exist_ok=True)
+        torch.save(self, str(self.save_path))
 
     @classmethod
     def load(cls, path):

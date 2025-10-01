@@ -2,13 +2,15 @@
 from typing import Any, Dict
 import copy
 
+
 from .pipeline import Pipeline
 
 class MultilayerSplitter(Pipeline):
     def __init__(self, **kwargs):
         """splits the input into different layers based on protocol. each layer is attached to a new pipeline"""
-        super().__init__(**kwargs)
-
+        super().__init__(component_type="pipeline", **kwargs)
+        
+        
     def setup(self):
         self.components={}
         # copy pipeline and attach to each protocol layer

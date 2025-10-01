@@ -1,5 +1,6 @@
 
-# dev commands include ANIDS folder to allow real-time testing of new code
 
 docker run --gpus all -it --rm -v "/path/to/datasets":/workspace/intrusion_detection/datasets -v /path/to/experiment/scripts:/workspace/intrusion_detection/experiment -v kihy/anidsc_image
+
+# run experiments with docker and slurm
 

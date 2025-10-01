@@ -1,3 +1,4 @@
+import sys
 from typing import Any, Dict, List
 
 import yaml
@@ -28,31 +29,58 @@ def make_packet_reader(dataset_name: str, file_name: str, **kwargs) -> dict:
     }
 
 
-def make_csv_reader(
-    dataset_name: str, file_name: str, fe_name: str, fe_attrs: dict, **kwargs
+def make_data_reader(
+    dataset_name: str,
+    file_name: str,
+    feature_extractor: str,
+    fe_attrs: dict,
+    reader_type="CSVReader",
+    **kwargs,
 ) -> dict:
     return {
         "data_source": {
-            "class": "CSVReader",
+            "class": reader_type,
             "attrs": {
                 "dataset_name": dataset_name,
                 "file_name": file_name,
-                "fe_name": fe_name,
+                "fe_name": feature_extractor,
                 "fe_attrs": fe_attrs,
             },
         }
     }
 
 
-def make_feature_extractor(fe_class: str, **kwargs) -> dict:
-    return {"feature_extractor": {"class": fe_class}}
+def make_feature_extractor(feature_extractor: str, **kwargs) -> dict:
+    return {"feature_extractor": {"class": feature_extractor}}
 
 
-def make_feature_buffer(save_buffer: bool, **kwargs) -> dict:
+def make_meta_extractor(meta_extractor: str, **kwargs) -> dict:
+    return {
+        "meta_extractor": {
+            "class": meta_extractor,
+            "attrs": {
+                "protocol_map": {
+                    "TCP": 0,
+                    "UDP": 1,
+                    "ICMP": 2,
+                    "ARP": 3,
+                    "Other": 4,
+                }
+            },
+        }
+    }
+
+
+def make_feature_buffer(
+    buffer_type, folder_name
+) -> dict:
+
     return {
         "feature_buffer": {
-            "class": "TabularFeatureBuffer",
-            "attrs": {"save_features": save_buffer},
+            "class": buffer_type,
+            "attrs": {
+                "folder_name": folder_name,
+            },
         }
     }
 
@@ -99,8 +127,8 @@ def make_node_encoder(node_encoder, n_features, **kwargs):
     }
 
 
-def make_graph_rep(**kwargs):
-    return {"graph_rep": {"class": "HomoGraphRepresentation"}}
+def make_graph_rep(rep_class="HomoGraphRepresentation", **kwargs):
+    return {"graph_rep": {"class": f"{rep_class}"}}
 
 
 def make_pipeline(manifest: Dict[str, Any], **kwargs) -> Dict[str, Any]:
@@ -113,29 +141,34 @@ def dict_to_yaml(pipeline_dict):
     )
 
 
+def make_aggregator(**kwargs):
+    return {"custom_processor": {"class": "Aggregator"}}
+
+
 def get_template(template_name, **kwargs):
     if template_name == "feature_extraction":
         components = make_packet_reader(**kwargs)
+        components.update(make_meta_extractor(**kwargs))
+        components.update(make_feature_buffer("TabularFeatureBuffer","metadata"))
         components.update(make_feature_extractor(**kwargs))
-        components.update(make_feature_buffer(**kwargs))
+        components.update(make_feature_buffer("TabularFeatureBuffer","features"))
         pipeline = make_pipeline(components)
 
-    elif template_name == "detection":
-        components = make_csv_reader(**kwargs)
+    elif template_name == "basic_detection":
+        components = make_data_reader(**kwargs)
         components.update(make_scaler(**kwargs))
         components.update(make_model(**kwargs))
         components.update(make_evaluator(graph_period=0, **kwargs))
         pipeline = make_pipeline(components)
 
-    elif template_name == "graph_detection":
-        components = make_csv_reader(**kwargs)
-        n_features = 15
+    elif template_name == "lager":
+        components = make_data_reader(**kwargs)
 
         inner_components = make_scaler(**kwargs)
         inner_components.update(make_graph_rep(**kwargs))
-        inner_components.update(make_node_encoder(n_features=n_features, **kwargs))
+        inner_components.update(make_node_encoder(n_features=15, **kwargs))
         inner_components.update(make_model(**kwargs))
-        inner_components.update(make_evaluator(graph_period=10, **kwargs))
+        inner_components.update(make_evaluator(graph_period=100, **kwargs))
         inner_components = make_pipeline(inner_components)
 
         split_keys = ["TCP", "UDP", "ICMP", "ARP", "Other"]
@@ -144,4 +177,34 @@ def get_template(template_name, **kwargs):
 
         pipeline = make_pipeline(components)
 
+    elif template_name == "graph_feature_detection":
+        components = make_data_reader(reader_type="JsonGraphReader", **kwargs)
+        components.update(
+            make_graph_rep(rep_class="AutoScaleGraphRepresentation", **kwargs)
+        )
+        components.update(make_node_encoder(n_features=2, **kwargs))
+        components.update(make_model(**kwargs))
+        components.update(make_evaluator(graph_period=1, **kwargs))
+        pipeline = make_pipeline(components)
+
+    elif template_name=="homogeneous":
+        components = make_data_reader(reader_type="JsonGraphReader", **kwargs)
+        components.update(
+            make_graph_rep(rep_class="PlainGraphRepresentation", **kwargs)
+        )
+        components.update(make_model(**kwargs))
+        components.update(make_evaluator(graph_period=1, **kwargs))
+        pipeline = make_pipeline(components)
+    elif template_name=="homogeneous_scaled":
+        components = make_data_reader(reader_type="JsonGraphReader", **kwargs)
+        components.update(
+            make_graph_rep(rep_class="PlainGraphRepresentation", **kwargs)
+        )
+        components.update(make_scaler())
+        components.update(make_model(**kwargs))
+        components.update(make_evaluator(graph_period=1, **kwargs))
+        pipeline = make_pipeline(components)
+
+    else:
+        raise ValueError("Unknown pipeline name")
     return dict_to_yaml(pipeline)

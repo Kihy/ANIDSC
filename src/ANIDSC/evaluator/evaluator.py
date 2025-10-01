@@ -1,7 +1,7 @@
 import json
 import os
 from typing import Any, Dict, List
-from networkx.drawing.nx_pydot import write_dot
+
 import networkx as nx
 import numpy as np
 
@@ -10,10 +10,8 @@ from ..component.pipeline_component import PipelineComponent
 from . import od_metrics
 from pathlib import Path
 import time
-import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
-from torch_geometric.utils import to_networkx
-import plotly.graph_objects as go
+
 from ..templates import METRICS
 
 
@@ -22,7 +20,7 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         self,
         metric_list: List[str] = METRICS,
         log_to_tensorboard: bool = True,
-        graph_period=1e4,
+        graph_period=False,
     ):
         """base evaluator that evaluates the output of a single model
         Args:
@@ -36,8 +34,9 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         self.metric_list = metric_list
         self.log_to_tensorboard = log_to_tensorboard
         self.graph_period = graph_period
-        self.last_anomaly=0
+        self.last_anomaly = 0
         self.comparable = False
+        self.save_attr.extend(["metric_list", "log_to_tensorboard", "graph_period"])
 
     def setup(self):
         super().setup()
@@ -45,15 +44,20 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         dataset_name = self.request_attr("data_source", "dataset_name")
         fe_name = self.request_attr("data_source", "fe_name")
         file_name = self.request_attr("data_source", "file_name")
+        prefix = self.request_attr("", "prefix", [])
+
+        prefix = "/".join(prefix)
+
         pipeline_name = str(self.parent_pipeline)
 
         self.file_template = (
-            f"{dataset_name}/{fe_name}/{{}}/{file_name}/{pipeline_name}"
+            f"{dataset_name}/{fe_name}/{{}}/{file_name}/{prefix}/{pipeline_name}"
         )
-        
+
         if self.graph_period:
-            graph_plot_path = Path(self.file_template.format("graphs"))
-            graph_plot_path.mkdir(parents=True, exist_ok=True)
+            graph_plot_path = Path(self.file_template.format("graphs") + ".ndjson")
+            graph_plot_path.parent.mkdir(parents=True, exist_ok=True)
+            self.graph_file = open(str(graph_plot_path), "a")
 
         # file to store outputs
         scores_and_thresholds_path = Path(self.file_template.format("results") + ".csv")
@@ -61,7 +65,8 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         self.output_file = open(str(scores_and_thresholds_path), "a")
         if os.stat(scores_and_thresholds_path).st_size == 0:
             self.output_file.write(
-                ",".join(["time", "batch_num"] + self.metric_list) + "\n"
+                ",".join(["process_time", "batch_num", "timestamp"] + self.metric_list)
+                + "\n"
             )
 
         if self.log_to_tensorboard:
@@ -78,6 +83,10 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
 
         self.output_file.close()
         print("results file saved at", self.output_file.name)
+        if self.graph_period:
+            self.graph_file.close()
+            print("graph file saved at", self.output_file.name)
+
         self.write_header = True
 
     def process(self, results: Dict[str, Any]) -> Dict[str, Any]:
@@ -94,7 +103,11 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         current_time = time.time()
         duration = current_time - self.parent_pipeline.start_time
 
-        result_dict = {"time": duration, "batch_num": results["batch_num"]}
+        result_dict = {
+            "process_time": duration,
+            "batch_num": self.request_attr("model", "batch_evaluated"),
+            "timestamp": self.request_attr("data_source", "timestamp"),
+        }
 
         for metric_name, metric in zip(self.metric_list, self.metrics):
             result_dict[metric_name] = metric(results)
@@ -103,45 +116,39 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
                 self.writer.add_scalar(
                     metric_name,
                     result_dict[metric_name],
-                    results["batch_num"],
+                    result_dict["batch_num"],
                 )
 
         self.output_file.write(",".join(map(str, result_dict.values())) + "\n")
 
-        
         if self.graph_period:
             # plot graphs periodically
-            if (results["batch_num"] % self.graph_period == 0):
+            if result_dict["batch_num"] % self.graph_period == 0:
                 self.save_graph(results)
-            
+
             # plot if there is an anomaly
-            if results['score'] is not None:
-                if (results['batch_num']-self.last_anomaly)>self.graph_period and np.median(results['score']) > results['threshold']:
+            if results["score"] is not None:
+                if (
+                    result_dict["batch_num"] - self.last_anomaly
+                ) > self.graph_period and np.median(results["score"]) > results[
+                    "threshold"
+                ]:
                     self.save_graph(results)
-                    self.last_anomaly=results['batch_num']
-            
+                    self.last_anomaly = result_dict["batch_num"]
+
     def save_graph(self, results):
-        G = self.request_attr("graph_rep", "G", None)
-        G = to_networkx(
-            G, node_attrs=["x", "idx", "updated"], edge_attrs=["edge_attr"]
-        )
-        
-        # get mac_to_idx_map
-        mac_to_idx_map=self.request_attr("data_source","fe_attrs")["mac_to_idx_map"]
-        idx_to_max_map={v:k for k,v in mac_to_idx_map.items()}
-        nx.set_node_attributes(G, idx_to_max_map, "mac_address")
-        
+        G = self.request_action("graph_rep", "get_networkx")
+
         # get threshold
-        G.graph["threshold"]=results["threshold"]
-        
+        G.graph["threshold"] = results["threshold"]
+
         # add anomaly score
         if results["score"] is None:
             nx.set_node_attributes(G, float("inf"), "node_as")
         else:
             # assign edge nodes
-            score_map={i:v for i,v in enumerate(results["score"].tolist())}
+            score_map = {i: float(v) for i, v in zip(G.nodes, results["score"])}
             nx.set_node_attributes(G, score_map, "node_as")
-        
-        with open(self.file_template.format("graphs")+f"/{results['batch_num']}.json", "w") as f:
-            json.dump(nx.cytoscape_data(G), f)
-           
+
+        json.dump(nx.cytoscape_data(G), self.graph_file)
+        self.graph_file.write("\n")

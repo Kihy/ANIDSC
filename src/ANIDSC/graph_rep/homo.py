@@ -8,7 +8,7 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.utils import k_hop_subgraph, to_networkx, remove_isolated_nodes
 from ..utils.helper import uniqueXT
-
+import networkx as nx
 
 
 def find_edge_indices(edges, srcID, dstID):
@@ -65,7 +65,7 @@ class HomoGraphRepresentation(TorchSaveMixin, PipelineComponent, torch.nn.Module
             preprocessors (List[str], optional): list of preprocessors. Defaults to [].
         """
         torch.nn.Module.__init__(self)
-        PipelineComponent.__init__(self, **kwargs)
+        PipelineComponent.__init__(self, component_type="graph_rep",**kwargs)
         self.device = device
         self.preprocessors.extend(["to_float_tensor","to_device"])
         self.n_features = 15
@@ -141,6 +141,17 @@ class HomoGraphRepresentation(TorchSaveMixin, PipelineComponent, torch.nn.Module
             self.G.x[self.G.idx == dstID[i]] = dst_feature[i]
 
         self.G.updated = torch.isin(self.G.idx, unique_nodes)
+
+    def get_networkx(self):
+        G = to_networkx(
+            self.G, node_attrs=["x", "idx", "updated"], edge_attrs=["edge_attr"]
+        )
+        
+        # get mac_to_idx_map
+        mac_to_idx_map=self.request_attr("data_source","fe_attrs")["mac_to_idx_map"]
+        idx_to_mac_map={v:k for k,v in mac_to_idx_map.items()}
+        
+        return nx.relabel_nodes(G, idx_to_mac_map)
 
     def update_edges(self, srcID, dstID, edge_feature):
         """updates edges between source and destination

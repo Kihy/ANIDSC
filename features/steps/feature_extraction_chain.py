@@ -5,26 +5,42 @@ from ANIDSC.templates import get_template
 from shutil import rmtree
 import os
 
+@given("Dataset: {dataset_name} and File: {file_name}")
+def step_given_dataset_and_file(context, dataset_name, file_name):
+    context.custom_vars={}
+    context.custom_vars["dataset_name"]=dataset_name 
+    context.custom_vars["file_name"]=file_name
 
-@given("a new {fe_class} feature extraction pipeline initialized with test_data dataset and file {file}")
-def step_given_new_afterimage_and_file(context, fe_class, file):
-    template=get_template("feature_extraction", dataset_name="test_data", file_name=file, fe_class=fe_class, save_buffer=True)
-        
-    context.pipeline=Pipeline.load(template)
-    context.pipeline.setup()
+@given("Meta Extractor: {meta_extractor} and Feature Extractor: {feature_extractor}")
+def step_given_feature_extractor(context, meta_extractor, feature_extractor):
+    
+    context.custom_vars["feature_extractor"]=feature_extractor 
+    context.custom_vars["meta_extractor"]=meta_extractor
+    
 
-@given("a loaded {fe_class} feature extraction pipeline initialized with test_data dataset and file {file}")
-def step_given_loaded_afterimage_and_file(context, fe_class, file):
-    saved_file=f"test_data/{fe_class}/saved_components/pipeline/benign_lenovo_bulb/PacketReader->{fe_class}->TabularFeatureBuffer(256).yaml"    
+
+@given("a {state} {pipeline_name} pipeline")
+def step_given_pipeline(context, state, pipeline_name):
     
-    with open(saved_file) as f:
-        manifest = yaml.safe_load(f)
+    
+    if state=="new":
         
-    manifest["attrs"]["manifest"]["data_source"]["attrs"]["file_name"]=file
-    
-    
-    context.pipeline=Pipeline.load(manifest)
-    context.pipeline.on_load()
+        context.pipeline=Pipeline.load(get_template(pipeline_name, **context.custom_vars))
+        
+        
+        context.config.userdata['benign_path']=context.pipeline.save_path
+
+    elif state=="loaded":
+        
+        with open(context.config.userdata['benign_path']) as f:
+            manifest = yaml.safe_load(f)
+            
+        manifest["attrs"]["manifest"]["data_source"]["attrs"]["file_name"]=context.custom_vars["file_name"]
+        
+        context.pipeline=Pipeline.load(manifest)
+        context.pipeline.on_load()
+
+
 
 @when("the pipeline starts")
 def step_when_pipeline_starts(context):

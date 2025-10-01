@@ -17,7 +17,7 @@ class BaseNodeEncoder(TorchSaveMixin, PipelineComponent, torch.nn.Module):
         device: str = "cuda",
     ):
         torch.nn.Module.__init__(self)
-        PipelineComponent.__init__(self)
+        PipelineComponent.__init__(self, component_type="node_encoder")
         self.node_latent_dim = node_latent_dim
         self.embedding_dist = embedding_dist
         self.device = device
@@ -33,11 +33,11 @@ class BaseNodeEncoder(TorchSaveMixin, PipelineComponent, torch.nn.Module):
 
         
     def process(self, data):
-        embedding, sw_loss=self.forward(*data)
+        embedding, sw_loss=self.forward(**data)
         
         return embedding
 
-    def forward(self, x, edge_index, edge_attr=None):
+    def forward(self, x, edge_index, edge_attr=None,**kwargs):
         node_embeddings = self.node_embed(
             x=x, edge_index=edge_index, edge_attr=edge_attr
         )
@@ -74,7 +74,6 @@ class LinearNodeEncoder(BaseNodeEncoder):
 
 class GCNNodeEncoder(BaseNodeEncoder):
     def setup(self):
-        
         self.node_embed = GCN(
             in_channels=self.n_features,
             hidden_channels=self.n_features,

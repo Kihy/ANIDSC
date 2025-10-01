@@ -1,87 +1,50 @@
 
 from abc import ABC, abstractmethod
 
-from pathlib import Path
-import time
-from typing import Callable, Dict, Any, List, Union
+import inspect
 
-from ANIDSC.save_mixin.null import NullSaveMixin
-from ANIDSC.save_mixin.pickle import PickleSaveMixin
-from ANIDSC.save_mixin.torch import TorchSaveMixin
-from ANIDSC.save_mixin.yaml import YamlSaveMixin
-from tqdm import tqdm
-import yaml
-import importlib
+import pickle
+
+
 from ..utils.helper import compare_dicts
 
+
 class PipelineComponent(ABC):
-    def __init__(self, component_type:str=""):
+    @property
+    def component_type(self):
+        module = self.__module__  # "pkg.A.Class"
+        parts = module.split(".")
+        return parts[1] if len(parts) > 1 else None
+    
+    def __init__(self):
         """A component in the pipeline that can be chained with | 
 
         Args:
             component_type (str, optional): type of component for saving. If '', the component is stateless and will not be saved. Defaults to "".
            
         """                
-
-        self.component_type=component_type
-        
         self.parent_pipeline = None  # Reference to parent pipeline
-        self.preprocessors=[]
-        self.postprocessors=[]
         
-        self.comparable=True
-        
-        # used for saving
-        self.unpickleable=["parent_pipeline"]
-        
-        # used for saving config
-        self.save_attr=[]
-        
-    def get_save_attr(self):
-        save_state={}
-        for i in self.save_attr:
-            if i=="manifest": #special case for components
-                value={k: v.to_dict() for k, v in self.__dict__["components"].items()}
-            else:
-                value=self.__dict__[i]
-            save_state[i]=value
+        frame = inspect.currentframe()
+        args, _, _, values = inspect.getargvalues(frame)
+
+        # you can store them if you like
+        self._params = {k: values[k] for k in args if k != "self"}
+      
+    @property
+    def config_attr(self):
+        # save_state={}
+        # for i in self.save_attr:
+        #     if i=="manifest": #special case for components
+        #         value={k: v.to_dict() for k, v in self.__dict__["components"].items()}
+        #     else:
+        #         value=self.__dict__[i]
+        #     save_state[i]=value
             
-        return save_state
+        return self._params
     
-    def preprocess(self,X):
-        """preprocesses the input with preprocessor
-
-        Args:
-            X (_type_): input data
-
-        Returns:
-            _type_: preprocessed X
-        """
-        if len(self.preprocessors) > 0:
-            for p in self.preprocessors:
-                X = p(X)
-        return X
-    
-    def postprocess(self,X):
-        """preprocesses the input with preprocessor
-
-        Args:
-            X (_type_): input data
-
-        Returns:
-            _type_: preprocessed X
-        """
-        if len(self.postprocessors) > 0:
-            for p in self.postprocessors:
-                X = p(X)
-        return X
     
     def request_attr(self, component, attr, default=None):
-        """finds the current component's context by recursively adding parent's context to self if it does not exist
-
-        Returns:
-            Dict[str, Any]: the overall context dictionary
-        """
         if self.parent_pipeline is None:
             return default
         else:
@@ -90,12 +53,11 @@ class PipelineComponent(ABC):
     def request_action(self, component, action):
         return self.parent_pipeline.perform_action(component, action)
     
-    def on_load(self):
-        pass
     
     @abstractmethod
     def setup(self):
         pass
+    
     
     @abstractmethod
     def process(self, data):
@@ -104,7 +66,6 @@ class PipelineComponent(ABC):
     @abstractmethod
     def save(self):
         pass 
-    
     
     @classmethod
     @abstractmethod
@@ -117,42 +78,33 @@ class PipelineComponent(ABC):
     def to_dict(self):
         comp_dict = {
             "class": self.__class__.__name__,
-            "attrs": self.get_save_attr(),
-            "file": self.get_save_path()
+            "attrs": self.config_attr,
+            "file": self.save_path
         }
         return comp_dict
 
-    
-    def get_save_path(self):
-        if isinstance(self, NullSaveMixin):
-            return False
-        elif isinstance(self, YamlSaveMixin):
-            return self.get_save_path_template().format(self.component_type, str(self), "yaml")
-        elif isinstance(self, PickleSaveMixin):
-            return self.parent_pipeline.get_save_path_template().format(self.component_type, str(self), "pkl")
-        elif isinstance(self, TorchSaveMixin):
-            return self.parent_pipeline.get_save_path_template().format(self.component_type, str(self), "pth")
+    @property
+    @abstractmethod
+    def save_path(self):
+        pass 
     
     def __getstate__(self):
-        state = self.__dict__.copy()
-        for i in self.unpickleable:            
-            state.pop(i,None)
+        state = {}
+        for k, v in self.__dict__.items():
+            try:
+                pickle.dumps(v)  # test if pickleable
+                state[k] = v
+            except Exception:
+                # skip silently
+                pass
         return state
     
     def __setstate__(self, state):
         self.__dict__.update(state)
     
-    def __eq__(self, other: 'PipelineComponent'):
-        same_class=self.__class__==other.__class__ 
-        if not same_class:
-            return False
+    def __eq__(self, other):
+        if not isinstance(other, self.__class__):
+            return NotImplemented
+        return compare_dicts(self.__dict__, other.__dict__, self.__class__)
         
-        if not self.comparable:
-            return True
-        
-        # Create copies of the __dict__ to avoid modifying the original attributes
-        self_attrs = self.__getstate__().copy()
-        other_attrs = other.__getstate__().copy()
-
-        return compare_dicts(self_attrs, other_attrs)        
               

@@ -1,4 +1,5 @@
 
+import math
 from ..save_mixin.pickle import PickleSaveMixin
 from ..component.pipeline_component import PipelineComponent
 from collections import deque
@@ -6,7 +7,7 @@ from collections import deque
 from abc import abstractmethod
 import numpy as np
 from ..utils import threshold_func
-
+from .. scaler import LivePercentile
 
 import importlib
 
@@ -14,6 +15,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def __init__(
         self,
         model_name,
+
         queue_len=10000,
         percentile=0.95,
         warmup=1000,
@@ -46,16 +48,27 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         else:
             module_path="ANIDSC.model"
             class_name=model_name
+            
         module = importlib.import_module(module_path)
         self.model_cls=getattr(module, class_name)
         
+        
+        
     def setup(self):
         super().setup()
-        # request from graph_rep first
-        ndim=self.request_attr("graph_rep","n_features", None)
+        # request from node encoder first
+        ndim=self.request_attr("model.node_encoder","node_latent_dim", None)
+        
+        if not ndim:
+        # request from graph_rep second
+            ndim=self.request_attr("graph_rep","n_features", None)
+        
         if not ndim:
             ndim=self.request_attr("data_source","ndim")
         self.model=self.model_cls(ndim)
+        self.normalizer=LivePercentile(ndim, p=[0.16,0.5,0.84])
+        
+        self.preprocessors.append(self.normalizer.process)
         
 
     def process(self, X):
@@ -69,13 +82,13 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         if self.batch_trained < self.warmup or threshold > np.median(score):
             # store score for trained samples only
             if score is not None:
-                self.loss_queue.extend(score)
+                self.loss_queue.extend([x for x in score if not math.isinf(x)])
              
             self.model.train_step(X)
             self.update_scaler()
             self.batch_trained+=1
-            
-        return {"threshold": threshold, "score": score, "batch_num": self.batch_evaluated}
+        
+        return {"threshold": threshold, "score": score}
 
     def update_scaler(self):
         self.request_action("scaler","update_current")

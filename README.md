@@ -17,7 +17,7 @@ There is no restriction on code structure
 install docker
 
 run
-`docker run --rm --gpus all -it --ipc=host --ulimit memlock=-1 --ulimit stack=67108864 --rm -v "/path/to/datasets":/workspace/intrusion_detection/datasets -v /path/to/experiment/scripts:/workspace/intrusion_detection/experiment -v kihy/anidsc_image`
+`docker run --gpus all -it --rm -v "/path/to/datasets":/workspace/intrusion_detection/datasets -v /path/to/experiment/scripts:/workspace/intrusion_detection/experiment -v kihy/anidsc_image`
 
 if gpu is not set up you can remove --gpus all 
 

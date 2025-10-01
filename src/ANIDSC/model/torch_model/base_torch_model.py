@@ -1,7 +1,7 @@
 from abc import abstractmethod
 import importlib
 import torch
-
+from torch_geometric.data import Data
 
 class BaseTorchModel(torch.nn.Module):
     def __init__(self, input_dims, device="cuda", **kwargs):
@@ -11,7 +11,6 @@ class BaseTorchModel(torch.nn.Module):
         self.optimizer = None
         self.input_dims=input_dims
 
-        
         self.init_model()
 
     @abstractmethod    
@@ -44,6 +43,8 @@ class BaseTorchModel(torch.nn.Module):
         return X.to(self.device)
 
     def to_tensor(self, X):
+        if isinstance(X, Data):
+            return X.x.float()
         if not isinstance(X, torch.Tensor):
             X=torch.tensor(X)
         return X.float()

@@ -1,39 +1,53 @@
-from abc import ABC
+from abc import ABC, abstractmethod
 from tqdm import tqdm
 
 
 from .pipeline_component import PipelineComponent
 
 
+
+
 class PipelineSource(PipelineComponent):
 
-    def __init__(self, dataset_name: str, file_name: str, max_records=float("inf"), batch_size=256):
-        super().__init__(component_type="data_source")
-        
-        self.comparable=False
+    def __init__(
+        self,
+        dataset_name: str,
+        file_name: str,
+        max_records=float("inf"),
+    ):
+        super().__init__()
 
         self.dataset_name = dataset_name
         self.file_name = file_name
         self.max_records = max_records
-        self.batch_size=batch_size        
+
         self.count = 0
-        self.iter = None
-        
-        self.unpickleable.append('iter')
-        
-        self.save_attr.extend(['dataset_name','file_name','max_records','batch_size'])
-        
-        
+        self._iter=None
+
     def setup(self):
         pass
 
-    def process(self, _:None):
-        
+    def process(self, _: None):
+
         # return None if end of iter
-        if self.max_records==self.count:
+        if self.max_records == self.count:
             return None
 
-        data=next(self.iter, None)
+        data = next(self.iter, None)
+        self.timestamp = self.get_timestamp(data)
         self.count += self.batch_size
-        return data 
-        
+        return data
+
+    @abstractmethod
+    def get_timestamp(self, data):
+        pass
+
+    @property
+    @abstractmethod
+    def batch_size(self):
+        pass
+
+    @property
+    def iter(self):
+        return self._iter
+

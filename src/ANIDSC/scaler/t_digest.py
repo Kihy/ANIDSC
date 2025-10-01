@@ -7,24 +7,24 @@ import numpy as np
 
 
 class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
-    def __init__(self, p: List[float] = [0.25, 0.5, 0.75], **kwargs):
+    def __init__(self,ndim, p: List[float] = [0.25, 0.5, 0.75], **kwargs):
         """normalizes input with percentile calculations with tdigest
 
         Args:
             p (List[float], optional): list of percentiles for extraction, in the order lower percentile, median, upper percentile. Defaults to [0.25, 0.5, 0.75].
         """
         BaseOnlineNormalizer.__init__(self, **kwargs)
+        self.ndim=ndim
         self.p = p
         self.count = 0
         self.preprocessors = [self.to_numpy]
-        
+        self.skip=0
+        self.dims=[TDigest() for _ in range(self.ndim - self.skip)]
 
     def to_numpy(self, X):
         return np.array(X)
-    
-    def setup(self):
-        super().setup()
-        self.dims=[TDigest() for _ in range(self.ndim - self.skip)]
+
+        
 
     def update(self, X):
         """Adds another datum"""
@@ -61,8 +61,7 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
     def quantiles(self):
         """Returns a list of tuples of the quantile and its location"""
 
-        if self.ndim == 0 or self.count < self.warmup:
-            return None
+        
         percentiles = np.zeros((len(self.p), self.ndim - self.skip))
 
         for d in range(self.ndim - self.skip):

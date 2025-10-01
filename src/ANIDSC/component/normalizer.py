@@ -3,8 +3,8 @@ from .pipeline_component import PipelineComponent
 
 import copy 
 
-class BaseOnlineNormalizer(PipelineComponent):
-    def __init__(self, warmup:int=10, **kwargs):
+class BaseOnlineNormalizer:
+    def __init__(self, **kwargs):
         """base normalizer to normalize datastream online
 
         Args:
@@ -12,27 +12,15 @@ class BaseOnlineNormalizer(PipelineComponent):
             ndim (int, optional): number of input dimensions. Defaults to 0.
             
         """        
-        super().__init__(component_type="scaler",**kwargs)
-        self.warmup=warmup
-        self.current_batch=None
-        
-
-        
-    def setup(self):
-        super().setup()
-
-        ndim=self.request_attr("data_source","ndim")
-        
-        self.ndim=ndim
-        self.skip=self.request_attr("data_source", "skip")
-
+        pass 
+    
+    @abstractmethod
+    def process(self, X):
+        pass
         
     @abstractmethod
     def update(self, X):
         pass 
-    
-    def update_current(self):
-        self.update(self.current_batch)
 
     @abstractmethod
     def reset(self):

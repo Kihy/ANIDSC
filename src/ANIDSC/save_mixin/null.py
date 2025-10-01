@@ -1,10 +1,13 @@
-class NullSaveMixin:
+from ..save_mixin.basemixin import BaseSaveMixin
+
+class NullSaveMixin(BaseSaveMixin):
     def save(self):
-        super().save()
         print(f"skipping save for {str(self)}")
         
     @classmethod
-    def load(cls, path):
-        """Load an object from a file using pickle."""
+    def load(cls, path):        
+        print("No load")
         
-        print("didn't load")
+    @property
+    def save_type(self):
+        return "none"
