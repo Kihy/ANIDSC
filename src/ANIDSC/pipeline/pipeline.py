@@ -24,13 +24,10 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         
 
     def setup(self):
-        for key, comp in self.components.items():
-            comp.setup()      
+        for i,comp in enumerate(self.components):
             comp.parent_pipeline = self
-
-    def perform_action(self, comp_type, action):
-        if comp_type in self.components:
-            return getattr(self.components[comp_type], action)()
+            comp.index=i 
+            comp.setup()      
 
     def process(self, data=None):
         """sequentially process data over each component
@@ -42,12 +39,12 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
             _type_: output data
         """
         self.start_time = time.time()
-        for comp_type, component in self.components.items():
+        for  component in self.components:
             data = component.process(data)
 
             if data is None:
                 break
-        return comp_type
+       
 
     def start(self):
 
@@ -56,22 +53,35 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         try:
             while True:
                 self.process()
-
                 pbar.update(1)
         except StopIteration as e:
-            print("End of File")
+            print("Pipeline Finished")
         finally:
             self.save()
 
-   
+    @property 
+    def config_attr(self):
+        return {"manifest":[v.to_dict() for v in self.components]}
+        
        
-    def get_attr(self, comp_type, attr, default=None):
-        if comp_type in self.components:
-            return getattr(self.components[comp_type], attr, default)
-        elif comp_type == "":
-            return getattr(self, attr, default)
-        else:
-            return self.request_attr(comp_type, attr, default)
+    def get_attr(self, index, attr, default=None):
+        for i in range(index, -1, -1):  # backward search
+            comp = self.components[i]
+
+            if hasattr(comp, attr):
+                return getattr(comp, attr)
+        
+        for i in range(index+1, len(self.components)):  # forwards search
+            comp = self.components[i]
+
+            if hasattr(comp, attr):
+                return getattr(comp, attr)
+
+        # check self
+        if hasattr(self, attr):
+            return getattr(self, attr)
+        
+        return default
 
     def __eq__(self, other: "Pipeline"):
         same_class = self.__class__ == other.__class__
@@ -81,4 +91,4 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         return self.components == other.components
 
     def __str__(self):
-        return "->".join([str(component) for _, component in self.components.items()])
+        return "->".join([str(component) for component in self.components])

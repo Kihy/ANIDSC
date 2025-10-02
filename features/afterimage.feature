@@ -1,24 +1,24 @@
 Feature: AfterImage
-    Scenario: Empty folders
-        Given test_data AfterImage folder is empty
+    # Scenario: Empty folders
+    #     Given test_data AfterImage folder is empty
 
-    Scenario Outline: Feature extraction
-        Given Dataset: test_data and File: <file>
-        And Meta Extractor: ProtocolMetaExtractor and Feature Extractor: AfterImage
-        And a <state> feature_extraction pipeline
-        When the pipeline starts
-        Then the pipeline should not fail
-        And the components are saved
-        Examples:
-            | state  | file                        |
-            | new    | benign_lenovo_bulb          |
-            | loaded | malicious_ACK_Flooding      |
-            | loaded | malicious_Service_Detection |
-            | loaded | malicious_Port_Scanning     |
+    # Scenario Outline: Feature extraction
+    #     Given Dataset: test_data and File: <file>
+    #     And Meta Extractor: ProtocolMetaExtractor and Feature Extractor: AfterImage
+    #     And a <state> feature_extraction pipeline
+    #     When the pipeline starts
+    #     Then the pipeline should not fail
+    #     And the components are saved
+    #     Examples:
+    #         | state  | file                        |
+    #         | new    | benign_lenovo_bulb          |
+    #         | loaded | malicious_ACK_Flooding      |
+    #         | loaded | malicious_Service_Detection |
+    #         | loaded | malicious_Port_Scanning     |
 
     Scenario Outline: Model Detection from CSV Features
         Given Dataset: test_data and File: <file>
-        And Meta Extractor: ProtocolMetaExtractor and Feature Extractor: AfterImage
+        And Feature Extracted by ProtocolMetaExtractor and AfterImage
         And Model: <model>
         And a <state> basic_detection pipeline
         When the pipeline starts

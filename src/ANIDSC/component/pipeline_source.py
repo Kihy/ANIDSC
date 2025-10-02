@@ -27,14 +27,20 @@ class PipelineSource(PipelineComponent):
     def setup(self):
         pass
 
+    @property
+    @abstractmethod
+    def output_dim(self):
+        pass
+
     def process(self, _: None):
 
         # return None if end of iter
         if self.max_records == self.count:
-            return None
+            raise StopIteration("Max records reached")
 
-        data = next(self.iter, None)
-        self.timestamp = self.get_timestamp(data)
+        data = next(self.iter)
+        if data:
+            self.timestamp = self.get_timestamp(data)
         self.count += self.batch_size
         return data
 

@@ -4,28 +4,16 @@ from typing import Any, Dict, List
 import yaml
 
 
-METRICS = [
-    "detection_rate",
-    "lower_quartile_score",
-    "upper_quartile_score",
-    "soft_min_score",
-    "soft_max_score",
-    "median_score",
-    "median_threshold",
-    "pos_count",
-    "batch_size",
-]
 
 
 def make_packet_reader(dataset_name: str, file_name: str, **kwargs) -> dict:
     return {
-        "data_source": {
-            "class": "PacketReader",
-            "attrs": {
-                "dataset_name": dataset_name,
-                "file_name": file_name,
-            },
-        }
+        "type": "data_source",
+        "class": "PacketReader",
+        "attrs": {
+            "dataset_name": dataset_name,
+            "file_name": file_name,
+        },
     }
 
 
@@ -33,76 +21,67 @@ def make_data_reader(
     dataset_name: str,
     file_name: str,
     feature_extractor: str,
-    fe_attrs: dict,
     reader_type="CSVReader",
     **kwargs,
 ) -> dict:
     return {
-        "data_source": {
-            "class": reader_type,
-            "attrs": {
-                "dataset_name": dataset_name,
-                "file_name": file_name,
-                "fe_name": feature_extractor,
-                "fe_attrs": fe_attrs,
-            },
-        }
+        "type": "data_source",
+        "class": reader_type,
+        "attrs": {
+            "dataset_name": dataset_name,
+            "file_name": file_name,
+            "fe_name": feature_extractor,
+        },
     }
 
 
 def make_feature_extractor(feature_extractor: str, **kwargs) -> dict:
-    return {"feature_extractor": {"class": feature_extractor}}
+    return {"type": "feature_extractor", "class": feature_extractor}
 
 
 def make_meta_extractor(meta_extractor: str, **kwargs) -> dict:
     return {
-        "meta_extractor": {
-            "class": meta_extractor,
-            "attrs": {
-                "protocol_map": {
-                    "TCP": 0,
-                    "UDP": 1,
-                    "ICMP": 2,
-                    "ARP": 3,
-                    "Other": 4,
-                }
-            },
-        }
+        "type": "meta_extractor",
+        "class": meta_extractor,
+        "attrs": {
+            "protocol_map": {
+                "TCP": 0,
+                "UDP": 1,
+                "ICMP": 2,
+                "ARP": 3,
+                "Other": 4,
+            }
+        },
     }
 
 
-def make_feature_buffer(
-    buffer_type, folder_name
-) -> dict:
+def make_feature_buffer(buffer_type, folder_name) -> dict:
 
     return {
-        "feature_buffer": {
-            "class": buffer_type,
-            "attrs": {
-                "folder_name": folder_name,
-            },
-        }
+        "type": "feature_buffer",
+        "class": buffer_type,
+        "attrs": {
+            "folder_name": folder_name,
+        },
     }
 
 
 def make_scaler(**kwargs) -> dict:
-    return {"scaler": {"class": "LivePercentile"}}
+    return {"type":"scaler", "class": "LivePercentile"}
 
 
 def make_model(model_name: str, **kwargs) -> dict:
 
     if model_name == "BoxPlot":
-        return {"model": {"class": model_name}}
+        return {"type":"model", "class": model_name}
     else:
-        return {
-            "model": {"class": "BaseOnlineODModel", "attrs": {"model_name": model_name}}
-        }
+        return {"type":"model","class": "BaseOnlineODModel", "attrs": {"model_name": model_name}}
+        
 
 
 def make_evaluator(graph_period, **kwargs) -> dict:
-    return {
-        "evaluator": {"class": "BaseEvaluator", "attrs": {"graph_period": graph_period}}
-    }
+    return {"type":"evaluator", "class": "BaseEvaluator", "attrs": {"graph_period": graph_period}}
+    
 
 
 def make_splitter(manifest, split_keys, name, **kwargs):
@@ -131,8 +110,8 @@ def make_graph_rep(rep_class="HomoGraphRepresentation", **kwargs):
     return {"graph_rep": {"class": f"{rep_class}"}}
 
 
-def make_pipeline(manifest: Dict[str, Any], **kwargs) -> Dict[str, Any]:
-    return {"class": "Pipeline", "attrs": {"manifest": manifest}}
+def make_pipeline(manifest) -> Dict[str, Any]:
+    return {"type":"pipeline","class": "Pipeline", "attrs": {"manifest": manifest}}
 
 
 def dict_to_yaml(pipeline_dict):
@@ -147,18 +126,20 @@ def make_aggregator(**kwargs):
 
 def get_template(template_name, **kwargs):
     if template_name == "feature_extraction":
-        components = make_packet_reader(**kwargs)
-        components.update(make_meta_extractor(**kwargs))
-        components.update(make_feature_buffer("TabularFeatureBuffer","metadata"))
-        components.update(make_feature_extractor(**kwargs))
-        components.update(make_feature_buffer("TabularFeatureBuffer","features"))
+        components = []
+        components.append(make_packet_reader(**kwargs))
+        components.append(make_meta_extractor(**kwargs))
+        components.append(make_feature_buffer("TabularFeatureBuffer", "metadata"))
+        components.append(make_feature_extractor(**kwargs))
+        components.append(make_feature_buffer("TabularFeatureBuffer", "features"))
         pipeline = make_pipeline(components)
 
     elif template_name == "basic_detection":
-        components = make_data_reader(**kwargs)
-        components.update(make_scaler(**kwargs))
-        components.update(make_model(**kwargs))
-        components.update(make_evaluator(graph_period=0, **kwargs))
+        components = []
+        components.append(make_data_reader(**kwargs))
+        components.append(make_scaler(**kwargs))
+        components.append(make_model(**kwargs))
+        components.append(make_evaluator(graph_period=0, **kwargs))
         pipeline = make_pipeline(components)
 
     elif template_name == "lager":
@@ -187,7 +168,7 @@ def get_template(template_name, **kwargs):
         components.update(make_evaluator(graph_period=1, **kwargs))
         pipeline = make_pipeline(components)
 
-    elif template_name=="homogeneous":
+    elif template_name == "homogeneous":
         components = make_data_reader(reader_type="JsonGraphReader", **kwargs)
         components.update(
             make_graph_rep(rep_class="PlainGraphRepresentation", **kwargs)
@@ -195,7 +176,7 @@ def get_template(template_name, **kwargs):
         components.update(make_model(**kwargs))
         components.update(make_evaluator(graph_period=1, **kwargs))
         pipeline = make_pipeline(components)
-    elif template_name=="homogeneous_scaled":
+    elif template_name == "homogeneous_scaled":
         components = make_data_reader(reader_type="JsonGraphReader", **kwargs)
         components.update(
             make_graph_rep(rep_class="PlainGraphRepresentation", **kwargs)

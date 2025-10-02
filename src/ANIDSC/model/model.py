@@ -15,7 +15,6 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def __init__(
         self,
         model_name,
-
         queue_len=10000,
         percentile=0.95,
         warmup=1000,
@@ -30,7 +29,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
             profile (bool, optional): whether to profile the model, only available for pytorch models. Defaults to False.
             load_existing (bool, optional): whether to loading existing model. Defaults to False.
         """
-        super().__init__(component_type="model", **kwargs)
+        super().__init__( **kwargs)
         
         self.model_name=model_name
         self.loss_queue = deque(maxlen=queue_len)
@@ -42,33 +41,25 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         self.batch_trained = 0
         self.batch_evaluated = 0
         
-        if "." in model_name:
-            sub_module, class_name = model_name.rsplit(".", 1)
-            module_path=f"ANIDSC.model.{sub_module}"
-        else:
-            module_path="ANIDSC.model"
-            class_name=model_name
-            
-        module = importlib.import_module(module_path)
-        self.model_cls=getattr(module, class_name)
+        
         
         
         
     def setup(self):
-        super().setup()
-        # request from node encoder first
-        ndim=self.request_attr("model.node_encoder","node_latent_dim", None)
         
-        if not ndim:
-        # request from graph_rep second
-            ndim=self.request_attr("graph_rep","n_features", None)
-        
-        if not ndim:
-            ndim=self.request_attr("data_source","ndim")
+        if "." in self.model_name:
+            sub_module, class_name = self.model_name.rsplit(".", 1)
+            module_path=f"ANIDSC.model.{sub_module}"
+        else:
+            module_path="ANIDSC.model"
+            class_name=self.model_name
+            
+        module = importlib.import_module(module_path)
+        self.model_cls=getattr(module, class_name)
+                
+        ndim=self.request_attr("output_dim")
+
         self.model=self.model_cls(ndim)
-        self.normalizer=LivePercentile(ndim, p=[0.16,0.5,0.84])
-        
-        self.preprocessors.append(self.normalizer.process)
         
 
     def process(self, X):

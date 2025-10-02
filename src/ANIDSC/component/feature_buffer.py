@@ -21,11 +21,16 @@ class BaseFeatureBuffer(PipelineComponent):
     def file_type(self):
         pass
     
+
+    @property
+    def folder_name(self):
+        return self._folder_name
     def __init__(
         self,
         folder_name,
     ):
-        self.folder_name=folder_name
+        super().__init__()
+        self._folder_name=folder_name
         self.save_file = None
         self.data_list = []
 
@@ -36,12 +41,9 @@ class BaseFeatureBuffer(PipelineComponent):
     
     def setup(self):
         # setup files
-        dataset_name = self.request_attr("data_source", "dataset_name")
-        file_name = self.request_attr("data_source", "file_name")
-
-        fe_name = self.request_action("feature_extractor", "__str__")
-        if fe_name is None:
-            fe_name = self.request_attr("data_source", "fe_name")
+        dataset_name = self.request_attr("dataset_name")
+        file_name = self.request_attr("file_name")  
+        fe_name = self.request_attr("fe_name")
         
 
         feature_path = (
@@ -52,7 +54,7 @@ class BaseFeatureBuffer(PipelineComponent):
         self.save_file = open(feature_path, "a")
 
         # write header when file is empty
-        headers = self.request_attr("data_source", "headers")
+        headers = self.request_attr("headers")
         
         if os.stat(feature_path).st_size == 0:
             self.save_file.write(",".join(headers) + "\n")

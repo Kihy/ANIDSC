@@ -16,8 +16,6 @@ class PickleSaveMixin(BaseSaveMixin):
     def save(self):
         """Save the object to a file using pickle.
         """ 
-
-        
         self.save_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(str(self.save_path), 'wb') as file:

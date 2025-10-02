@@ -1,12 +1,12 @@
+from ..save_mixin.pickle import PickleSaveMixin
 import numpy as np
 
 from ..component.feature_buffer import BaseFeatureBuffer
-from ..save_mixin.null import NullSaveMixin
 
 from numpy.typing import NDArray
 
 
-class TabularFeatureBuffer(NullSaveMixin, BaseFeatureBuffer):
+class TabularFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
     @property 
     def file_type(self):
         return "csv"
@@ -33,4 +33,4 @@ class TabularFeatureBuffer(NullSaveMixin, BaseFeatureBuffer):
 
 
     def __str__(self):
-        return f"TabularFeatureBuffer({self.buffer_size})"
+        return f"TabularFeatureBuffer({self.folder_name})"

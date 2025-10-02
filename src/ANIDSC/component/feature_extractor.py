@@ -27,6 +27,7 @@ class BaseMetaExtractor(PipelineComponent):
         self.last_timestamp = None
         self.result_folder_name="metadata"
         
+    
 
     @abstractmethod
     def get_meta_vector(self, packet):
@@ -37,15 +38,14 @@ class BaseMetaExtractor(PipelineComponent):
             packet (scapy packet): input packet
         """
         pass
-
+    
+    @property
     @abstractmethod
-    def get_headers(self):
+    def headers(self):
         """returns the names of the meta data"""
         pass
     
-    def setup(self):
-        self.header = self.get_headers()
-        self.output_features = len(self.header)
+    
 
     def process(self, packet: Packet, peek=False) -> Tuple[List[float], List[Any]]:
         """The main entry point of feature extractor, this function
@@ -81,12 +81,14 @@ class BaseFeatureExtractor(PipelineComponent):
         super().__init__( **kwargs)
         self.result_folder_name="features"
 
-    def setup(self):
-        self.header = self.get_headers()
-        self.output_features = len(self.header)
+
+    @property 
+    def fe_name(self):
+        return self.name 
     
+    @property
     @abstractmethod
-    def get_headers(self):
+    def headers(self):
         """returns the names of the features"""
         pass
 

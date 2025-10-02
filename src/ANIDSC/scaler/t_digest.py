@@ -7,24 +7,24 @@ import numpy as np
 
 
 class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
-    def __init__(self,ndim, p: List[float] = [0.25, 0.5, 0.75], **kwargs):
+    def __init__(self):
         """normalizes input with percentile calculations with tdigest
 
         Args:
             p (List[float], optional): list of percentiles for extraction, in the order lower percentile, median, upper percentile. Defaults to [0.25, 0.5, 0.75].
         """
-        BaseOnlineNormalizer.__init__(self, **kwargs)
-        self.ndim=ndim
-        self.p = p
+        super().__init__()
+
+        self.p = [0.16, 0.5, 0.84]
         self.count = 0
         self.preprocessors = [self.to_numpy]
-        self.skip=0
-        self.dims=[TDigest() for _ in range(self.ndim - self.skip)]
 
     def to_numpy(self, X):
         return np.array(X)
 
-        
+    def setup(self):
+        self.ndim = self.request_attr("output_dim")
+        self.dims = [TDigest() for _ in range(self.ndim)]
 
     def update(self, X):
         """Adds another datum"""
@@ -35,24 +35,20 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         self.count += 1
 
     def process(self, X):
-        
+
         percentiles = self.quantiles()
 
-        no_scale = X[:, : self.skip]
-        scale = X[:, self.skip :]
-        
-        self.current_batch = scale
+        self.current_batch = X
 
         if percentiles is None:
-            percentiles = np.quantile(scale, self.p, axis=0)
+            percentiles = np.quantile(X, self.p, axis=0)
 
-
-        scaled_features = (scale - percentiles[1]) / (percentiles[2] - percentiles[0])
+        scaled_features = (X - percentiles[1]) / (percentiles[2] - percentiles[0])
         scaled_features = np.nan_to_num(
             scaled_features, nan=0.0, posinf=0.0, neginf=0.0
         )
 
-        return np.hstack((no_scale, scaled_features))
+        return scaled_features
 
     def reset(self):
         self.dims = [TDigest() for _ in range(self.ndim - self.skip)]
@@ -61,7 +57,6 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
     def quantiles(self):
         """Returns a list of tuples of the quantile and its location"""
 
-        
         percentiles = np.zeros((len(self.p), self.ndim - self.skip))
 
         for d in range(self.ndim - self.skip):
@@ -76,8 +71,8 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         return [TDigest.of_centroids(np.array(i)) for i in dim_list]
 
     def __getstate__(self):
-        state_dict=super().__getstate__().copy()
-        
+        state_dict = super().__getstate__().copy()
+
         state_dict["dims"] = self.to_centroids()
 
         return state_dict

@@ -11,7 +11,10 @@ class ProtocolMetaExtractor(PickleSaveMixin, BaseMetaExtractor):
     def __init__(self,  protocol_map={},**kwargs):
         super().__init__(**kwargs)
         self.protocol_map=protocol_map
-    
+
+        
+    def setup(self):
+        pass 
     
     def get_meta_vector(self, packet: Packet):
         """extracts the traffic vectors from packet
@@ -124,7 +127,8 @@ class ProtocolMetaExtractor(PickleSaveMixin, BaseMetaExtractor):
 
         return protocol.upper()
 
-    def get_headers(self):
+    @property
+    def headers(self):
         """return the feature names of traffic vectors
 
         Returns:

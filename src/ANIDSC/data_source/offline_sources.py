@@ -1,14 +1,15 @@
 import json
 import os
 from typing import Any, Dict
+from ..save_mixin.pickle import PickleSaveMixin
 import numpy as np
 from scapy.all import PcapReader
 from ..component.pipeline_source import PipelineSource
 from pathlib import Path
 import pandas as pd
-from ..save_mixin.null import NullSaveMixin
 
-class PacketReader(NullSaveMixin,PipelineSource):
+
+class PacketReader(PickleSaveMixin,PipelineSource):
     def __init__(self, **kwargs):
         """reads data from pcap file
 
@@ -19,6 +20,7 @@ class PacketReader(NullSaveMixin,PipelineSource):
         """
         super().__init__(**kwargs)
 
+    def setup(self):
         # Try both extensions
         base_path = f"{self.dataset_name}/pcap/{self.file_name}"
         pcap_path = f"{base_path}.pcap"
@@ -43,8 +45,8 @@ class PacketReader(NullSaveMixin,PipelineSource):
         
         
 
-class CSVReader(NullSaveMixin, PipelineSource):
-    def __init__(self, fe_name: str, fe_attrs:Dict[str, Any]={}, **kwargs):
+class CSVReader(PickleSaveMixin, PipelineSource):
+    def __init__(self, fe_name: str, **kwargs):
         """reads data from CSV file
 
         Args:
@@ -53,12 +55,10 @@ class CSVReader(NullSaveMixin, PipelineSource):
 
         """
         super().__init__(**kwargs)
+        self.fe_name=fe_name 
 
-        # set fe_attrs to self 
-        self.fe_name=fe_name
-        
-        # set fe_attrs to self
-        self.fe_attrs=fe_attrs
+    
+    def setup(self):
         
         self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.csv"
         self._iter = pd.read_csv(
@@ -68,16 +68,18 @@ class CSVReader(NullSaveMixin, PipelineSource):
     def get_timestamp(self, data):
         return data["timestamp"]
     
-    def __getattr__(self, name):
-        return self.fe_attrs[name]
     
     @property
     def batch_size(self):
         return 1024
     
+    @property
+    def output_dim(self):
+        return len(self.iter._engine.names)
+    
 
-class JsonGraphReader(NullSaveMixin, PipelineSource):
-    def __init__(self, fe_name: str, fe_attrs:Dict[str, Any]={}, **kwargs):
+class JsonGraphReader(PickleSaveMixin, PipelineSource):
+    def __init__(self, fe_name: str, **kwargs):
         """reads data from JSON file
 
         Args:
@@ -91,10 +93,8 @@ class JsonGraphReader(NullSaveMixin, PipelineSource):
         self.fe_name=fe_name
  
         
-        # set fe_attrs to self
-        self.fe_attrs=fe_attrs
 
-        
+    def setup(self):
         self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.ndjson"
         
         self._iter=self.get_json_obj()

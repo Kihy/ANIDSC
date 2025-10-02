@@ -9,17 +9,17 @@ from ..save_mixin.basemixin import BaseSaveMixin
 
 
 def load_components(manifest):
-    components = {}
-    for type, meta in manifest.items():
-        module = importlib.import_module(f"ANIDSC.{type}")
-        component_cls = getattr(module, meta["class"])
-        if meta.get("file", False):
-            file_path = meta["file"]
+    components = []
+    for comp in manifest:
+        
+        module = importlib.import_module(f"ANIDSC.{comp['type']}")
+        component_cls = getattr(module, comp["class"])
+        if comp.get("file", False):
+            file_path = comp["file"]
             comp = component_cls.load(file_path)
-
         else:
-            comp = component_cls(**meta.get("attrs", {}))
-        components[type] = comp
+            comp = component_cls(**comp.get("attrs", {}))
+        components.append( comp)
     return components
 
 
@@ -30,7 +30,7 @@ class YamlSaveMixin(BaseSaveMixin):
 
     def save(self):
         # save individual components
-        for key, component in self.components.items():
+        for component in self.components:
             component.save()
 
         # save manifest

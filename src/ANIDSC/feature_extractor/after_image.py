@@ -15,7 +15,7 @@ from ..utils.helper import compare_dicts
 
 class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
     def __init__(self):
-
+        super().__init__()
         self.decay_factors = [5, 3, 1, 0.1, 0.01]
         self.clean_up_round = 5000
 
@@ -23,6 +23,9 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
             decay_factors=self.decay_factors,
             limit=float("inf"),
         )
+
+    def setup(self):
+        pass 
 
     def peek(self, traffic_vectors: List[Dict[str, Any]]):
         """fake update. obtains a copy of existing database,
@@ -183,7 +186,8 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
 
         return np.expand_dims(feature, axis=0)
 
-    def get_headers(self):
+    @property
+    def headers(self):
         """returns the feature names
 
         Returns:

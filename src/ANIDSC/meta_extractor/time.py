@@ -15,8 +15,8 @@ class TimeMetaExtractor(PickleSaveMixin, BaseMetaExtractor):
         return {"timestamp": float(packet[0].time)}
 
     
-
-    def get_headers(self):
+    @property
+    def headers(self):
         """return the feature names of traffic vectors
 
         Returns:

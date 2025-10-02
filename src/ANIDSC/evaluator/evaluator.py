@@ -12,13 +12,23 @@ from pathlib import Path
 import time
 from torch.utils.tensorboard import SummaryWriter
 
-from ..templates import METRICS
+
+METRICS = [
+    "detection_rate",
+    "lower_quartile_score",
+    "upper_quartile_score",
+    "soft_min_score",
+    "soft_max_score",
+    "median_score",
+    "median_threshold",
+    "pos_count",
+    "batch_size",
+]
 
 
 class BaseEvaluator(NullSaveMixin, PipelineComponent):
     def __init__(
         self,
-        metric_list: List[str] = METRICS,
         log_to_tensorboard: bool = True,
         graph_period=False,
     ):
@@ -30,28 +40,25 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
             draw_graph_rep_interval (bool, optional): whether to draw the graph representation. only available if pipeline contains graph representation. Defaults to False.
         """
         super().__init__()
-        self.metrics = [getattr(od_metrics, m) for m in metric_list]
-        self.metric_list = metric_list
+        self.metrics = [getattr(od_metrics, m) for m in METRICS]
+        self.metric_list = METRICS
         self.log_to_tensorboard = log_to_tensorboard
         self.graph_period = graph_period
         self.last_anomaly = 0
-        self.comparable = False
-        self.save_attr.extend(["metric_list", "log_to_tensorboard", "graph_period"])
+        
 
     def setup(self):
         super().setup()
 
-        dataset_name = self.request_attr("data_source", "dataset_name")
-        fe_name = self.request_attr("data_source", "fe_name")
-        file_name = self.request_attr("data_source", "file_name")
-        prefix = self.request_attr("", "prefix", [])
-
-        prefix = "/".join(prefix)
+        dataset_name = self.request_attr("dataset_name")
+        fe_name = self.request_attr("fe_name")
+        file_name = self.request_attr("file_name")
+        
 
         pipeline_name = str(self.parent_pipeline)
 
         self.file_template = (
-            f"{dataset_name}/{fe_name}/{{}}/{file_name}/{prefix}/{pipeline_name}"
+            f"{dataset_name}/{fe_name}/{{}}/{file_name}/{pipeline_name}"
         )
 
         if self.graph_period:
@@ -76,8 +83,7 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
 
         self.prev_timestamp = time.time()
 
-    def on_load(self):
-        self.setup()
+
 
     def save(self):
 

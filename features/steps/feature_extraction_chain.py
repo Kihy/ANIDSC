@@ -26,6 +26,7 @@ def step_given_pipeline(context, state, pipeline_name):
     if state=="new":
         
         context.pipeline=Pipeline.load(get_template(pipeline_name, **context.custom_vars))
+        context.pipeline.setup()
         
         
         context.config.userdata['benign_path']=context.pipeline.save_path
@@ -34,11 +35,12 @@ def step_given_pipeline(context, state, pipeline_name):
         
         with open(context.config.userdata['benign_path']) as f:
             manifest = yaml.safe_load(f)
-            
-        manifest["attrs"]["manifest"]["data_source"]["attrs"]["file_name"]=context.custom_vars["file_name"]
+        
+        # datasource is always 0
+        manifest["attrs"]["manifest"][0]["attrs"]["file_name"]=context.custom_vars["file_name"]
         
         context.pipeline=Pipeline.load(manifest)
-        context.pipeline.on_load()
+        context.pipeline.setup()
 
 
 
