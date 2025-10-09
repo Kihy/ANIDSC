@@ -70,6 +70,10 @@ class BaseTorchModel(torch.nn.Module):
 
         X = self.preprocess(X)
         
+        # Kitsune creates optimizer later
+        if self.optimizer is None:
+            return 
+        
         self.optimizer.zero_grad()
         
         _, loss = self.forward(X, inference=False)

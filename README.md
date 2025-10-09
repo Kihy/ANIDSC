@@ -33,4 +33,8 @@ There is a feature folder for scenario testing that can be used as example. For 
 `behave features/afterimage.feature` 
 
 
+At a high level, you need to create a file iterator which produces the file names along with the state of the file (new if from scratch, loaded if it should be loaded from last file). Example of iterator can be found in features/steps/basic.py
 
+Once you have the iterator, you can call the run_script() function in utils/run_script.py:
+`run_file(file_iterator, pipeline_name, pipeline_vars)`
+The predefined pipelines are in templates.py file, and pipeline_vars are the needed variables to the pipeline.

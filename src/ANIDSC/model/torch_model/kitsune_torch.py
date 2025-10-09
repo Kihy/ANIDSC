@@ -272,6 +272,8 @@ class Kitsune(BaseTorchModel):
         , self.grace_period)
 
         self.mse = RMSELoss(reduction="none")
+        
+       
 
     def _build_tails(
         self, compression_rate: float, dropout_rate: float

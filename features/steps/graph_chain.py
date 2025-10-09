@@ -8,4 +8,4 @@ import yaml
 
 @given("Node Embedder: {node_embed}")
 def step_given_feature_extractor(context, node_embed):
-    context.custom_vars["node_embed"]=node_embed 
+    context.pipeline_vars["node_embed"]=node_embed 

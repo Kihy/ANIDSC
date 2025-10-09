@@ -1,8 +1,8 @@
 import sys
 from typing import Any, Dict, List
 
-import yaml
 
+import yaml
 
 
 
@@ -60,29 +60,28 @@ def make_feature_buffer(buffer_type, folder_name, buffer_size) -> dict:
     return {
         "type": "feature_buffer",
         "class": buffer_type,
-        "attrs": {
-            "folder_name": folder_name,
-            "buffer_size": buffer_size
-        },
+        "attrs": {"folder_name": folder_name, "buffer_size": buffer_size},
     }
 
 
 def make_scaler(**kwargs) -> dict:
-    return {"type":"scaler", "class": "LivePercentile"}
+    return {"type": "scaler", "class": "LivePercentile"}
 
 
 def make_model(model_name: str, **kwargs) -> dict:
 
     if model_name == "BoxPlot":
-        return {"type":"model", "class": model_name}
+        return {"type": "model", "class": model_name}
     else:
-        return {"type":"model","class": "BaseOnlineODModel", "attrs": {"model_name": model_name}}
-        
+        return {
+            "type": "model",
+            "class": "BaseOnlineODModel",
+            "attrs": {"model_name": model_name},
+        }
 
 
 def make_evaluator(eval_type, **kwargs) -> dict:
-    return {"type":"evaluator", "class": eval_type}
-    
+    return {"type": "evaluator", "class": eval_type}
 
 
 def make_splitter(manifest, split_keys, name, **kwargs):
@@ -99,19 +98,19 @@ def make_splitter(manifest, split_keys, name, **kwargs):
 
 
 def make_node_embedder(embedder, **kwargs):
-    return {"type":"node_encoder",
-            "class": "BaseNodeEmbedder",
-            "attrs":{"model_name":embedder}
-        }
-    
+    return {
+        "type": "node_encoder",
+        "class": "BaseNodeEmbedder",
+        "attrs": {"model_name": embedder},
+    }
 
 
 def make_graph_rep(rep_class="HomoGraphRepresentation", **kwargs):
-    return {"type":"graph_rep","class": f"{rep_class}"}
+    return {"type": "graph_rep", "class": f"{rep_class}"}
 
 
 def make_pipeline(manifest) -> Dict[str, Any]:
-    return {"type":"pipeline","class": "Pipeline", "attrs": {"manifest": manifest}}
+    return {"type": "pipeline", "class": "Pipeline", "attrs": {"manifest": manifest}}
 
 
 def dict_to_yaml(pipeline_dict):
@@ -130,17 +129,25 @@ def get_template(template_name, **kwargs):
 
         components.append(make_packet_reader(**kwargs))
         components.append(make_meta_extractor(**kwargs))
-        components.append(make_feature_buffer("DictFeatureBuffer", "metadata", buffer_size=1))
+        components.append(
+            make_feature_buffer("DictFeatureBuffer", "metadata", buffer_size=1)
+        )
         components.append(make_feature_extractor(**kwargs))
-        components.append(make_feature_buffer("NumpyFeatureBuffer", "features", buffer_size=1024))
+        components.append(
+            make_feature_buffer("NumpyFeatureBuffer", "features", buffer_size=1024)
+        )
         pipeline = make_pipeline(components)
-        
-    elif template_name=="graph_feature_extraction":
+
+    elif template_name == "graph_feature_extraction":
         components.append(make_packet_reader(**kwargs))
         components.append(make_meta_extractor(**kwargs))
-        components.append(make_feature_buffer("DictFeatureBuffer", "metadata", buffer_size=1024))
+        components.append(
+            make_feature_buffer("DictFeatureBuffer", "metadata", buffer_size=1024)
+        )
         components.append(make_feature_extractor(**kwargs))
-        components.append(make_feature_buffer("JsonFeatureBuffer", "features", buffer_size=1))
+        components.append(
+            make_feature_buffer("JsonFeatureBuffer", "features", buffer_size=1)
+        )
         pipeline = make_pipeline(components)
 
     elif template_name == "basic_detection":
@@ -167,20 +174,18 @@ def get_template(template_name, **kwargs):
         pipeline = make_pipeline(components)
 
     elif template_name == "homogeneous":
-        
-        components.append(make_data_reader(reader_type="JsonGraphReader", **kwargs)) 
+
+        components.append(make_data_reader(reader_type="JsonGraphReader", **kwargs))
         components.append(
             make_graph_rep(rep_class="PlainGraphRepresentation", **kwargs)
         )
-        
-        components.append(
-            make_node_embedder(embedder=kwargs["node_embed"], **kwargs)
-        )
-        
+
+        components.append(make_node_embedder(embedder=kwargs["node_embed"], **kwargs))
+
         # add scaler
         if kwargs["model_name"] != "MedianDetector":
             components.append(make_scaler(**kwargs))
-        
+
         components.append(make_model(**kwargs))
         components.append(make_evaluator("CSVResultWriter"))
         components.append(make_evaluator("GraphResultWriter"))
