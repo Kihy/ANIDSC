@@ -1,6 +1,6 @@
 from collections import deque
 
-from ANIDSC.feature_buffer.tabular import TabularFeatureBuffer
+from ANIDSC.feature_buffer.tabular import NumpyFeatureBuffer
 
 from ..utils.helper import compare_dicts
 
@@ -40,7 +40,7 @@ class FrequencyExtractor(PickleSaveMixin, BaseFeatureExtractor):
         
         self.state=FrequencyState(self.time_window)     # collection of timestamps
         
-        self.feature_buffer = TabularFeatureBuffer(buffer_size=256)
+        self.feature_buffer = NumpyFeatureBuffer(buffer_size=256)
         self.feature_buffer.attach_to(self)
     
     def peek(self, traffic_vectors):

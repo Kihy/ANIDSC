@@ -5,7 +5,7 @@ Feature: Detection with homogeneous models
     # Scenario Outline: Feature extraction
     #     Given Dataset: test_data and File: <file>
     #     And Meta Extractor: ProtocolMetaExtractor and Feature Extractor: NetworkAccessGraphExtractor
-    #     And a <state> feature_extraction pipeline
+    #     And a <state> graph_feature_extraction pipeline
     #     When the pipeline starts
     #     Then the pipeline should not fail
     #     And the components are saved
@@ -21,6 +21,7 @@ Feature: Detection with homogeneous models
         Given Dataset: test_data and File: <file>
         And Feature Extracted by ProtocolMetaExtractor and NetworkAccessGraphExtractor
         And Model: <model>
+        And Node Embedder: PassThroughEmbedder
         And a <state> homogeneous pipeline
         When the pipeline starts
         Then the pipeline should not fail

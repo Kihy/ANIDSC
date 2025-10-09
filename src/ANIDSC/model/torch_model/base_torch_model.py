@@ -5,7 +5,7 @@ from torch_geometric.data import Data
 
 class BaseTorchModel(torch.nn.Module):
     def __init__(self, input_dims, device="cuda", **kwargs):
-        torch.nn.Module.__init__(self)
+        super().__init__()
         self.preprocessors = [self.to_tensor, self.to_device]
         self.device = device
         self.optimizer = None
@@ -43,8 +43,7 @@ class BaseTorchModel(torch.nn.Module):
         return X.to(self.device)
 
     def to_tensor(self, X):
-        if isinstance(X, Data):
-            return X.x.float()
+        
         if not isinstance(X, torch.Tensor):
             X=torch.tensor(X)
         return X.float()
@@ -71,8 +70,7 @@ class BaseTorchModel(torch.nn.Module):
 
         X = self.preprocess(X)
         
-        if self.optimizer:
-            self.optimizer.zero_grad()
+        self.optimizer.zero_grad()
         
         _, loss = self.forward(X, inference=False)
 

@@ -1,6 +1,6 @@
 from socket import getservbyport
 
-from ..feature_buffer.tabular import TabularFeatureBuffer
+from ..feature_buffer.tabular import NumpyFeatureBuffer
 from ..component.feature_extractor import BaseMetaExtractor
 from ..save_mixin.pickle import PickleSaveMixin
 

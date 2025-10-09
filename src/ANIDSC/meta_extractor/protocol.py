@@ -1,6 +1,6 @@
 from socket import getservbyport
 
-from ..feature_buffer.tabular import TabularFeatureBuffer
+from ..feature_buffer.tabular import NumpyFeatureBuffer
 from ..component.feature_extractor import BaseMetaExtractor
 from ..save_mixin.pickle import PickleSaveMixin
 
@@ -15,6 +15,9 @@ class ProtocolMetaExtractor(PickleSaveMixin, BaseMetaExtractor):
         
     def setup(self):
         pass 
+    
+    def teardown(self):
+        pass
     
     def get_meta_vector(self, packet: Packet):
         """extracts the traffic vectors from packet

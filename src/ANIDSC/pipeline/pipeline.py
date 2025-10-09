@@ -27,7 +27,12 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         for i,comp in enumerate(self.components):
             comp.parent_pipeline = self
             comp.index=i 
-            comp.setup()      
+            comp.setup()
+            
+    def teardown(self):
+        for i,comp in enumerate(self.components):
+            comp.teardown()
+        
 
     def process(self, data=None):
         """sequentially process data over each component
@@ -57,6 +62,7 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         except StopIteration as e:
             print("Pipeline Finished")
         finally:
+            self.teardown()
             self.save()
 
     @property 
@@ -65,13 +71,13 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         
        
     def get_attr(self, index, attr, default=None):
-        for i in range(index, -1, -1):  # backward search
+        for i in range(index-1, -1, -1):  # backward search
             comp = self.components[i]
 
             if hasattr(comp, attr):
                 return getattr(comp, attr)
         
-        for i in range(index+1, len(self.components)):  # forwards search
+        for i in range(index, len(self.components)):  # forwards search
             comp = self.components[i]
 
             if hasattr(comp, attr):

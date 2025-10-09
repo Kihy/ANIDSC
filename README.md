@@ -29,6 +29,8 @@ and add code there.
 The ANIDSC package should already be installed, just need to import.
 
 # Running the code
-There is a feature folder for scenario testing that can be used as example
+There is a feature folder for scenario testing that can be used as example. For example,
+`behave features/afterimage.feature` 
+
 
 

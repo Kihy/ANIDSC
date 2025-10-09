@@ -20,8 +20,8 @@ class MedianDetector(PickleSaveMixin):
     
     def predict_step(self, X):
         return_score=[]
-        for data in X.x:
-            data=data.cpu().numpy()
+        for data in X:
+            data=data.cpu().detach().numpy()
             score=-float('inf')
             for x, dim in zip(data, self.model):
                 
@@ -39,8 +39,8 @@ class MedianDetector(PickleSaveMixin):
     def train_step(self, X):
         
             
-        for data in X.x:
-            data=data.cpu().numpy()
+        for data in X:
+            data=data.cpu().detach().numpy()
             
             for x, dim in zip(data, self.model):
                 dim.update(x)

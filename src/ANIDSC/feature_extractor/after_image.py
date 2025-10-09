@@ -1,4 +1,4 @@
-from ..feature_buffer.tabular import TabularFeatureBuffer
+from ..feature_buffer.tabular import NumpyFeatureBuffer
 import numpy as np
 from pprint import pformat
 import copy
@@ -10,7 +10,6 @@ from numpy.typing import NDArray
 from ..component.feature_extractor import BaseFeatureExtractor
 from ..save_mixin.pickle import PickleSaveMixin
 from ..utils.helper import compare_dicts
-
 
 
 class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
@@ -25,7 +24,10 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
         )
 
     def setup(self):
-        pass 
+        pass
+
+    def teardown(self):
+        pass
 
     def peek(self, traffic_vectors: List[Dict[str, Any]]):
         """fake update. obtains a copy of existing database,
@@ -123,7 +125,14 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
             vectors.append(self.update(tv, fake_db))
         return np.vstack(vectors)
 
-    def update(self, traffic_vector: Dict[str, Any], state=None):
+    def update(self, traffic_vector):
+        if isinstance(traffic_vector, list):
+            return np.vstack([self.update_single(i) for i in traffic_vector])
+
+        else:
+            return self.update_single(traffic_vector)
+
+    def update_single(self, traffic_vector: Dict[str, Any], state=None):
         """updates the internal state with traffic vector
 
         Args:
@@ -350,7 +359,6 @@ class AfterImageGraph(AfterImage):
                 headers.append(f"{name}_{time}_{stat}")
         return headers
 
-    
 
 def magnitude(x: float, y: float):
     """the magnitude of a set of incStats, pass var instead of mean to get radius

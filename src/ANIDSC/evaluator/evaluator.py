@@ -1,9 +1,13 @@
+from abc import abstractmethod
 import json
 import os
 from typing import Any, Dict, List
 
+from ..save_mixin.pickle import PickleSaveMixin
 import networkx as nx
 import numpy as np
+
+from ..component.feature_buffer import OutputWriter
 
 from ..save_mixin.null import NullSaveMixin
 from ..component.pipeline_component import PipelineComponent
@@ -45,7 +49,6 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         self.log_to_tensorboard = log_to_tensorboard
         self.graph_period = graph_period
         self.last_anomaly = 0
-        
 
     def setup(self):
         super().setup()
@@ -53,7 +56,6 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
         dataset_name = self.request_attr("dataset_name")
         fe_name = self.request_attr("fe_name")
         file_name = self.request_attr("file_name")
-        
 
         pipeline_name = str(self.parent_pipeline)
 
@@ -82,8 +84,6 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
             print("tensorboard logging to", log_dir)
 
         self.prev_timestamp = time.time()
-
-
 
     def save(self):
 
@@ -158,3 +158,105 @@ class BaseEvaluator(NullSaveMixin, PipelineComponent):
 
         json.dump(nx.cytoscape_data(G), self.graph_file)
         self.graph_file.write("\n")
+
+
+class ResultWriter(OutputWriter):
+    def setup(self):
+        # setup files
+        dataset_name = self.request_attr("dataset_name")
+        file_name = self.request_attr("file_name")  
+        fe_name = self.request_attr("fe_name")
+        pipeline_name=self.parent_pipeline.name
+        
+
+        self.feature_path = Path(
+            f"{dataset_name}/{fe_name}/{self.folder_name}/{file_name}/{pipeline_name}.{self.file_type}"
+        )
+        self.feature_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.save_file = open(self.feature_path, "a")
+
+    def teardown(self):
+        self.save_file.close()
+
+class CSVResultWriter(PickleSaveMixin, ResultWriter):
+    @property
+    def folder_name(self):
+        return "results"
+
+    @property
+    def file_type(self):
+        return "csv"
+
+    def setup(self):
+        super().setup()
+
+        self.metrics = [getattr(od_metrics, m) for m in METRICS]
+        if os.stat(self.feature_path).st_size == 0:
+            self.save_file.write(
+                ",".join(["process_time", "batch_num", "timestamp"] + METRICS) + "\n"
+            )
+
+    def process(self, data):
+        current_time = time.time()
+        duration = current_time - self.request_attr("start_time")
+
+        result_dict = {
+            "process_time": duration,
+            "batch_num": self.request_attr("batch_evaluated"),
+            "timestamp": self.request_attr("timestamp"),
+        }
+
+        for metric_name, metric in zip(METRICS, self.metrics):
+
+            result_dict[metric_name] = metric(data)
+
+        self.save_file.write(",".join(map(str, result_dict.values())) + "\n")
+
+        return result_dict
+
+
+class GraphResultWriter(PickleSaveMixin,ResultWriter):
+
+    @property
+    def folder_name(self):
+        return "graphs"
+
+    @property
+    def file_type(self):
+        return "ndjson"
+
+    def __init__(self, graph_period=1):
+        super().__init__()
+        self.graph_period = graph_period
+        self.last_timestamp = None
+
+    def process(self, data):
+        cur_time = self.request_attr("timestamp")
+
+        if self.last_timestamp is None:
+            self.last_timestamp = self.request_attr("timestamp")
+
+        if self.last_timestamp - cur_time > self.graph_period:
+            self.save_graph(data)
+
+            self.last_timestamp = cur_time
+            
+        return data 
+
+    def save_graph(self, data):
+        G = self.request_attr("networkx")
+
+        # get threshold
+        G.graph["threshold"] = data["threshold"]
+
+        # add anomaly score
+        if data["score"] is None:
+            nx.set_node_attributes(G, float("inf"), "node_as")
+        else:
+            # assign edge nodes
+            score_map = {i: float(v) for i, v in zip(G.nodes, data["score"])}
+            nx.set_node_attributes(G, score_map, "node_as")
+
+        json.dump(nx.cytoscape_data(G), self.save_file)
+        self.save_file.write("\n")

@@ -1,5 +1,5 @@
 from ANIDSC.feature_buffer.json import JsonFeatureBuffer
-from ANIDSC.feature_buffer.tabular import TabularFeatureBuffer
+from ANIDSC.feature_buffer.tabular import NumpyFeatureBuffer
 import numpy as np
 from networkx.readwrite import json_graph
 from ..save_mixin.pickle import PickleSaveMixin
@@ -30,8 +30,6 @@ class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
         self.time_stamp = None
         self.G = nx.DiGraph()
 
-        self.feature_buffer = JsonFeatureBuffer(buffer_size=256)
-        self.feature_buffer.attach_to(self)
 
     def peek(self, traffic_vectors):
         pass
@@ -42,11 +40,32 @@ class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
         self.G = nx.DiGraph()
         return data
 
-    def get_headers(self):
-        """No header for graphs"""
-        return ["size", "count"]
+    def setup(self):
+        pass 
+    
+    def teardown(self):
+        pass
 
+    @property
+    def headers(self):
+        return ["size", "count"] # header for nodes
+    
     def update(self, traffic_vector):
+        if isinstance(traffic_vector, list):
+            ret=[]
+            for i in traffic_vector:
+                result=self.update_single(i)
+                if result is not None:
+                    ret.append(result)
+            if len(ret)==0:
+                return None 
+            else:
+                return ret
+
+        else:
+            return self.update_single(traffic_vector)
+
+    def update_single(self, traffic_vector):
 
         time_stamp = traffic_vector["timestamp"]
         length = traffic_vector["packet_size"]

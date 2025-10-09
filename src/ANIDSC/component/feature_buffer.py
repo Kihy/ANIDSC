@@ -10,12 +10,7 @@ from typing import Dict, Any, List, Tuple, Union
 from numpy.typing import NDArray
 
 
-
-
-
-
-class BaseFeatureBuffer(PipelineComponent):
-    
+class OutputWriter(PipelineComponent):
     @property 
     @abstractmethod
     def file_type(self):
@@ -23,22 +18,10 @@ class BaseFeatureBuffer(PipelineComponent):
     
 
     @property
+    @abstractmethod
     def folder_name(self):
-        return self._folder_name
-    def __init__(
-        self,
-        folder_name,
-    ):
-        super().__init__()
-        self._folder_name=folder_name
-        self.save_file = None
-        self.data_list = []
+        pass
 
-
-    @property
-    def buffer_size(self):
-        return 1024
-    
     def setup(self):
         # setup files
         dataset_name = self.request_attr("dataset_name")
@@ -46,18 +29,39 @@ class BaseFeatureBuffer(PipelineComponent):
         fe_name = self.request_attr("fe_name")
         
 
-        feature_path = (
+        self.feature_path = Path(
             f"{dataset_name}/{fe_name}/{self.folder_name}/{file_name}.{self.file_type}"
         )
-        Path(feature_path).parent.mkdir(parents=True, exist_ok=True)
+        self.feature_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.save_file = open(feature_path, "a")
+        self.save_file = open(self.feature_path, "a")
 
-        # write header when file is empty
-        headers = self.request_attr("headers")
-        
-        if os.stat(feature_path).st_size == 0:
-            self.save_file.write(",".join(headers) + "\n")
+    def teardown(self):
+        self.save_file.close()
+
+
+class BaseFeatureBuffer(OutputWriter):
+    
+    @property
+    def folder_name(self):
+        return self._folder_name
+    
+    def __init__(
+        self,
+        folder_name,
+        buffer_size
+    ):
+        super().__init__()
+        self._folder_name=folder_name
+        self.save_file = None
+        self.data_list = []
+        self._buffer_size=buffer_size
+
+
+    @property
+    def buffer_size(self):
+        return self._buffer_size
+            
 
     def process(self, data: Tuple[List[Any], List[Any]]) -> Union[None, NDArray]:
         """process input data
@@ -76,6 +80,10 @@ class BaseFeatureBuffer(PipelineComponent):
 
         if len(self.data_list) >= self.buffer_size:
             return self.save_buffer()
+
+    def teardown(self):
+        self.save_buffer()
+        super().teardown()
 
     @abstractmethod
     def save_buffer(self):

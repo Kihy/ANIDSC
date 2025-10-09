@@ -55,13 +55,14 @@ def make_meta_extractor(meta_extractor: str, **kwargs) -> dict:
     }
 
 
-def make_feature_buffer(buffer_type, folder_name) -> dict:
+def make_feature_buffer(buffer_type, folder_name, buffer_size) -> dict:
 
     return {
         "type": "feature_buffer",
         "class": buffer_type,
         "attrs": {
             "folder_name": folder_name,
+            "buffer_size": buffer_size
         },
     }
 
@@ -79,8 +80,8 @@ def make_model(model_name: str, **kwargs) -> dict:
         
 
 
-def make_evaluator(graph_period, **kwargs) -> dict:
-    return {"type":"evaluator", "class": "BaseEvaluator", "attrs": {"graph_period": graph_period}}
+def make_evaluator(eval_type, **kwargs) -> dict:
+    return {"type":"evaluator", "class": eval_type}
     
 
 
@@ -97,17 +98,16 @@ def make_splitter(manifest, split_keys, name, **kwargs):
     }
 
 
-def make_node_encoder(node_encoder, n_features, **kwargs):
-    return {
-        "model.node_encoder": {
-            "class": node_encoder,
-            "attrs": {"n_features": n_features},
+def make_node_embedder(embedder, **kwargs):
+    return {"type":"node_encoder",
+            "class": "BaseNodeEmbedder",
+            "attrs":{"model_name":embedder}
         }
-    }
+    
 
 
 def make_graph_rep(rep_class="HomoGraphRepresentation", **kwargs):
-    return {"graph_rep": {"class": f"{rep_class}"}}
+    return {"type":"graph_rep","class": f"{rep_class}"}
 
 
 def make_pipeline(manifest) -> Dict[str, Any]:
@@ -125,21 +125,29 @@ def make_aggregator(**kwargs):
 
 
 def get_template(template_name, **kwargs):
+    components = []
     if template_name == "feature_extraction":
-        components = []
+
         components.append(make_packet_reader(**kwargs))
         components.append(make_meta_extractor(**kwargs))
-        components.append(make_feature_buffer("TabularFeatureBuffer", "metadata"))
+        components.append(make_feature_buffer("DictFeatureBuffer", "metadata", buffer_size=1))
         components.append(make_feature_extractor(**kwargs))
-        components.append(make_feature_buffer("TabularFeatureBuffer", "features"))
+        components.append(make_feature_buffer("NumpyFeatureBuffer", "features", buffer_size=1024))
+        pipeline = make_pipeline(components)
+        
+    elif template_name=="graph_feature_extraction":
+        components.append(make_packet_reader(**kwargs))
+        components.append(make_meta_extractor(**kwargs))
+        components.append(make_feature_buffer("DictFeatureBuffer", "metadata", buffer_size=1024))
+        components.append(make_feature_extractor(**kwargs))
+        components.append(make_feature_buffer("JsonFeatureBuffer", "features", buffer_size=1))
         pipeline = make_pipeline(components)
 
     elif template_name == "basic_detection":
-        components = []
         components.append(make_data_reader(**kwargs))
         components.append(make_scaler(**kwargs))
         components.append(make_model(**kwargs))
-        components.append(make_evaluator(graph_period=0, **kwargs))
+        components.append(make_evaluator("CSVResultWriter"))
         pipeline = make_pipeline(components)
 
     elif template_name == "lager":
@@ -147,7 +155,7 @@ def get_template(template_name, **kwargs):
 
         inner_components = make_scaler(**kwargs)
         inner_components.update(make_graph_rep(**kwargs))
-        inner_components.update(make_node_encoder(n_features=15, **kwargs))
+        inner_components.update(make_node_embedder(n_features=15, **kwargs))
         inner_components.update(make_model(**kwargs))
         inner_components.update(make_evaluator(graph_period=100, **kwargs))
         inner_components = make_pipeline(inner_components)
@@ -158,34 +166,25 @@ def get_template(template_name, **kwargs):
 
         pipeline = make_pipeline(components)
 
-    elif template_name == "graph_feature_detection":
-        components = make_data_reader(reader_type="JsonGraphReader", **kwargs)
-        components.update(
-            make_graph_rep(rep_class="AutoScaleGraphRepresentation", **kwargs)
-        )
-        components.update(make_node_encoder(n_features=2, **kwargs))
-        components.update(make_model(**kwargs))
-        components.update(make_evaluator(graph_period=1, **kwargs))
-        pipeline = make_pipeline(components)
-
     elif template_name == "homogeneous":
-        components = make_data_reader(reader_type="JsonGraphReader", **kwargs)
-        components.update(
+        
+        components.append(make_data_reader(reader_type="JsonGraphReader", **kwargs)) 
+        components.append(
             make_graph_rep(rep_class="PlainGraphRepresentation", **kwargs)
         )
-        components.update(make_model(**kwargs))
-        components.update(make_evaluator(graph_period=1, **kwargs))
-        pipeline = make_pipeline(components)
-    elif template_name == "homogeneous_scaled":
-        components = make_data_reader(reader_type="JsonGraphReader", **kwargs)
-        components.update(
-            make_graph_rep(rep_class="PlainGraphRepresentation", **kwargs)
+        
+        components.append(
+            make_node_embedder(embedder=kwargs["node_embed"], **kwargs)
         )
-        components.update(make_scaler())
-        components.update(make_model(**kwargs))
-        components.update(make_evaluator(graph_period=1, **kwargs))
+        
+        # add scaler
+        if kwargs["model_name"] != "MedianDetector":
+            components.append(make_scaler(**kwargs))
+        
+        components.append(make_model(**kwargs))
+        components.append(make_evaluator("CSVResultWriter"))
+        components.append(make_evaluator("GraphResultWriter"))
         pipeline = make_pipeline(components)
-
     else:
         raise ValueError("Unknown pipeline name")
     return dict_to_yaml(pipeline)

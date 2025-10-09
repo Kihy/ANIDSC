@@ -3,7 +3,7 @@ import json
 import random
 from typing import Tuple
 
-from ANIDSC.feature_buffer.tabular import TabularFeatureBuffer
+from ANIDSC.feature_buffer.tabular import NumpyFeatureBuffer
 import numpy as np
 from ..component.pipeline_component import PipelineComponent
 from ..save_mixin.torch import TorchSaveMixin

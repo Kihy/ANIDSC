@@ -9,7 +9,7 @@ import pickle
 
 from ..utils.helper import compare_dicts
 
-
+import collections
 
 
 class PipelineComponent(ABC):
@@ -28,10 +28,19 @@ class PipelineComponent(ABC):
         """                
         self.parent_pipeline = None  # Reference to parent pipeline
         
-        frame = inspect.currentframe().f_back  # the caller (child class __init__)
-        arg_info = inspect.getargvalues(frame)
-        # capture args (excluding "self")
-        self._params = {k: arg_info.locals[k] for k in arg_info.args if k != "self"}
+        frame = inspect.currentframe()
+        self._params = {}
+
+        # Walk up the call stack
+        while frame:
+            code = frame.f_code
+            if code.co_name == "__init__":
+                arg_info = inspect.getargvalues(frame)
+                args_dict = {k: arg_info.locals[k] for k in arg_info.args if k != "self"}
+                self._params.update(args_dict)  # derived overrides base if keys collide
+            frame = frame.f_back
+            
+        
       
     @property
     def config_attr(self):
@@ -48,6 +57,10 @@ class PipelineComponent(ABC):
     
     @abstractmethod
     def setup(self):
+        pass
+    
+    @abstractmethod
+    def teardown(self):
         pass
     
     
@@ -69,7 +82,7 @@ class PipelineComponent(ABC):
     
     @property
     def name(self):
-        return self.__class__.__name__
+        return self.__str__()
 
     def to_dict(self):
         comp_dict = {
@@ -90,13 +103,16 @@ class PipelineComponent(ABC):
         for k, v in self.__dict__.items():
             if k == "parent_pipeline":
                 continue
-
-            try:
-                pickle.dumps(v)  # test if pickleable
-                state[k] = v
-            except Exception:
-                print(f"{k}:{v} of {self.__class__.__name__} is not pickleable. If it is created during setup, its fine")
+            
+            if isinstance(v, io.IOBase):
+                print(f"{k}:{v} of {self.__class__.__name__} is file. If it is created during setup, its fine")
+                
                 continue
+            
+            if isinstance(v, collections.abc.Iterator):
+                print(f"{k}:{v} of {self.__class__.__name__} is an iterator. If it is created during setup, its fine")
+                continue 
+            state[k] = v
         return state
     
     def __setstate__(self, state):

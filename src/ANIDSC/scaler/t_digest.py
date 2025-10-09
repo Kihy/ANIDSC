@@ -1,5 +1,7 @@
 from typing import List
 
+import torch
+
 from ..save_mixin.pickle import PickleSaveMixin
 from ..component.normalizer import BaseOnlineNormalizer
 from pytdigest import TDigest
@@ -17,14 +19,17 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
 
         self.p = [0.16, 0.5, 0.84]
         self.count = 0
-        self.preprocessors = [self.to_numpy]
-
-    def to_numpy(self, X):
-        return np.array(X)
+        self.ndim=None
+    
 
     def setup(self):
-        self.ndim = self.request_attr("output_dim")
-        self.dims = [TDigest() for _ in range(self.ndim)]
+        if self.ndim is None:
+            self.ndim = self.request_attr("output_dim")
+            self.dims = [TDigest() for _ in range(self.ndim)]
+            
+        
+    def teardown(self):
+        pass 
 
     def update(self, X):
         """Adds another datum"""
@@ -35,10 +40,15 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         self.count += 1
 
     def process(self, X):
-
+        
+        # convert to numpy
+        if isinstance(X, torch.Tensor):
+            X=X.detach().cpu().numpy()
+        else:
+            X=np.array(X)
+        
         percentiles = self.quantiles()
 
-        self.current_batch = X
 
         if percentiles is None:
             percentiles = np.quantile(X, self.p, axis=0)
@@ -47,19 +57,23 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         scaled_features = np.nan_to_num(
             scaled_features, nan=0.0, posinf=0.0, neginf=0.0
         )
+        
+        #update afterwards
+        
+        self.update(X)
 
         return scaled_features
 
     def reset(self):
-        self.dims = [TDigest() for _ in range(self.ndim - self.skip)]
+        self.dims = [TDigest() for _ in range(self.ndim)]
         self.count = 0
 
     def quantiles(self):
         """Returns a list of tuples of the quantile and its location"""
 
-        percentiles = np.zeros((len(self.p), self.ndim - self.skip))
+        percentiles = np.zeros((len(self.p), self.ndim))
 
-        for d in range(self.ndim - self.skip):
+        for d in range(self.ndim ):
             percentiles[:, d] = self.dims[d].inverse_cdf(self.p)
 
         return percentiles

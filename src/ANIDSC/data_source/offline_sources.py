@@ -41,6 +41,10 @@ class PacketReader(PickleSaveMixin,PipelineSource):
     @property
     def batch_size(self):
         return 1
+    
+    @property
+    def output_dim(self):
+        return None
         
         
         
@@ -66,8 +70,10 @@ class CSVReader(PickleSaveMixin, PipelineSource):
         )
     
     def get_timestamp(self, data):
-        return data["timestamp"]
-    
+        if "timestamp" in data.columns:            
+            return data["timestamp"]
+        else:
+            return None
     
     @property
     def batch_size(self):
@@ -111,3 +117,7 @@ class JsonGraphReader(PickleSaveMixin, PipelineSource):
     @property
     def batch_size(self):
         return 1
+    
+    @property
+    def output_dim(self):
+        return None

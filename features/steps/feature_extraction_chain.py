@@ -38,6 +38,7 @@ def step_given_pipeline(context, state, pipeline_name):
         
         # datasource is always 0
         manifest["attrs"]["manifest"][0]["attrs"]["file_name"]=context.custom_vars["file_name"]
+        manifest["attrs"]["manifest"][0]["file"]=None
         
         context.pipeline=Pipeline.load(manifest)
         context.pipeline.setup()

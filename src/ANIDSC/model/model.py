@@ -40,26 +40,28 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
                 
         self.batch_trained = 0
         self.batch_evaluated = 0
+        self.model=None 
         
         
-        
-        
+    def teardown(self):
+        pass 
         
     def setup(self):
         
-        if "." in self.model_name:
-            sub_module, class_name = self.model_name.rsplit(".", 1)
-            module_path=f"ANIDSC.model.{sub_module}"
-        else:
-            module_path="ANIDSC.model"
-            class_name=self.model_name
-            
-        module = importlib.import_module(module_path)
-        self.model_cls=getattr(module, class_name)
+        if self.model is None:
+            if "." in self.model_name:
+                sub_module, class_name = self.model_name.rsplit(".", 1)
+                module_path=f"ANIDSC.model.{sub_module}"
+            else:
+                module_path="ANIDSC.model"
+                class_name=self.model_name
                 
-        ndim=self.request_attr("output_dim")
+            module = importlib.import_module(module_path)
+            self.model_cls=getattr(module, class_name)
+                    
+            ndim=self.request_attr("output_dim")
 
-        self.model=self.model_cls(ndim)
+            self.model=self.model_cls(ndim)
         
 
     def process(self, X):
@@ -76,13 +78,11 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
                 self.loss_queue.extend([x for x in score if not math.isinf(x)])
              
             self.model.train_step(X)
-            self.update_scaler()
             self.batch_trained+=1
         
         return {"threshold": threshold, "score": score}
 
-    def update_scaler(self):
-        self.request_action("scaler","update_current")
+    
     
     def get_threshold(self) -> float:
         """gets the current threshold value based on previous recorded loss value. By default it is 95th percentile
