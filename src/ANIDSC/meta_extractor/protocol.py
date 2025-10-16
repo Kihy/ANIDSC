@@ -138,13 +138,13 @@ class ProtocolMetaExtractor(PickleSaveMixin, BaseMetaExtractor):
             list: names of traffic vectors
         """
         return [
-            "ip_type",
-            "src_mac",
-            "dst_mac",
-            "scr_ip",
-            "src_protocol",
-            "dst_ip",
-            "dst_protocol",
-            "time_stamp",
+            "protocol",
+            "srcMAC",
+            "dstMAC",
+            "srcIP",
+            "srcport",
+            "dstIP",
+            "dstport",
+            "timestamp",
             "packet_size",
         ]

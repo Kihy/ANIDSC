@@ -29,7 +29,7 @@ Feature: Detection with homogeneous models
         And Data Source: JsonGraphReader        
         And Model: <model>
         And Node Embedder: <node_embed>
-        And a homogeneous pipeline
+        And a concept_drift pipeline
         When the pipeline starts
         Then the pipeline should not fail
         And the components are saved

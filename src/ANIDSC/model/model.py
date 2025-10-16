@@ -66,6 +66,9 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
 
     def process(self, X):
         threshold=self.get_threshold()
+        
+        
+        
         # calculate score
         score = self.model.predict_step(X)
 

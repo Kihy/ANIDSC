@@ -13,6 +13,9 @@ from torch_geometric.utils import from_networkx
 import networkx as nx
 from scipy.stats import ks_2samp
 
+from ..save_mixin.pickle import PickleSaveMixin
+
+
 
 class Concept:
     """
@@ -310,7 +313,7 @@ def standardizer(attr, concepts):
         reshaped = True
         attr_array = attr_array.reshape(1, -1)
 
-    percentiles = np.percentile(concepts_array, [15, 50, 85], axis=0)
+    percentiles = np.percentile(concepts_array, [16, 50, 84], axis=0)
 
     # Avoid division by zero
     denominator = percentiles[2] - percentiles[0]
@@ -560,10 +563,10 @@ class ConceptStore:
         )
 
 
-class AutoScaleGraphRepresentation(TorchSaveMixin, PipelineComponent, torch.nn.Module):
+class AutoScaleGraphRepresentation(PickleSaveMixin, PipelineComponent):
     def __init__(
         self,
-        device: str = "cuda",
+        
         **kwargs,
     ):
         """Basic graph representation of network
@@ -572,48 +575,43 @@ class AutoScaleGraphRepresentation(TorchSaveMixin, PipelineComponent, torch.nn.M
             device (str, optional): name of device. Defaults to "cuda".
             preprocessors (List[str], optional): list of preprocessors. Defaults to [].
         """
-        torch.nn.Module.__init__(self)
-        PipelineComponent.__init__(self, component_type="graph_rep", **kwargs)
-        self.device = device
-        self.preprocessors.extend(
-            ["concept_drift_scaler", "to_pytorch_geometric_data", "to_device"]
-        )
-        self.concept_store = ConceptStore(60, 300, ks_test_multivariate, standardizer)
-        self.custom_params = ["graph", "concept_store"]
-        self.n_features=2
         
-    def preprocess(self, X):
-        if len(self.preprocessors) > 0:
-            for p in self.preprocessors:
-                X = getattr(self, p)(X)
-                if X is None:
-                    return None
-        return X
+        super().__init__()
 
-    def concept_drift_scaler(self, X):
+
+        self.concept_store = ConceptStore(60, 300, ks_test_multivariate, standardizer)
+
+    def teardown(self):
+        pass
+    
+    @property
+    def output_dim(self):
+        return 2
+    
+    @property 
+    def networkx(self):
+        return self.graph
+        
+
+    def setup(self):
+        super().setup()
+
+    def process(self, X) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """updates data with x and output graph representation after update
+
+        Args:
+            x (_type_): input data features
+
+        Returns:
+            Tuple[torch.Tensor,torch.Tensor,torch.Tensor]: tuple of node features, edge indices, edge features
+        """
+
         X = json_graph.node_link_graph(X)
 
         self.concept_store.update(X)
 
-        
         self.graph=X
-        return X
-        # # remove empty nodes since they are not ready
-        # to_remove = [n for n, attrs in X.items() if attrs["concept_idx"] is None]
-        # to_update = {n: attrs for n, attrs in scaled_attr.items() if attrs is not None}
-        # X.remove_nodes_from(to_remove)
-
-        # if len(to_update) > 0:
-        #     nx.set_node_attributes(X, to_update)
-            
-        #     return X
-        # else:
-        #     return None
-
-    def to_device(self, X):
-        return X.to(self.device)
-
-    def to_pytorch_geometric_data(self, X):
+        
         # remove unscaled nodes for model
         filtered_graph=X.copy()
         
@@ -632,23 +630,6 @@ class AutoScaleGraphRepresentation(TorchSaveMixin, PipelineComponent, torch.nn.M
         data.concept_idx = nx.get_node_attributes(filtered_graph,"concept_idx")
         data.time_stamp = X.graph["time_stamp"]
 
-        return data
-
-    def get_networkx(self):
-        return self.graph
-
-    def setup(self):
-        super().setup()
-
-    def process(self, x) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """updates data with x and output graph representation after update
-
-        Args:
-            x (_type_): input data features
-
-        Returns:
-            Tuple[torch.Tensor,torch.Tensor,torch.Tensor]: tuple of node features, edge indices, edge features
-        """
-
-        return x
+        return data.to("cuda")
+        
 

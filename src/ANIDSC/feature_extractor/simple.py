@@ -19,6 +19,7 @@ from scapy.all import (
     rdpcap,
 )
 import networkx as nx
+import pandas as pd
 
 
 class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
@@ -51,10 +52,10 @@ class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
         return ["size", "count"] # header for nodes
     
     def update(self, traffic_vector):
-        if isinstance(traffic_vector, list):
+        if isinstance(traffic_vector, pd.DataFrame):
             ret=[]
-            for i in traffic_vector:
-                result=self.update_single(i)
+            for row in traffic_vector.itertuples(index=False):
+                result=self.update_single(row)
                 if result is not None:
                     ret.append(result)
             if len(ret)==0:
@@ -67,10 +68,10 @@ class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
 
     def update_single(self, traffic_vector):
 
-        time_stamp = traffic_vector["timestamp"]
-        length = traffic_vector["packet_size"]
-        src_mac = traffic_vector["srcMAC"]
-        dst_mac = traffic_vector["dstMAC"]
+        time_stamp = traffic_vector.timestamp
+        length = traffic_vector.packet_size
+        src_mac = traffic_vector.srcMAC
+        dst_mac = traffic_vector.dstMAC
 
         if self.time_stamp is None:
             self.time_stamp = time_stamp

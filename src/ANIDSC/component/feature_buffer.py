@@ -8,6 +8,8 @@ from .pipeline_component import PipelineComponent
 
 from typing import Dict, Any, List, Tuple, Union
 from numpy.typing import NDArray
+import fsspec
+import subprocess
 
 
 class OutputWriter(PipelineComponent):
@@ -21,26 +23,85 @@ class OutputWriter(PipelineComponent):
     @abstractmethod
     def folder_name(self):
         pass
+    
+    
+    @property 
+    @abstractmethod
+    def output_path(self):
+        #original name of output file
+        pass
+    
+    @property
+    def feature_path(self):
+        return self.output_path
 
     def setup(self):
         # setup files
-        dataset_name = self.request_attr("dataset_name")
-        file_name = self.request_attr("file_name")  
-        fe_name = self.request_attr("fe_name")
+        self.dataset_name = self.request_attr("dataset_name")
+        self.file_name = self.request_attr("file_name")  
+        # use the name from the previous component
+        self.comp_name = self.request_attr("fe_name")
         
-
-        self.feature_path = Path(
-            f"{dataset_name}/{fe_name}/{self.folder_name}/{file_name}.{self.file_type}"
-        )
         self.feature_path.parent.mkdir(parents=True, exist_ok=True)
 
-        self.save_file = open(self.feature_path, "a")
+        self.save_file = open(self.feature_path, "w")
 
     def teardown(self):
         self.save_file.close()
+        
+
+class CompressedOutputWriter(PipelineComponent):
+    @property 
+    @abstractmethod
+    def file_type(self):
+        pass
+    
+
+    @property
+    @abstractmethod
+    def folder_name(self):
+        pass
+    
+    
+    @property 
+    @abstractmethod
+    def output_path(self):
+        #original name of output file
+        pass
+    
+    @property
+    def feature_path(self):
+        # real name
+        return self.output_path.with_name(self.output_path.name + ".zst")
+
+    def setup(self):
+        # setup files
+        self.dataset_name = self.request_attr("dataset_name")
+        self.file_name = self.request_attr("file_name")  
+        # use the name from the previous component
+        self.comp_name = self.request_attr("fe_name")
+        
+        self.feature_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.save_file = fsspec.open(self.feature_path, "wt", compression="zstd").open()
+
+    def teardown(self):
+        self.save_file.close()
+        
+        # check file is valid
+        subprocess.run(
+            ["zstd", "-t", str(self.feature_path)],
+            check=True,
+            capture_output=True
+        )
+        
+    
+        
+        
+            
 
 
-class BaseFeatureBuffer(OutputWriter):
+class BaseFeatureBuffer(CompressedOutputWriter):
     
     @property
     def folder_name(self):
@@ -57,11 +118,25 @@ class BaseFeatureBuffer(OutputWriter):
         self.data_list = []
         self._buffer_size=buffer_size
 
+    @property
+    def output_path(self):
+        
+        
+        feature_path = Path(
+            f"{self.dataset_name}/{self.comp_name}/{self.folder_name}/{self.file_name}.{self.file_type}"
+        )
+        return feature_path
 
     @property
     def buffer_size(self):
         return self._buffer_size
             
+
+    def setup(self):
+        super().setup()
+        
+        
+        
 
     def process(self, data: Tuple[List[Any], List[Any]]) -> Union[None, NDArray]:
         """process input data

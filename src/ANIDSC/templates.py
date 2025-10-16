@@ -6,22 +6,12 @@ import yaml
 
 
 
-def make_packet_reader(dataset_name: str, file_name: str, **kwargs) -> dict:
-    return {
-        "type": "data_source",
-        "class": "PacketReader",
-        "attrs": {
-            "dataset_name": dataset_name,
-            "file_name": file_name,
-        },
-    }
-
 
 def make_data_reader(
+    reader_type,
     dataset_name: str,
     file_name: str,
-    feature_extractor: str,
-    reader_type="CSVReader",
+    fe_name: str = "",
     **kwargs,
 ) -> dict:
     return {
@@ -30,7 +20,7 @@ def make_data_reader(
         "attrs": {
             "dataset_name": dataset_name,
             "file_name": file_name,
-            "fe_name": feature_extractor,
+            "fe_name": fe_name,
         },
     }
 
@@ -125,30 +115,30 @@ def make_aggregator(**kwargs):
 
 def get_template(template_name, **kwargs):
     components = []
-    if template_name == "feature_extraction":
+    if template_name == "meta_extraction":
 
-        components.append(make_packet_reader(**kwargs))
+        components.append(make_data_reader(**kwargs))
         components.append(make_meta_extractor(**kwargs))
         components.append(
-            make_feature_buffer("DictFeatureBuffer", "metadata", buffer_size=1)
-        )
-        components.append(make_feature_extractor(**kwargs))
-        components.append(
-            make_feature_buffer("NumpyFeatureBuffer", "features", buffer_size=1024)
+            make_feature_buffer("DictFeatureBuffer", "features", buffer_size=1)
         )
         pipeline = make_pipeline(components)
-
-    elif template_name == "graph_feature_extraction":
-        components.append(make_packet_reader(**kwargs))
-        components.append(make_meta_extractor(**kwargs))
-        components.append(
-            make_feature_buffer("DictFeatureBuffer", "metadata", buffer_size=1024)
-        )
+        
+    elif template_name == "feature_extraction":
+        components.append(make_data_reader(**kwargs))
         components.append(make_feature_extractor(**kwargs))
-        components.append(
+        
+        if "Graph" in kwargs["feature_extractor"]:
+            components.append(
             make_feature_buffer("JsonFeatureBuffer", "features", buffer_size=1)
         )
+        else:
+            components.append(
+                make_feature_buffer("NumpyFeatureBuffer", "features", buffer_size=1024)
+            )
         pipeline = make_pipeline(components)
+
+    
 
     elif template_name == "basic_detection":
         components.append(make_data_reader(**kwargs))
@@ -175,9 +165,9 @@ def get_template(template_name, **kwargs):
 
     elif template_name == "homogeneous":
 
-        components.append(make_data_reader(reader_type="JsonGraphReader", **kwargs))
+        components.append(make_data_reader(**kwargs))
         components.append(
-            make_graph_rep(rep_class="PlainGraphRepresentation", **kwargs)
+            make_graph_rep(rep_class="FilterGraphRepresentation", **kwargs)
         )
 
         components.append(make_node_embedder(embedder=kwargs["node_embed"], **kwargs))
@@ -187,8 +177,8 @@ def get_template(template_name, **kwargs):
             components.append(make_scaler(**kwargs))
 
         components.append(make_model(**kwargs))
-        components.append(make_evaluator("CSVResultWriter"))
-        components.append(make_evaluator("GraphResultWriter"))
+        components.append(make_evaluator("CSVResultWriter", **kwargs))
+        components.append(make_evaluator("GraphResultWriter", **kwargs))
         pipeline = make_pipeline(components)
     else:
         raise ValueError("Unknown pipeline name")

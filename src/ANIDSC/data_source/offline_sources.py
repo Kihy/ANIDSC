@@ -1,6 +1,8 @@
 import json
 import os
 from typing import Any, Dict
+
+import fsspec
 from ..save_mixin.pickle import PickleSaveMixin
 import numpy as np
 from scapy.all import PcapReader
@@ -10,7 +12,7 @@ import pandas as pd
 
 
 class PacketReader(PickleSaveMixin,PipelineSource):
-    def __init__(self, **kwargs):
+    def __init__(self, fe_name,**kwargs):
         """reads data from pcap file
 
         Args:
@@ -64,9 +66,12 @@ class CSVReader(PickleSaveMixin, PipelineSource):
     
     def setup(self):
         
-        self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.csv"
+        self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.csv.zst"
+        
+        self._file = fsspec.open(self.path, "rt", compression="zstd").open()
+
         self._iter = pd.read_csv(
-            self.path, chunksize=self.batch_size, nrows=self.max_records, header=0
+            self._file, chunksize=self.batch_size, nrows=self.max_records, header=0
         )
     
     def get_timestamp(self, data):
@@ -83,6 +88,8 @@ class CSVReader(PickleSaveMixin, PipelineSource):
     def output_dim(self):
         return len(self.iter._engine.names)
     
+    def teardown(self):
+        self._file.close()
 
 class JsonGraphReader(PickleSaveMixin, PipelineSource):
     def __init__(self, fe_name: str, **kwargs):
@@ -101,19 +108,23 @@ class JsonGraphReader(PickleSaveMixin, PipelineSource):
         
 
     def setup(self):
-        self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.ndjson"
+        self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.ndjson.zst"
+        self._file = fsspec.open(self.path, "rt", compression="zstd").open()
         
         self._iter=self.get_json_obj()
         
     def get_json_obj(self):
-        with open(self.path, 'r') as f:
-            for line in f:
-                obj = json.loads(line)
-                yield obj
+        for line in self._file:
+            yield json.loads(line)
+
+    def teardown(self):
+        self._file.close()
+        
     
     def get_timestamp(self, data):
         return data["graph"]["time_stamp"]
-        
+    
+
     @property
     def batch_size(self):
         return 1

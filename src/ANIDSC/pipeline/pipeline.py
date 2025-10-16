@@ -1,7 +1,7 @@
 import importlib
 import time
 from typing import Dict
-
+import os 
 from tqdm import tqdm
 import yaml
 
@@ -53,8 +53,8 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
 
     def start(self):
 
-        pbar = tqdm()
-
+        pbar = tqdm(mininterval=float(os.getenv("TQDM_MININTERVAL", 60)), dynamic_ncols=False, ascii=True)
+        
         try:
             while True:
                 self.process()

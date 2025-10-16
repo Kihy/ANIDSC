@@ -10,7 +10,7 @@ from numpy.typing import NDArray
 from ..component.feature_extractor import BaseFeatureExtractor
 from ..save_mixin.pickle import PickleSaveMixin
 from ..utils.helper import compare_dicts
-
+import pandas as pd 
 
 class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
     def __init__(self):
@@ -46,73 +46,73 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
         for traffic_vector in traffic_vectors:
 
             # srcMAC-IP
-            fake_db.stat1d[f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}"] = (
+            fake_db.stat1d[f"{traffic_vector.srcMAC}_{traffic_vector.srcIP}"] = (
                 copy.deepcopy(
                     self.state.stat1d.get(
-                        f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}"
+                        f"{traffic_vector.srcMAC}_{traffic_vector.srcIP}"
                     )
                 )
             )
 
             # jitter
-            fake_db.stat1d[f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}"] = (
+            fake_db.stat1d[f"{traffic_vector.srcIP}_{traffic_vector.dstIP}"] = (
                 copy.deepcopy(
                     self.state.stat1d.get(
-                        f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}"
+                        f"{traffic_vector.srcIP}_{traffic_vector.dstIP}"
                     )
                 )
             )
 
             # channel
-            fake_db.stat1d[f"{traffic_vector['srcIP']}"] = copy.deepcopy(
-                self.state.stat1d.get(f"{traffic_vector['srcIP']}")
+            fake_db.stat1d[f"{traffic_vector.srcIP}"] = copy.deepcopy(
+                self.state.stat1d.get(f"{traffic_vector.srcIP}")
             )
-            fake_db.stat1d[f"{traffic_vector['dstIP']}"] = copy.deepcopy(
-                self.state.stat1d.get(f"{traffic_vector['dstIP']}")
+            fake_db.stat1d[f"{traffic_vector.dstIP}"] = copy.deepcopy(
+                self.state.stat1d.get(f"{traffic_vector.dstIP}")
             )
-            fake_db.stat2d[f"{traffic_vector['srcIP']}->{traffic_vector['dstIP']}"] = (
+            fake_db.stat2d[f"{traffic_vector.srcIP}->{traffic_vector.dstIP}"] = (
                 copy.deepcopy(
                     self.state.stat2d.get(
-                        f"{traffic_vector['srcIP']}->{traffic_vector['dstIP']}"
+                        f"{traffic_vector.srcIP}->{traffic_vector.dstIP}"
                     )
                 )
             )
 
             # socket
-            if traffic_vector["srcport"] == "ARP":
-                fake_db.stat1d[f"{traffic_vector['srcMAC']}"] = copy.deepcopy(
-                    self.state.stat1d.get(f"{traffic_vector['srcMAC']}")
+            if traffic_vector.srcport == "ARP":
+                fake_db.stat1d[f"{traffic_vector.srcMAC}"] = copy.deepcopy(
+                    self.state.stat1d.get(f"{traffic_vector.srcMAC}")
                 )
-                fake_db.stat1d[f"{traffic_vector['dstMAC']}"] = copy.deepcopy(
-                    self.state.stat1d.get(f"{traffic_vector['dstMAC']}")
+                fake_db.stat1d[f"{traffic_vector.dstMAC}"] = copy.deepcopy(
+                    self.state.stat1d.get(f"{traffic_vector.dstMAC}")
                 )
                 fake_db.stat2d[
-                    f"{traffic_vector['srcMAC']}->{traffic_vector['dstMAC']}"
+                    f"{traffic_vector.srcMAC}->{traffic_vector.dstMAC}"
                 ] = copy.deepcopy(
                     self.state.stat2d.get(
-                        f"{traffic_vector['srcMAC']}->{traffic_vector['dstMAC']}"
+                        f"{traffic_vector.srcMAC}->{traffic_vector.dstMAC}"
                     )
                 )
             else:
                 fake_db.stat1d[
-                    f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}"
+                    f"{traffic_vector.srcIP}_{traffic_vector.srcport}"
                 ] = copy.deepcopy(
                     self.state.stat1d.get(
-                        f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}"
+                        f"{traffic_vector.srcIP}_{traffic_vector.srcport}"
                     )
                 )
                 fake_db.stat1d[
-                    f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}"
+                    f"{traffic_vector.dstIP}_{traffic_vector.dstport}"
                 ] = copy.deepcopy(
                     self.state.stat1d.get(
-                        f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}"
+                        f"{traffic_vector.dstIP}_{traffic_vector.dstport}"
                     )
                 )
                 fake_db.stat2d[
-                    f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}->{traffic_vector['dstIP']}_{traffic_vector['dstport']}"
+                    f"{traffic_vector.srcIP}_{traffic_vector.srcport}->{traffic_vector.dstIP}_{traffic_vector.dstport}"
                 ] = copy.deepcopy(
                     self.state.stat2d.get(
-                        f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}->{traffic_vector['dstIP']}_{traffic_vector['dstport']}"
+                        f"{traffic_vector.srcIP}_{traffic_vector.srcport}->{traffic_vector.dstIP}_{traffic_vector.dstport}"
                     )
                 )
 
@@ -128,7 +128,8 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
     def update(self, traffic_vector):
         if isinstance(traffic_vector, list):
             return np.vstack([self.update_single(i) for i in traffic_vector])
-
+        elif isinstance(traffic_vector, pd.DataFrame):
+            return np.vstack([self.update_single(row) for row in traffic_vector.itertuples(index=False)])
         else:
             return self.update_single(traffic_vector)
 
@@ -146,52 +147,52 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
             state = self.state
 
         src_mac_ip = state.update_get_stats_1D(
-            f"{traffic_vector['srcMAC']}_{traffic_vector['srcIP']}",
-            traffic_vector["timestamp"],
-            traffic_vector["packet_size"],
+            f"{traffic_vector.srcMAC}_{traffic_vector.srcIP}",
+            traffic_vector.timestamp,
+            traffic_vector.packet_size,
         )
 
         # jitter between channels
         jitter = state.update_get_stats_1D(
-            f"{traffic_vector['srcIP']}_{traffic_vector['dstIP']}",
-            traffic_vector["timestamp"],
+            f"{traffic_vector.srcIP}_{traffic_vector.dstIP}",
+            traffic_vector.timestamp,
             None,
         )
 
         # channel: sent between this packet’s source and destination IPs
         channel = state.update_get_stats_2D(
-            f"{traffic_vector['srcIP']}",
-            f"{traffic_vector['dstIP']}",
-            traffic_vector["timestamp"],
-            traffic_vector["packet_size"],
+            f"{traffic_vector.srcIP}",
+            f"{traffic_vector.dstIP}",
+            traffic_vector.timestamp,
+            traffic_vector.packet_size,
         )
 
         # Socket: sent between this packet’s source and destination TCP/UDP Socket
         # arp has no IP
-        if traffic_vector["srcport"] == "ARP":
+        if traffic_vector.srcport == "ARP":
             socket = state.update_get_stats_2D(
-                f"{traffic_vector['srcMAC']}",
-                f"{traffic_vector['dstMAC']}",
-                traffic_vector["timestamp"],
-                traffic_vector["packet_size"],
+                f"{traffic_vector.srcMAC}",
+                f"{traffic_vector.dstMAC}",
+                traffic_vector.timestamp,
+                traffic_vector.packet_size,
             )
         else:
             socket = state.update_get_stats_2D(
-                f"{traffic_vector['srcIP']}_{traffic_vector['srcport']}",
-                f"{traffic_vector['dstIP']}_{traffic_vector['dstport']}",
-                traffic_vector["timestamp"],
-                traffic_vector["packet_size"],
+                f"{traffic_vector.srcIP}_{traffic_vector.srcport}",
+                f"{traffic_vector.dstIP}_{traffic_vector.dstport}",
+                traffic_vector.timestamp,
+                traffic_vector.packet_size,
             )
 
         state.num_updated += 1
 
-        state.last_timestamp = traffic_vector["timestamp"]
+        state.last_timestamp = traffic_vector.timestamp
 
         feature = np.hstack([src_mac_ip, jitter, channel, socket])
 
         # clean our records
         if state.num_updated % self.clean_up_round == 0:
-            state.clean_records(traffic_vector["timestamp"])
+            state.clean_records(traffic_vector.timestamp)
 
         return np.expand_dims(feature, axis=0)
 
@@ -273,12 +274,12 @@ class AfterImageGraph(AfterImage):
         Returns:
             array: the extracted features
         """
-        srcMAC = f"{traffic_vector['srcMAC']}"
-        dstMAC = f"{traffic_vector['dstMAC']}"
+        srcMAC = f"{traffic_vector.srcMAC}"
+        dstMAC = f"{traffic_vector.dstMAC}"
 
         # get protocol
         protocol = self.protocol_map.get(
-            traffic_vector["protocol"], len(self.protocol_map) - 1
+            traffic_vector.protocol, len(self.protocol_map) - 1
         )
 
         # udpate link stats
@@ -287,22 +288,22 @@ class AfterImageGraph(AfterImage):
 
         # update node stats
         src_stat = self.state.update_get_stats_1D(
-            srcID, traffic_vector["timestamp"], traffic_vector["packet_size"]
+            srcID, traffic_vector.timestamp, traffic_vector.packet_size
         )
         dst_stat = self.state.update_get_stats_1D(
-            dstID, traffic_vector["timestamp"], -traffic_vector["packet_size"]
+            dstID, traffic_vector.timestamp, -traffic_vector.packet_size
         )
 
         # get link stats
         link_stat = self.state.update_get_stats_2D(
             srcID,
             dstID,
-            traffic_vector["timestamp"],
-            traffic_vector["packet_size"],
+            traffic_vector.timestamp,
+            traffic_vector.packet_size,
             return_1d=False,
         )
         jitter_stat = self.state.update_get_stats_1D(
-            f"{srcID}-{dstID}", traffic_vector["timestamp"], None
+            f"{srcID}-{dstID}", traffic_vector.timestamp, None
         )
 
         self.state.num_updated += 1
@@ -315,11 +316,11 @@ class AfterImageGraph(AfterImage):
             [1, srcID, dstID, protocol, src_stat, dst_stat, jitter_stat, link_stat]
         )
 
-        self.state.last_timestamp = traffic_vector["timestamp"]
+        self.state.last_timestamp = traffic_vector.timestamp
 
         # clean our records
         if self.state.num_updated % self.clean_up_round == 0:
-            n, keys = self.state.clean_records(traffic_vector["timestamp"])
+            n, keys = self.state.clean_records(traffic_vector.timestamp)
             all_records = [feature]
             for key in keys:
                 src, dst = key.split("->")

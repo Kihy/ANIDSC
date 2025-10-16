@@ -4,6 +4,7 @@ import torch
 from collections import deque
 
 import torch_geometric
+import pandas as pd
 import networkx as nx
 
 
@@ -85,8 +86,11 @@ def compare_dicts(dict1, dict2, comp_class=None):
             compare_dicts(val1.to_dict(), val2.to_dict(), comp_class)
 
         elif isinstance(val1, torch.Tensor):
-            return torch.allclose(val1, val2)
-
+            is_same= torch.allclose(val1, val2)
+        
+        elif isinstance(val1, pd.Series):
+            is_same=val1.equals(val2)
+        
         elif val1 != val2:
             is_same = False
             break

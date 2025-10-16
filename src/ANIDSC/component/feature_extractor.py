@@ -67,11 +67,9 @@ class BaseMetaExtractor(PipelineComponent):
         return meta_vector
 
 
-    
-            
-
-
-
+    @property 
+    def fe_name(self):
+        return self.name 
 
 class BaseFeatureExtractor(PipelineComponent):
     def __init__(self,**kwargs):

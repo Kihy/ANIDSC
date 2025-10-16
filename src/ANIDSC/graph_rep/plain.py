@@ -38,13 +38,71 @@ class PlainGraphRepresentation(PickleSaveMixin, PipelineComponent):
         """
 
         X = json_graph.node_link_graph(X)
+        
+
+        
         self.graph=X
         
         data = from_networkx(X, group_node_attrs=["count","size"])
         data.x=data.x.float()
+        
+        
         
         data.label = [node for node in X.nodes]
         data.time_stamp = X.graph["time_stamp"]
 
         return data.to("cuda")
 
+
+
+
+class FilterGraphRepresentation(PickleSaveMixin, PipelineComponent):
+    def __init__(self):
+       
+
+        super().__init__()
+
+
+    @property
+    def output_dim(self):
+        return 2
+    
+    def teardown(self):
+        pass
+
+    @property 
+    def networkx(self):
+        return self.graph
+
+    def setup(self):
+        super().setup()
+
+    def process(self, X):
+        """converts json format to pytorch_geometric Data format.
+        """
+
+        X = json_graph.node_link_graph(X)
+        
+        
+        # remove nodes with all 0 values
+        to_remove = [
+            n for n, attrs in X.nodes(data=True)
+            if attrs.get("count", 0) == 0 and attrs.get("size", 0) == 0
+        ]
+        
+        X.remove_nodes_from(to_remove)
+        
+        if len(X.nodes)==0:
+            return None
+        
+        self.graph=X
+        
+        data = from_networkx(X, group_node_attrs=["count","size"])
+        data.x=data.x.float()
+        
+        
+        
+        data.label = [node for node in X.nodes]
+        data.time_stamp = X.graph["time_stamp"]
+
+        return data.to("cuda")

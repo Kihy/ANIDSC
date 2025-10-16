@@ -17,8 +17,6 @@ class JsonFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
     def save_buffer(self) -> str:
         """saves buffer"""
 
-   
-
         flat = [item for sublist in self.data_list for item in (sublist if isinstance(sublist, list) else [sublist])]
 
         for g in flat:

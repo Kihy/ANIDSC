@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from tqdm import tqdm
 
 
 from .pipeline_component import PipelineComponent

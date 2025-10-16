@@ -5,14 +5,8 @@ from shutil import rmtree
 
 
 import os
-import yaml
 
 
-@given("Feature Extracted by {meta_extractor} and {feature_extractor}")
-def step_given_feature_extractor(context, meta_extractor, feature_extractor):
-    context.pipeline_vars['feature_extractor']=feature_extractor
-    context.pipeline_vars['meta_extractor']=meta_extractor
-   
    
 
 @given("Model: {model_name}")
@@ -33,9 +27,9 @@ def step_then_components_are_saved(context):
         manifest_path=str(pipeline.save_path)
         
         loaded_pipeline=Pipeline.load(manifest_path)
-
-        loaded_pipeline.setup() # load the components
         
+        # do not call setup because attributes in setup are assumed to be created dynamically
+                
         assert loaded_pipeline==pipeline
     
 
@@ -59,12 +53,23 @@ def step_given_dataset_and_file(context):
     context.pipeline_vars = {"dataset_name": "test_data"}
 
 
-@given("Meta Extractor: {meta_extractor} and Feature Extractor: {feature_extractor}")
-def step_given_feature_extractor(context, meta_extractor, feature_extractor):
-
-    context.pipeline_vars["feature_extractor"] = feature_extractor
+@given("Meta Extractor: {meta_extractor}")
+def step_given_feature_extractor(context, meta_extractor):
     context.pipeline_vars["meta_extractor"] = meta_extractor
 
+
+@given("Data Source: {reader_type}")
+def step_given_feature_extractor(context, reader_type):
+    context.pipeline_vars["reader_type"] = reader_type
+    
+@given("FE Name: {fe_name}")
+def step_given_feature_extractor(context, fe_name):
+    context.pipeline_vars["fe_name"] = fe_name
+
+
+@given("Feature Extractor: {feature_extractor}")
+def step_given_feature_extractor(context, feature_extractor):
+    context.pipeline_vars["feature_extractor"] = feature_extractor
 
 @given("a {pipeline_name} pipeline")
 def step_given_pipeline(context, pipeline_name):

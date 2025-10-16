@@ -83,4 +83,4 @@ class DictFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
         return batched
     
     def __str__(self):
-        return f"NumpyFeatureBuffer({self.folder_name})"
+        return f"DictFeatureBuffer({self.folder_name})"

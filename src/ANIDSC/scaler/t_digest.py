@@ -47,6 +47,7 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         else:
             X=np.array(X)
         
+        
         percentiles = self.quantiles()
 
 
