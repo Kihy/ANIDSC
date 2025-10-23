@@ -5,8 +5,6 @@ from typing import Any, Dict, List
 import yaml
 
 
-
-
 def make_data_reader(
     reader_type,
     dataset_name: str,
@@ -95,8 +93,12 @@ def make_node_embedder(embedder, **kwargs):
     }
 
 
-def make_graph_rep(rep_class="HomoGraphRepresentation", **kwargs):
-    return {"type": "graph_rep", "class": f"{rep_class}"}
+def make_graph_rep(**kwargs):
+    return {
+        "type": "graph_rep",
+        "class": "GraphProcessor",
+        "attrs": {"rep_name": kwargs["graph_rep"]},
+    }
 
 
 def make_pipeline(manifest) -> Dict[str, Any]:
@@ -123,22 +125,20 @@ def get_template(template_name, **kwargs):
             make_feature_buffer("DictFeatureBuffer", "features", buffer_size=1)
         )
         pipeline = make_pipeline(components)
-        
+
     elif template_name == "feature_extraction":
         components.append(make_data_reader(**kwargs))
         components.append(make_feature_extractor(**kwargs))
-        
+
         if "Graph" in kwargs["feature_extractor"]:
             components.append(
-            make_feature_buffer("JsonFeatureBuffer", "features", buffer_size=1)
-        )
+                make_feature_buffer("JsonFeatureBuffer", "features", buffer_size=1)
+            )
         else:
             components.append(
                 make_feature_buffer("NumpyFeatureBuffer", "features", buffer_size=1024)
             )
         pipeline = make_pipeline(components)
-
-    
 
     elif template_name == "basic_detection":
         components.append(make_data_reader(**kwargs))
@@ -167,14 +167,18 @@ def get_template(template_name, **kwargs):
 
         components.append(make_data_reader(**kwargs))
         components.append(
-            make_graph_rep(rep_class="FilterGraphRepresentation", **kwargs)
+            make_graph_rep(
+               **kwargs
+            )
         )
 
         components.append(make_node_embedder(embedder=kwargs["node_embed"], **kwargs))
 
-        # add scaler
+        # add scaler, no need for median dectector
         if kwargs["model_name"] != "MedianDetector":
-            components.append(make_scaler(**kwargs))
+            # no need for CDD
+            if kwargs["graph_rep"]!= "CDD":
+                components.append(make_scaler(**kwargs))
 
         components.append(make_model(**kwargs))
         components.append(make_evaluator("CSVResultWriter", **kwargs))

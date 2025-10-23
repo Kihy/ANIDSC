@@ -46,10 +46,8 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
             X=X.detach().cpu().numpy()
         else:
             X=np.array(X)
-        
-        
+                
         percentiles = self.quantiles()
-
 
         if percentiles is None:
             percentiles = np.quantile(X, self.p, axis=0)

@@ -1,89 +1,30 @@
 
 from typing import Tuple
 
+from ..graph_rep.base import GraphRepresentation
+
 from ..save_mixin.pickle import PickleSaveMixin
 
 from ..component.pipeline_component import PipelineComponent
-from ..save_mixin.torch import TorchSaveMixin
-import torch
+
 from torch_geometric.utils import from_networkx
 from networkx.readwrite import json_graph
 
-
-
-
-class PlainGraphRepresentation(PickleSaveMixin, PipelineComponent):
-    def __init__(self):
-       
-
-        super().__init__()
-
-
-    @property
-    def output_dim(self):
-        return 2
+class Plain(GraphRepresentation):
     
-    def teardown(self):
-        pass
-
-    @property 
-    def networkx(self):
-        return self.graph
-
-    def setup(self):
-        super().setup()
-
-    def process(self, X):
-        """converts json format to pytorch_geometric Data format.
+    def transform(self, X):
+        """ Does nothing
         """
-
-        X = json_graph.node_link_graph(X)
-        
-
-        
-        self.graph=X
-        
-        data = from_networkx(X, group_node_attrs=["count","size"])
-        data.x=data.x.float()
-        
-        
-        
-        data.label = [node for node in X.nodes]
-        data.time_stamp = X.graph["time_stamp"]
-
-        return data.to("cuda")
+        return X 
 
 
 
-
-class FilterGraphRepresentation(PickleSaveMixin, PipelineComponent):
-    def __init__(self):
-       
-
-        super().__init__()
-
-
-    @property
-    def output_dim(self):
-        return 2
+class Filter(GraphRepresentation):
     
-    def teardown(self):
-        pass
 
-    @property 
-    def networkx(self):
-        return self.graph
-
-    def setup(self):
-        super().setup()
-
-    def process(self, X):
-        """converts json format to pytorch_geometric Data format.
+    def transform(self, X):
+        """remove zeros
         """
-
-        X = json_graph.node_link_graph(X)
-        
-        
         # remove nodes with all 0 values
         to_remove = [
             n for n, attrs in X.nodes(data=True)
@@ -94,15 +35,5 @@ class FilterGraphRepresentation(PickleSaveMixin, PipelineComponent):
         
         if len(X.nodes)==0:
             return None
-        
-        self.graph=X
-        
-        data = from_networkx(X, group_node_attrs=["count","size"])
-        data.x=data.x.float()
-        
-        
-        
-        data.label = [node for node in X.nodes]
-        data.time_stamp = X.graph["time_stamp"]
-
-        return data.to("cuda")
+        else:
+            return None 

@@ -1,19 +1,17 @@
 from collections import defaultdict, deque
 import json
 import random
+import sys
 from typing import Tuple
 
-from ANIDSC.feature_buffer.tabular import NumpyFeatureBuffer
+
+from ..graph_rep.base import GraphRepresentation
 import numpy as np
-from ..component.pipeline_component import PipelineComponent
-from ..save_mixin.torch import TorchSaveMixin
-import torch
-from networkx.readwrite import json_graph
-from torch_geometric.utils import from_networkx
+
+
 import networkx as nx
 from scipy.stats import ks_2samp
 
-from ..save_mixin.pickle import PickleSaveMixin
 
 
 
@@ -22,7 +20,7 @@ class Concept:
     Implements the Reservoir Sampling algorithm to sample k items from a stream.
     """
 
-    def __init__(self, min_length, max_length):
+    def __init__(self, idx, min_length, max_length):
         """
         Initializes the ReservoirSampler.
 
@@ -35,10 +33,15 @@ class Concept:
         if min_length > max_length:
             raise ValueError("min_length cannot be greater than max_length")
 
+        self.idx=idx
         self.min_length = min_length
         self.max_length = max_length
         self.reservoir = []
         self.count = 0  # Number of items processed so far
+
+    def __repr__(self):
+        return str(self.idx)
+
 
     def add_item(self, item):
         """
@@ -195,7 +198,7 @@ class FutureConcept:
         Returns:
             list: Copy of items in the store
         """
-        if len(self.store)>0:
+        if len(self.store) > 0:
             return np.vstack(self.store)
         else:
             return np.array([[]])
@@ -331,7 +334,7 @@ class ConceptDetector:
     Advanced concept drift detector using reservoir sampling with future concept assignment.
     """
 
-    def __init__(self, min_length, max_length, drift_detector, scaler):
+    def __init__(self, name, min_length, max_length, drift_detector, scaler):
         """
         Initialize the concept detector.
 
@@ -343,12 +346,17 @@ class ConceptDetector:
         """
         self.min_length = min_length
         self.max_length = max_length
-        self.concepts = [Concept(min_length, max_length)]
+        self.name=name
+        self.concept_count=0
+        self.concepts = [Concept(self.concept_count, min_length, max_length)]
         self.current_idx = 0
         self.drift_detector = drift_detector
         self.scaler = scaler
         self.future_concept = FutureConcept(min_length)
 
+    def __repr__(self):
+        return self.name 
+    
     def update(self, attr):
         """
         Update the concept detector with new attribute data.
@@ -362,22 +370,26 @@ class ConceptDetector:
         # Convert to numpy array for consistent handling
 
         attr_array = np.array(list(attr.values()))
-
         
+        if np.all(attr_array==0):
+            attr.update({f"scaled_{k}": 0 for i, k in enumerate(attr)})
+            attr["concept_idx"] = -1
+            return attr 
+
         # Phase 1: Initialize current concept
         if not self.concepts[self.current_idx].is_initialized():
             self.concepts[self.current_idx].add_item(attr_array)
-            
+
             attr.update({f"scaled_{k}": None for k in attr})
-            attr["concept_idx"]=None
+            attr["concept_idx"] = None
             return attr
 
         # Phase 2: Initialize future concept
         if not self.future_concept.is_initialized():
             self.future_concept.add_item(attr_array)
-            
+
             attr.update({f"scaled_{k}": None for k in attr})
-            attr["concept_idx"]=None
+            attr["concept_idx"] = None
             return attr
 
         # Phase 3: Drift detection and assignment (if not already assigned)
@@ -387,7 +399,7 @@ class ConceptDetector:
 
             if self.drift_detector(current_array, future_array):
                 # Drift detected - check if it matches any existing concept
-                candidates=[]
+                candidates = []
 
                 for idx, concept in enumerate(self.concepts):
                     candidate_sample = concept.get_sample()
@@ -396,38 +408,40 @@ class ConceptDetector:
                     if not self.drift_detector(future_array, candidate_array):
                         # Found matching existing concept
                         candidates.append(idx)
-                        
 
-                if len(candidates)==0:
+                if len(candidates) == 0:
                     # New concept discovered
-                    self.concepts.append(Concept(self.min_length, self.max_length))
+                    self.concept_count+=1
+                    self.concepts.append(Concept(self.concept_count, self.min_length, self.max_length))
+                    print(f"{self.name}: adding concept {self.concept_count}", file=sys.stderr)
+                    
                     new_concept_idx = len(self.concepts) - 1
                     self.concepts[new_concept_idx].add_batch(future_array)
                     self.future_concept.add_future_idx(
                         new_concept_idx, len(future_array)
                     )
                     self.current_idx = new_concept_idx
-                elif len(candidates)==1:
-                    new_idx=candidates[0]
+                elif len(candidates) == 1:
+                    new_idx = candidates[0]
                     # Switch to existing matching concept
                     self.future_concept.add_future_idx(new_idx, len(future_array))
                     self.current_idx = new_idx
                 else:
                     # switch to first matching concept
-                    new_idx=candidates[0]
+                    new_idx = candidates[0]
                     self.future_concept.add_future_idx(new_idx, len(future_array))
                     self.current_idx = new_idx
-                    
-                    print(f"Merging {candidates} into {candidates[0]}")
+
+                    print(f"{self.name}: Merging {candidates} into {candidates[0]}", file=sys.stderr)
+                    print(f"{self.name}: {self.concepts}",end=" ", file=sys.stderr)
                     # merge other ones
                     for i in candidates[1:]:
                         self.concepts[new_idx].add_batch(self.concepts[i].get_sample())
-                    
+
                     # delete merged concepts:
                     for i in sorted(candidates[1:], reverse=True):
                         self.concepts.pop(i)
-                    
-                    
+                    print(f"-> {self.concepts}", file=sys.stderr)
 
             # Check for high confidence same distribution (with higher p-value threshold)
             elif not self.drift_detector(current_array, future_array, p=0.95):
@@ -451,9 +465,8 @@ class ConceptDetector:
         # Add new item to future concept for next iteration
         self.future_concept.add_item(attr_array)
 
-
         attr.update({f"scaled_{k}": scaled[i] for i, k in enumerate(attr)})
-        attr["concept_idx"]=self.current_idx
+        attr["concept_idx"] = self.current_idx
         return attr
 
     def get_current_concept_id(self):
@@ -499,7 +512,6 @@ class ConceptStore:
         self.scaler = scaler
         self.concepts = {}
 
-
     def update(self, graph):
         """
         Update concept detectors for all nodes in the graph.
@@ -510,19 +522,18 @@ class ConceptStore:
         Returns:
             dict: Mapping of node_id -> scaled attributes
         """
-        results = {}
-        for node, attrs in graph.nodes(data=True):
-
+        updated_graph = graph.copy()
+        for node, attrs in updated_graph.nodes(data=True):
             if node not in self.concepts:
-                self.concepts[node] = ConceptDetector(
+                self.concepts[node] = ConceptDetector( node, 
                     self.min_length, self.max_length, self.drift_detector, self.scaler
                 )
 
             scaled_result = self.concepts[node].update(attrs)
-            
-            results[node] = scaled_result
 
-        return results
+            updated_graph.nodes[node].update(scaled_result)
+
+        return updated_graph
 
     def get_concept_info(self, node=None):
         """
@@ -563,40 +574,14 @@ class ConceptStore:
         )
 
 
-class AutoScaleGraphRepresentation(PickleSaveMixin, PipelineComponent):
+class CDD(GraphRepresentation):
     def __init__(
         self,
-        
-        **kwargs,
     ):
-        """Basic graph representation of network
-
-        Args:
-            device (str, optional): name of device. Defaults to "cuda".
-            preprocessors (List[str], optional): list of preprocessors. Defaults to [].
-        """
-        
         super().__init__()
-
-
         self.concept_store = ConceptStore(60, 300, ks_test_multivariate, standardizer)
 
-    def teardown(self):
-        pass
-    
-    @property
-    def output_dim(self):
-        return 2
-    
-    @property 
-    def networkx(self):
-        return self.graph
-        
-
-    def setup(self):
-        super().setup()
-
-    def process(self, X) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+    def transform(self, X):
         """updates data with x and output graph representation after update
 
         Args:
@@ -606,30 +591,20 @@ class AutoScaleGraphRepresentation(PickleSaveMixin, PipelineComponent):
             Tuple[torch.Tensor,torch.Tensor,torch.Tensor]: tuple of node features, edge indices, edge features
         """
 
-        X = json_graph.node_link_graph(X)
+        scaled_graph = self.concept_store.update(X)
 
-        self.concept_store.update(X)
-
-        self.graph=X
-        
         # remove unscaled nodes for model
-        filtered_graph=X.copy()
-        
-        to_remove = [n for n, d in filtered_graph.nodes(data=True) if d.get("concept_idx") is None]
+        filtered_graph = scaled_graph.copy()
+
+        to_remove = [
+            n
+            for n, d in filtered_graph.nodes(data=True)
+            if d.get("concept_idx") is None
+        ]
         # remove them
         filtered_graph.remove_nodes_from(to_remove)
 
         if nx.is_empty(filtered_graph):
             return None
-        
-
-        data = from_networkx(filtered_graph, group_node_attrs=["scaled_count","scaled_size"])
-        data.x=data.x.float()
-        
-        data.label = [node for node in filtered_graph.nodes]
-        data.concept_idx = nx.get_node_attributes(filtered_graph,"concept_idx")
-        data.time_stamp = X.graph["time_stamp"]
-
-        return data.to("cuda")
-        
-
+        else:
+            return filtered_graph

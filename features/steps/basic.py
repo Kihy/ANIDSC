@@ -12,6 +12,10 @@ import os
 @given("Model: {model_name}")
 def step_given_feature_extractor(context, model_name):
     context.pipeline_vars["model_name"]=model_name 
+    
+@given("Graph Rep: {graph_rep}")
+def step_given_feature_extractor(context, graph_rep):
+    context.pipeline_vars["graph_rep"]=graph_rep 
 
 
 @then("the pipeline should not fail")

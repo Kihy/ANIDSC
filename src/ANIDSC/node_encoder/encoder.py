@@ -52,8 +52,6 @@ class GNNEmbedder(BaseTorchModel):
     def create_node_embed(self):
         pass 
     
-
-    
     def init_model(self):
         self.hidden_channels=5
         self.out_channels=10
@@ -77,9 +75,10 @@ class GNNEmbedder(BaseTorchModel):
         return self.linear(node_embeddings), self.sw_loss(node_embeddings)
     
     def predict_step(self, x, edge_index, edge_attr):
-        embedding, loss = self.forward(x, edge_index, edge_attr)
         
-
+        with torch.no_grad():
+            embedding, loss = self.forward(x, edge_index, edge_attr)
+        
         return embedding, loss.detach().cpu().numpy()
     
     def train_step(self, x, edge_index, edge_attr):
@@ -88,7 +87,7 @@ class GNNEmbedder(BaseTorchModel):
         _, loss = self.forward(x, edge_index, edge_attr)
         
         loss = loss.mean()
-        loss.backward()
+        loss.backward(retain_graph=True)
         self.optimizer.step()
         
         return loss.detach().cpu().item()

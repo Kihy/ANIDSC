@@ -3,6 +3,7 @@ import importlib
 import torch
 from torch_geometric.data import Data
 
+
 class BaseTorchModel(torch.nn.Module):
     def __init__(self, input_dims, device="cuda", **kwargs):
         super().__init__()
@@ -59,7 +60,8 @@ class BaseTorchModel(torch.nn.Module):
 
         X = self.preprocess(X)
 
-        _, loss = self.forward(X, inference=True)
+        with torch.no_grad():
+            _, loss = self.forward(X, inference=True)
         
         if loss is None:
             return None
@@ -67,6 +69,7 @@ class BaseTorchModel(torch.nn.Module):
         return loss.detach().cpu().numpy()
 
     def train_step(self, X):
+        
 
         X = self.preprocess(X)
         
@@ -82,6 +85,8 @@ class BaseTorchModel(torch.nn.Module):
             return None
         
         loss = loss.mean()
+
+
         loss.backward()
         self.optimizer.step()
         
