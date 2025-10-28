@@ -36,4 +36,4 @@ class Filter(GraphRepresentation):
         if len(X.nodes)==0:
             return None
         else:
-            return None 
+            return X 

@@ -372,7 +372,11 @@ class ConceptDetector:
         attr_array = np.array(list(attr.values()))
         
         if np.all(attr_array==0):
-            attr.update({f"scaled_{k}": 0 for i, k in enumerate(attr)})
+            
+            update_attr={f"original_{k}": v for k,v in attr.items()}
+            update_attr.update({k: 0 for i, k in enumerate(attr)})
+            attr.update(update_attr)
+            
             attr["concept_idx"] = -1
             return attr 
 
@@ -380,7 +384,11 @@ class ConceptDetector:
         if not self.concepts[self.current_idx].is_initialized():
             self.concepts[self.current_idx].add_item(attr_array)
 
-            attr.update({f"scaled_{k}": None for k in attr})
+            
+            update_attr={f"original_{k}": v for k,v in attr.items()}
+            update_attr.update({k: None for i, k in enumerate(attr)})
+            attr.update(update_attr)
+            
             attr["concept_idx"] = None
             return attr
 
@@ -388,7 +396,10 @@ class ConceptDetector:
         if not self.future_concept.is_initialized():
             self.future_concept.add_item(attr_array)
 
-            attr.update({f"scaled_{k}": None for k in attr})
+            update_attr={f"original_{k}": v for k,v in attr.items()}
+            update_attr.update({k: None for i, k in enumerate(attr)})
+            attr.update(update_attr)
+            
             attr["concept_idx"] = None
             return attr
 
@@ -465,7 +476,10 @@ class ConceptDetector:
         # Add new item to future concept for next iteration
         self.future_concept.add_item(attr_array)
 
-        attr.update({f"scaled_{k}": scaled[i] for i, k in enumerate(attr)})
+        
+        update_attr={f"original_{k}": v for k,v in attr.items()}
+        update_attr.update({k: scaled[i] for i, k in enumerate(attr)})
+        attr.update(update_attr)
         attr["concept_idx"] = self.current_idx
         return attr
 
