@@ -1,0 +1,61 @@
+# syntax=docker/dockerfile:1
+FROM pytorch/pytorch:latest
+LABEL maintainer="Ke He <kh695640204@gmail.com>" 
+
+
+
+# 1. Set work directory
+WORKDIR /workspace/intrusion_detection
+
+
+# 2. Install Python packages
+RUN pip install --no-cache-dir --upgrade pip
+RUN pip install --no-cache-dir \
+    behave \
+    networkx \
+    numpy \
+    pandas \
+    pyswarms \
+    pytdigest \
+    pytz \
+    scapy \
+    scipy \
+    torch_geometric  \
+    tqdm \
+    tensorboard \
+    pyyaml \
+    ijson \
+    pytest \
+    fsspec  \
+    zstandard 
+
+# Copy your ANIDSC into the image
+COPY ANIDSC ./ANIDSC
+
+# Install in “editable” mode so changes to /ANIDSC are picked up immediately
+RUN pip install --no-cache-dir --editable ./ANIDSC
+
+# avoid interactive prompts (e.g. tzdata asks for geographic area)
+ENV DEBIAN_FRONTEND=noninteractive \
+    TZ=Pacific/Auckland
+
+
+USER root
+RUN apt-get update && \
+    apt-get install -y \
+    tzdata \                   
+    && ln -fs /usr/share/zoneinfo/$TZ /etc/localtime \
+    && dpkg-reconfigure -f noninteractive tzdata \
+    && rm -rf /var/lib/apt/lists/*
+
+# Uncomment if you want root docker 
+ARG USER_ID
+ARG GROUP_ID
+RUN groupadd -g ${GROUP_ID} hostgroup && \
+    useradd -m -u ${USER_ID} -g ${GROUP_ID} -s /bin/bash hostuser
+USER hostuser
+
+SHELL ["/bin/bash", "-c"]
+
+# 5. Default command
+CMD ["/bin/bash"]

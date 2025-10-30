@@ -5,8 +5,9 @@ from ..templates import get_template
 
 def run_file(file_iterator, pipeline_name, pipeline_vars):
     pipelines = []
-    for state, file in file_iterator():        
+    for state, file, dataset in file_iterator():        
         pipeline_vars["file_name"] = file
+        pipeline_vars["dataset_name"] = dataset
         
         print(f"Running {state} pipeline {pipeline_name}:")
         print("-"*50)

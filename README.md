@@ -2,39 +2,86 @@
  Adversarial NIDS Chain
 
 # Setting up directory
-It is recommended to have two folders, one for dataset and one for actual code.
+It is recommended to add code to existing code structure
 
-The dataset folder structure should be something like ./datasets/{dataset_name}/pcap/{filename}
+- ANIDSC folder contains all source code
+- docker_root folder contains docker setup files
+- experiments contains code to run experiments in slurm, but can be easily modified to run with docker 
+- features folder contains feature files with behave for basic testing 
+- visualisations folder contains visualisation code to analyse data.
 
+The dataset folder structure should be something like datasets/{dataset_name}/pcap/{filename}
 Any pcap file should work, the main dataset used for testing is the UQ-IoT-IDS dataset: https://espace.library.uq.edu.au/view/UQ:17b44bb
-Some test data are also available in ./test_data/pcap folder
+Some test data are also available in datasets/test_data/pcap folder
 
-
-
-There is no restriction on code structure 
 
 # Setting Up environment
-install docker
+install docker. 
+run from top level directory (same level as the top level ANIDSC file):
+```
+docker build --pull --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g)  -t kihy/anidsc_image -f docker_root/Dockerfile.exp .
+```
 
-run
-`docker run --gpus all -it --rm -v "/path/to/datasets":/workspace/intrusion_detection/datasets -v /path/to/experiment/scripts:/workspace/intrusion_detection/experiment -v kihy/anidsc_image`
+The visualisation/plotting container:
+```
+docker build --pull --build-arg USER_ID=$(id -u) --build-arg GROUP_ID=$(id -g)  -t kihy/anidsc_vis_image -f docker_root/Dockerfile.vis .
+```
 
-if gpu is not set up you can remove --gpus all 
+Push Docker images:
+```
+docker push kihy/anidsc_image:latest
+```
+
+verify gpu is intalled correctly via:
+```
+docker run --rm --gpus all -it kihy/anidsc_image python -c "import torch; print(torch.cuda.device_count(), torch.cuda.get_device_name(0))"
+```
 
 
-go to code folder 
-`cd /workspace/ANIDSC`
-and add code there.
+## running docker for debugging
+To run the experiment container:
+```
+docker run --rm --gpus all -it \
+  -v "$(pwd)/ANIDSC":/workspace/intrusion_detection/ANIDSC \
+  -v "$(pwd)/datasets":/workspace/intrusion_detection/datasets \
+  -v "$(pwd)/experiments":/workspace/intrusion_detection/experiments \
+  -v "$(pwd)/.vscode":/workspace/intrusion_detection/.vscode\
+  -w /workspace/intrusion_detection/ANIDSC \
+  -u $(id -u):$(id -g)  \
+  kihy/anidsc_image
+```
 
-The ANIDSC package should already be installed, just need to import.
+To run the visualisation container:
+```
+docker run --rm --gpus all -it \
+  -v "$(pwd)/datasets":/workspace/intrusion_detection/datasets \
+  -v "$(pwd)/visualisations":/workspace/intrusion_detection/visualisations \
+  -w /workspace/intrusion_detection/visualisations \
+  -u $(id -u):$(id -g)  \
+  -p 5006:5006 \
+  kihy/anidsc_vis_image
+```
 
-# Running the code
-There is a feature folder for scenario testing that can be used as example. For example,
-`behave features/afterimage.feature` 
+Note:
+The permissions are set as follows:
+- within the docker container, the user is hostuser and hostgroup
+- within the host system, it is the user and group that runs the command
 
+## running behave jobs 
+```
+docker run --rm --gpus all -it \
+  -v "$(pwd)/ANIDSC":/workspace/intrusion_detection/ANIDSC \
+  -v "$(pwd)/datasets":/workspace/intrusion_detection/datasets \
+  -v "$(pwd)/features":/workspace/intrusion_detection/features \
+  -w /workspace/intrusion_detection/ \
+  -u $(id -u):$(id -g)  \
+  kihy/anidsc_image \
+  behave features --stop
+```
 
-At a high level, you need to create a file iterator which produces the file names along with the state of the file (new if from scratch, loaded if it should be loaded from last file). Example of iterator can be found in features/steps/basic.py
-
-Once you have the iterator, you can call the run_script() function in utils/run_script.py:
-`run_file(file_iterator, pipeline_name, pipeline_vars)`
-The predefined pipelines are in templates.py file, and pipeline_vars are the needed variables to the pipeline.
+## running slurm jobs
+```
+sbatch experiments/jobs/meta_extraction.slurm
+sbatch experiments/jobs/feature_extraction.slurm
+sbatch experiments/jobs/detection.slurm
+```

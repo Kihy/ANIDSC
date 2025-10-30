@@ -42,19 +42,19 @@ def step_then_components_are_saved(context):
 def step_given_dataset_and_file(context):
 
     def iterate_files():
-        yield "new", "benign_lenovo_bulb"
+        yield "new", "benign_lenovo_bulb", "datasets/test_data"
 
         # Attack files (subsequent runs)
         for attack in [
             "malicious_ACK_Flooding",
             "malicious_Port_Scanning",
-            "malicious_Service_Detection",
+            "malicious_Service_Detection"
         ]:
 
-            yield "loaded", attack
+            yield "loaded", attack, "datasets/test_data"
 
     context.file_iterator = iterate_files
-    context.pipeline_vars = {"dataset_name": "test_data"}
+    context.pipeline_vars = {}
 
 
 @given("Meta Extractor: {meta_extractor}")
