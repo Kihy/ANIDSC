@@ -23,7 +23,7 @@ import pandas as pd
 
 
 class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
-    def __init__(self, granularity=1, **kwargs):
+    def __init__(self, granularity=60, **kwargs):
         """"""
         super().__init__(**kwargs)
 

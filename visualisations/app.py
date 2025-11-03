@@ -7,9 +7,8 @@ Structure:
  - WidgetManager: create and keep widgets, wire watchers
  - PlotManager: all plotting routines; mode dispatch
 """
-
-
 from __future__ import annotations
+import re
 from collections import defaultdict
 from dataclasses import dataclass
 import io
@@ -70,14 +69,16 @@ class DataManager:
 
     def __init__(self, root: Path = ROOT, seed: int = 42):
         self.root = Path(root)
+        self.frames = {}
+        self.csvs={}
         random.seed(seed)
 
     def list_subdirectories(self, path: Optional[Path]) -> List[str]:
         """Return ['None'] or a list of entries inside path (quick fail if invalid)."""
         if path is None or not path.exists() or not path.is_dir():
-            return ["Select"]
+            return [""]
         time.sleep(0.1)
-        return ["Select"] + [p.name for p in path.iterdir()]
+        return [p.name for p in path.iterdir()]
 
     def list_files(self, folder: Path) -> List[str]:
         """Return leaf directories (relative paths) under folder."""
@@ -89,55 +90,114 @@ class DataManager:
                 leaves.append(str(p.relative_to(folder)))
         return leaves
 
+    def _manage_progress_widget(
+        self, widget_mgr, visible: bool, active: bool = False, status: str = ""
+    ):
+        """Helper to manage progress widget visibility and status."""
+        if widget_mgr:
+            widget_mgr.progress.visible = visible
+            widget_mgr.progress.active = active
+            widget_mgr.status.visible = visible
+            if status:
+                widget_mgr.status.object = status
+
+    def _reservoir_sample(
+        self, file_handle, max_frames: int, sample_range: tuple = None, widget_mgr=None
+    ):
+        """Perform reservoir sampling on file lines with optional progress updates."""
+        sample = []
+        start_idx, end_idx = sample_range if sample_range else (0, float("inf"))
+
+        for i, line in enumerate(file_handle, start=1):
+            if i < start_idx:
+                continue
+            if i > end_idx:
+                break
+
+            if len(sample) < max_frames:
+                sample.append(line)
+            else:
+                j = random.randint(1, i)
+                if j <= max_frames:
+                    sample[j - 1] = line
+
+            if widget_mgr:
+                widget_mgr.status.object = f"**{i:,} lines processed...**"
+
+        return sample
+
     def load_frames(
         self,
         file_path: Path,
         widget_mgr: Optional["WidgetManager"] = None,
-        max_frames=None,
+        
     ) -> Iterable[dict]:
         """Yield JSON frames from a file, sampling by prob, with optional progress updates."""
         file_path = Path(file_path)
         if not file_path.exists():
             return
 
-        count = 0
-        if widget_mgr:
+        max_frames=widget_mgr.max_frames_input.value 
+        sample_range=(widget_mgr.range_start.value, widget_mgr.range_end.value)
+        # Check cache
+        cache_key = (file_path, max_frames, sample_range)
+        if cache_key in self.frames:
+            yield from self.frames[cache_key]
+            return
 
-            widget_mgr.progress.visible = True
-            widget_mgr.progress.active = True
-            widget_mgr.status.visible = True
-            widget_mgr.status.object = "**0 lines read...**"
+        self._manage_progress_widget(
+            widget_mgr, visible=True, active=True, status="**0 lines read...**"
+        )
 
-        if max_frames is None:
+        try:
             with fsspec.open(file_path, "rt", compression="zstd") as f:
-                for line in f:
-                    count += 1
+                sample = self._reservoir_sample(f, max_frames, sample_range, widget_mgr)
 
-                    if widget_mgr:
-                        widget_mgr.status.object = f"**{count} lines read...**"
-                    # Process current batch
+            frames = [json.loads(line) for line in sample]
+            self.frames[cache_key] = frames
+            yield from frames
 
-                    yield json.loads(line)
-        else:
+        finally:
+            self._manage_progress_widget(widget_mgr, visible=False)
 
-            sample = []
-            with fsspec.open(file_path, "rt", compression="zstd") as f:
-                for i, line in enumerate(f, start=1):
-                    if i <= max_frames:
-                        sample.append(line)
-                    else:
-                        j = random.randint(1, i)
-                        if j <= max_frames:
-                            sample[j - 1] = line
+    def read_csv(
+        self,
+        path: Path,
+        widget_mgr: Optional["WidgetManager"] = None,
+        max_frames: int = None,
+        sample_range: tuple = None,
+    ) -> pd.DataFrame:
+        """Read CSV with optional Panel progress bar from widget manager (indeterminate)."""
+        path = Path(path)
+        if not path.exists():
+            raise FileNotFoundError(path)
 
-            frames = [json.loads(l) for l in sample]
 
-            return frames
+        max_frames=widget_mgr.max_frames_input.value 
+        sample_range=(widget_mgr.range_start.value, widget_mgr.range_end.value)
+        
+        # Check cache
+        cache_key = (path, max_frames, sample_range)
+        if cache_key in self.csvs:
+            df = pd.read_csv(io.StringIO(header + "".join(sample)))
+            return df.sort_values(by="timestamp")
+        
+        self._manage_progress_widget(
+            widget_mgr, visible=True, active=True, status="**0 rows read...**"
+        )
 
-        if widget_mgr:
-            widget_mgr.progress.active = False
-            widget_mgr.progress.visible = False
-            widget_mgr.status.visible = False
+        try:
+            with fsspec.open(path, "rt", compression="zstd") as f:
+                header = next(f)
+                sample = self._reservoir_sample(f, max_frames, sample_range, widget_mgr)
+            
+            self.csvs[cache_key] = sample
+
+            df = pd.read_csv(io.StringIO(header + "".join(sample)))
+            return df.sort_values(by="timestamp")
+
+        finally:
+            self._manage_progress_widget(widget_mgr, visible=False)
 
     def get_frame(
         self,
@@ -145,8 +205,10 @@ class DataManager:
         idx: int,
         widget_mgr: Optional["WidgetManager"] = None,
     ) -> Optional[dict]:
-        """Return the frame at index idx."""
+        """Return the frame at index idx."""        
         for i, frame in enumerate(self.load_frames(file_path, widget_mgr)):
+            print(i, idx, frame)
+            
             if i == idx:
                 return frame
         return None
@@ -158,56 +220,6 @@ class DataManager:
     ) -> int:
         """Count frames available (after sampling)."""
         return sum(1 for _ in self.load_frames(file_path, widget_mgr))
-
-    def read_csv(
-        self,
-        path: Path,
-        widget_mgr: Optional["WidgetManager"] = None,
-        max_frames: int = None,
-    ) -> pd.DataFrame:
-        """Read CSV with optional Panel progress bar from widget manager (indeterminate)."""
-        path = Path(path)
-        if not path.exists():
-            raise FileNotFoundError(path)
-
-        if max_frames is None:
-            with fsspec.open("path", compression="zstd") as f:
-                return pd.read_csv(f)
-
-        if widget_mgr:
-            # Indeterminate progress bar
-            widget_mgr.progress.visible = True
-            widget_mgr.progress.active = True
-            widget_mgr.status.visible = True
-            widget_mgr.status.object = "**0 rows read...**"
-
-        rows_read = 1
-
-        sample = []
-        with fsspec.open(path, "rt", compression="zstd") as f:
-
-            header = next(f)  # keep header line
-
-            for i, line in enumerate(f, start=1):
-                rows_read += 1
-                if widget_mgr:
-                    widget_mgr.status.object = f"**{rows_read:,} rows read...**"
-                if i <= max_frames:
-                    sample.append(line)
-                else:
-                    j = random.randint(1, i)
-                    if j <= max_frames:
-                        sample[j - 1] = line
-
-        if widget_mgr:
-            widget_mgr.progress.active = False
-            widget_mgr.progress.visible = False
-            widget_mgr.status.visible = False
-
-        df = pd.read_csv(io.StringIO(header + "".join(sample)))
-        df = df.sort_values(by="timestamp")
-
-        return df
 
 
 def simple_pipeline_name(name: str) -> Optional[str]:
@@ -227,7 +239,7 @@ def simple_pipeline_name(name: str) -> Optional[str]:
 
     if "LivePercentile" in name:
         extracted_name.append("scaler")
-    
+
     return "+".join(extracted_name)
 
 
@@ -289,18 +301,37 @@ class WidgetManager:
 
     def __post_init__(self):
         # main controls
-        self.dataset_input = pn.widgets.Select(
+        self.dataset_input = pn.widgets.AutocompleteInput(
             name="Dataset",
             options=self.data_mgr.list_subdirectories(self.data_mgr.root),
+            case_sensitive=False,
+            search_strategy="includes",
+            min_characters=0,
+            placeholder="Search",
         )
-        self.fe_input = pn.widgets.Select(
-            name="Feature Extractor", options=self.data_mgr.list_subdirectories(None)
+        self.fe_input = pn.widgets.AutocompleteInput(
+            name="Feature Extractor",
+            options=self.data_mgr.list_subdirectories(None),
+            case_sensitive=False,
+            search_strategy="includes",
+            min_characters=0,
+            placeholder="Search",
         )
-        self.file_input = pn.widgets.Select(
-            name="File", options=self.data_mgr.list_subdirectories(None)
+        self.file_input = pn.widgets.AutocompleteInput(
+            name="File",
+            options=self.data_mgr.list_subdirectories(None),
+            case_sensitive=False,
+            search_strategy="includes",
+            min_characters=0,
+            placeholder="Search",
         )
-        self.pipeline_input = pn.widgets.Select(
-            name="Pipeline", options=self.data_mgr.list_subdirectories(None)
+        self.pipeline_input = pn.widgets.AutocompleteInput(
+            name="Pipeline",
+            options=self.data_mgr.list_subdirectories(None),
+            case_sensitive=False,
+            search_strategy="includes",
+            min_characters=0,
+            placeholder="Search",
         )
 
         # numeric and mode controls
@@ -320,8 +351,7 @@ class WidgetManager:
             options=[
                 "mAP",
                 "f1",
-                "acc_benign",
-                "acc_malicious",
+                "accuracy",
                 "hmean_acc",
                 "average time",
                 "total positive",
@@ -353,13 +383,43 @@ class WidgetManager:
         )
         # Status text showing number of lines read
         self.status = pn.pane.Markdown("", sizing_mode="stretch_width", visible=False)
+        
+        # Max frames widget
+        self.max_frames_input = pn.widgets.IntInput(
+            name='Max Frames',
+            value=10000,
+            step=100,
+            start=1,
+            sizing_mode = "stretch_width"
+        )
+        
+        # Sample range widgets
+        self.range_start = pn.widgets.IntInput(
+            name='Range Start',
+            step=100,
+            value=0,
+            sizing_mode = "stretch_width"
+        )
+        
+        self.range_end = pn.widgets.IntInput(
+            name='Range End',
+            step=100,
+            value=1000,
+            sizing_mode = "stretch_width"
+        )
 
+        self.file_filter=pn.WidgetBox("File Sampling", self.max_frames_input, self.range_start, self.range_end)
+        
+        self.pipeline_regex=pn.widgets.TextInput(name="Pipeline Regex",placeholder="Regex to filter pipeline names")
+        
+        
         # watch wiring
         self.dataset_input.param.watch(self._on_dataset_change, "value")
         self.fe_input.param.watch(self._on_fe_change, "value")
         self.file_input.param.watch(self._on_file_change, "value")
         self.pipeline_input.param.watch(self._on_pipeline_change, "value")
         self.mode_selector.param.watch(self._on_mode_change, "value")
+        
 
         # small state to allow disabling widgets during long ops
         self._disable_targets = [
@@ -372,6 +432,7 @@ class WidgetManager:
             self.generate_btn,
             self.download_csv,
             self.mode_selector,
+            self.file_filter
         ]
 
         for w in self._disable_targets:
@@ -389,6 +450,7 @@ class WidgetManager:
                 self.file_input,
                 self.pipeline_input,
                 self.node_input,
+                self.file_filter
             )
         elif mode == "Network":
             return pn.WidgetBox(
@@ -396,11 +458,12 @@ class WidgetManager:
                 self.file_input,
                 self.pipeline_input,
                 self.graph_slider,
+                self.file_filter
             )
         elif mode == "Scores":
-            return pn.WidgetBox("Parameters", self.file_input, self.pipeline_input)
+            return pn.WidgetBox("Parameters", self.file_input, self.pipeline_input, self.file_filter)
         elif mode == "Summary":
-            return pn.WidgetBox("Parameters", self.metric_input)
+            return pn.WidgetBox("Parameters", self.metric_input, self.pipeline_regex)
         return pn.pane.Markdown("Unknown mode")
 
     # --------- watchers (populate dependent options) ----------
@@ -451,13 +514,13 @@ class WidgetManager:
 
         self._disable(True)
         try:
-            pipelines=self.data_mgr.list_subdirectories(
+            pipelines = self.data_mgr.list_subdirectories(
                 self.data_mgr.root / dataset / fe / folder / file_val
             )
-            
-            
-            
-            self.pipeline_input.options ={simple_pipeline_name(p):p for p in pipelines} 
+
+            self.pipeline_input.options = {
+                simple_pipeline_name(p): p for p in pipelines
+            }
         finally:
             self._disable(False)
 
@@ -478,6 +541,7 @@ class WidgetManager:
             )
 
             frames = list(self.data_mgr.load_frames(file_path, self))
+
             # collect unique node ids from frames
             node_ids = sorted(
                 {n["data"]["id"] for fr in frames for n in fr["elements"]["nodes"]}
@@ -519,6 +583,7 @@ class WidgetManager:
 # Plot manager: all plot logic collected here
 # ------------------------------
 class PlotManager:
+    
     def __init__(
         self, data_mgr: DataManager, widgets: WidgetManager, container: pn.Column
     ):
@@ -608,31 +673,33 @@ class PlotManager:
             # extract main frame-level keys (time_stamp, threshold)
             if node:
                 for key, value in fr.get("data", []):
+
                     if key == "time_stamp":
-                        time_val = pd.to_datetime(float(value))
+                        time_val = pd.to_datetime(
+                            float(value), unit="s", origin="unix"
+                        ).tz_localize("Pacific/Auckland")
                         data_dict["times"].append(time_val)
                     elif key == "threshold":
                         data_dict["threshold"].append(value)
 
                 concept_idx = str(node["data"].get("concept_idx"))
-                if prev_concept is None:
+                
+                if prev_concept != concept_idx or prev_concept is None:
                     prev_concept = concept_idx
                     concept_idx_order.append(concept_idx)
                     concept_change_indices.append(time_val)
-                    unique_concepts.add(concept_idx)
-
-                if prev_concept != concept_idx:
-                    concept_change_indices.append(time_val)
-                    concept_idx_order.append(concept_idx)
-                    prev_concept = concept_idx
                     unique_concepts.add(concept_idx)
 
                 # collect node fields (safe-get)
                 data_dict["node_as_vals"].append(node["data"].get("node_as"))
                 data_dict["count_vals"].append(node["data"].get("count"))
                 data_dict["size_vals"].append(node["data"].get("size"))
-                data_dict["scaled_count_vals"].append(node["data"].get("scaled_count"))
-                data_dict["scaled_size_vals"].append(node["data"].get("scaled_size"))
+                data_dict["original_count_vals"].append(
+                    node["data"].get("original_count")
+                )
+                data_dict["original_size_vals"].append(
+                    node["data"].get("original_size")
+                )
 
         if not data_dict["times"]:
             self.plot_container.append(
@@ -651,6 +718,8 @@ class PlotManager:
         }
 
         df = pd.DataFrame(data_dict).sort_values("times")
+
+        print("plotting")
 
         # Build the plotly figure (keeps the same traces & names as original)
         fig = go.Figure()
@@ -694,7 +763,7 @@ class PlotManager:
         fig.add_trace(
             go.Scatter(
                 x=df["times"],
-                y=df["scaled_count_vals"],
+                y=df["original_count_vals"],
                 mode="markers",
                 name="Scaled Count",
                 line=dict(color="orange", dash="dot"),
@@ -703,26 +772,34 @@ class PlotManager:
         fig.add_trace(
             go.Scatter(
                 x=df["times"],
-                y=df["scaled_size_vals"],
+                y=df["original_size_vals"],
                 mode="markers",
                 name="Scaled Size",
                 line=dict(color="green", dash="dot"),
             )
         )
 
-        for i, (prev_idx, cur_idx) in enumerate(
-            zip(concept_change_indices[:-1], concept_change_indices[1:])
-        ):
-            concept = concept_idx_order[i]
-            fig.add_vrect(
-                x0=prev_idx,
-                x1=cur_idx,
-                fillcolor=color_map.get(concept, "#cccccc"),
-                annotation_text=f"Concept {concept}",
-                opacity=0.1,
-                layer="below",
-                line_width=0,
-            )
+        print(len(concept_change_indices))
+        print(concept_idx_order)
+
+        if len(concept_idx_order) < 20:
+            print("plotting concepts")
+            for i, (prev_idx, cur_idx) in enumerate(
+                zip(concept_change_indices[:-1], concept_change_indices[1:])
+            ):
+                concept = concept_idx_order[i]
+                fig.add_vrect(
+                    x0=prev_idx,
+                    x1=cur_idx,
+                    fillcolor=color_map.get(concept, "#cccccc"),
+                    opacity=0.1,
+                    annotation_text=f"{concept}",
+                    annotation_position="top left",
+                    layer="below",
+                    line_width=0,
+                )
+        else:
+            print("concepts greater than 20, skipping")
 
         fig.update_layout(
             title=f"Node {node_label}: Values Over Time",
@@ -733,6 +810,7 @@ class PlotManager:
             legend=dict(x=1.02, y=1),
             hovermode="x unified",
         )
+
         self.plot_container.append(pn.pane.Plotly(fig, config={"responsive": True}))
 
     # ---------- Network (graph) plot ----------
@@ -805,7 +883,7 @@ class PlotManager:
             self.plot_container.append(pn.pane.Markdown("⚠️ Score CSV not found"))
             return
 
-        df = self.data_mgr.read_csv(file_path, self.w, max_frames=10e4)
+        df = self.data_mgr.read_csv(file_path, self.w)
 
         fig = go.Figure()
 
@@ -830,7 +908,7 @@ class PlotManager:
                 line=dict(width=0),
                 fill="tonexty",
                 fillcolor="rgba(200,200,200,0.3)",
-                name="Range (Min–Max)",
+                name="Range (Min-Max)",
             )
         )
         # IQR shading
@@ -916,17 +994,12 @@ class PlotManager:
         ap_results = {}
 
         for model_name, file_dict in scores_dict.items():
-            
-            
 
             # Identify benign and attack files
             benign_file = [f for f in file_dict if f.startswith("benign")][0]
             attack_files = [f for f in file_dict if f.startswith("attack")]
-            
-            
 
             benign_scores = file_dict[benign_file].dropna().values
-            
 
             model_ap = {}
             for attack_file in attack_files:
@@ -934,18 +1007,20 @@ class PlotManager:
 
                 # Combine scores and labels
                 scores = np.concatenate([benign_scores, attack_scores])
-                labels = np.concatenate([
-                    np.zeros_like(benign_scores, dtype=int),
-                    np.ones_like(attack_scores, dtype=int)
-                ])
+                labels = np.concatenate(
+                    [
+                        np.zeros_like(benign_scores, dtype=int),
+                        np.ones_like(attack_scores, dtype=int),
+                    ]
+                )
 
                 # Compute AP
-                
+
                 ap = average_precision_score(labels, scores)
-                model_ap[attack_file]=ap
+                model_ap[attack_file] = ap
 
             ap_results[model_name] = model_ap
-        
+
         ap_df = pd.DataFrame(ap_results).T
         df_map = ap_df.mean(axis=1).reset_index()
         df_map.columns = ["model", "MAP"]
@@ -975,7 +1050,7 @@ class PlotManager:
         }
 
         summary_list = []
-        scores_dict=defaultdict(dict)
+        scores_dict = defaultdict(dict)
         # iterate leaf files (re-implementation of original)
         for file in [
             str(p.relative_to(base_dir))
@@ -986,6 +1061,16 @@ class PlotManager:
             for pipeline_file in [
                 str(p.relative_to(file_dir)) for p in file_dir.rglob("*") if p.is_file()
             ]:
+                
+                regex=self.w.pipeline_regex.value
+                
+                if regex!="":
+                    match = re.search(regex, pipeline_file)
+                    if not match:
+                        continue
+                        
+
+                
                 csv_path = file_dir / pipeline_file
                 df = pd.read_csv(csv_path)
                 if df.empty:
@@ -996,17 +1081,17 @@ class PlotManager:
                     file=file,
                     pipeline=simple_pipeline_name(pipeline_file),
                 )
-                scores_dict[simple_pipeline_name(pipeline_file)].update({file: df["median_score"]})
-                
+                scores_dict[simple_pipeline_name(pipeline_file)].update(
+                    {file: df["median_score"]}
+                )
+
                 summary = (
                     df.groupby(["dataset", "fe_name", "file", "pipeline"])
                     .agg(AGG_FUNCS)
                     .reset_index()
                 )
                 summary_list.append(summary)
-        
-        
-        
+
         if not summary_list:
             self.plot_container.append(pn.pane.Markdown("⚠️ No summary data"))
             return
@@ -1030,8 +1115,8 @@ class PlotManager:
             self.plot_container.append(pane)
             return
 
-        if metric=="mAP":
-            ap_df=self.compute_map(scores_dict)
+        if metric == "mAP":
+            ap_df = self.compute_map(scores_dict)
 
             fig = sns.catplot(
                 data=ap_df,
@@ -1039,15 +1124,15 @@ class PlotManager:
                 x="MAP",
                 kind="bar",
                 aspect=1.6,
-                height=4,
-                order=sorted(ap_df["model"].unique())
+                height=0.2 * len(ap_df["model"].unique()),
+                order=sorted(ap_df["model"].unique()),
             )
             for ax in fig.axes.flat:
                 ax.tick_params(axis="x", rotation=45)
             plt.close(fig.fig)
             pane = pn.pane.Matplotlib(fig.fig, interactive=False)
             self.plot_container.append(pane)
-            return 
+            return
 
         if metric == "total positive":
             fig = sns.catplot(
@@ -1063,6 +1148,40 @@ class PlotManager:
             for ax in fig.axes.flat:
                 ax.tick_params(axis="x", rotation=45)
             plt.close(fig.fig)
+            pane = pn.pane.Matplotlib(fig.fig, interactive=False)
+            self.plot_container.append(pane)
+            return
+
+        if metric == "accuracy":
+            results = []
+            for (dataset, fe_name, pipeline), group in summary_df.groupby(
+                ["dataset", "fe_name", "pipeline"]
+            ):
+                df_stats = calc_stats(group)
+                df_stats["dataset"] = dataset
+                df_stats["fe_name"] = fe_name
+                df_stats["pipeline"] = pipeline
+                results.append(df_stats)
+
+            results_df = pd.concat(results, ignore_index=True)
+
+            df_long = results_df.melt(
+                id_vars="pipeline",
+                value_vars=["acc_benign", "acc_malicious"],
+                var_name="metric",
+                value_name="accuracy",
+            )
+
+            # Plot
+            fig = sns.catplot(
+                data=df_long,
+                y="pipeline",
+                x="accuracy",
+                hue="metric",
+                aspect=1.6,
+                height=0.2 * len(df_long["pipeline"].unique()),
+                kind="bar",  # or "point", "box", etc
+            )
             pane = pn.pane.Matplotlib(fig.fig, interactive=False)
             self.plot_container.append(pane)
             return
