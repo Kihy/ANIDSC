@@ -51,6 +51,8 @@ docker run --rm --gpus all -it \
   kihy/anidsc_image
 ```
 
+## running visualisation container
+
 To run the visualisation container:
 ```
 docker run --rm --gpus all -it \

@@ -70,7 +70,7 @@ class DataManager:
     def __init__(self, root: Path = ROOT, seed: int = 42):
         self.root = Path(root)
         self.frames = {}
-        self.csvs={}
+        self.csvs = {}
         random.seed(seed)
 
     def list_subdirectories(self, path: Optional[Path]) -> List[str]:
@@ -130,15 +130,14 @@ class DataManager:
         self,
         file_path: Path,
         widget_mgr: Optional["WidgetManager"] = None,
-        
     ) -> Iterable[dict]:
         """Yield JSON frames from a file, sampling by prob, with optional progress updates."""
         file_path = Path(file_path)
         if not file_path.exists():
             return
 
-        max_frames=widget_mgr.max_frames_input.value 
-        sample_range=(widget_mgr.range_start.value, widget_mgr.range_end.value)
+        max_frames = widget_mgr.max_frames_input.value
+        sample_range = (widget_mgr.range_start.value, widget_mgr.range_end.value)
         # Check cache
         cache_key = (file_path, max_frames, sample_range)
         if cache_key in self.frames:
@@ -172,32 +171,33 @@ class DataManager:
         if not path.exists():
             raise FileNotFoundError(path)
 
+        max_frames = widget_mgr.max_frames_input.value
+        sample_range = (widget_mgr.range_start.value, widget_mgr.range_end.value)
 
-        max_frames=widget_mgr.max_frames_input.value 
-        sample_range=(widget_mgr.range_start.value, widget_mgr.range_end.value)
-        
         # Check cache
         cache_key = (path, max_frames, sample_range)
         if cache_key in self.csvs:
-            df = pd.read_csv(io.StringIO(header + "".join(sample)))
-            return df.sort_values(by="timestamp")
-        
-        self._manage_progress_widget(
-            widget_mgr, visible=True, active=True, status="**0 rows read...**"
-        )
+            header = self.csvs[cache_key][0]
+            sample = self.csvs[cache_key][1]
+        else:
 
-        try:
-            with fsspec.open(path, "rt", compression="zstd") as f:
-                header = next(f)
-                sample = self._reservoir_sample(f, max_frames, sample_range, widget_mgr)
-            
-            self.csvs[cache_key] = sample
+            self._manage_progress_widget(
+                widget_mgr, visible=True, active=True, status="**0 rows read...**"
+            )
+            try:
+                with fsspec.open(path, "rt", compression="zstd") as f:
+                    header = next(f)
+                    sample = self._reservoir_sample(
+                        f, max_frames, sample_range, widget_mgr
+                    )
 
-            df = pd.read_csv(io.StringIO(header + "".join(sample)))
-            return df.sort_values(by="timestamp")
+                self.csvs[cache_key] = (header, sample)
 
-        finally:
-            self._manage_progress_widget(widget_mgr, visible=False)
+            finally:
+                self._manage_progress_widget(widget_mgr, visible=False)
+
+        df = pd.read_csv(io.StringIO(header + "".join(sample)))
+        return df.sort_values(by="timestamp")
 
     def get_frame(
         self,
@@ -205,10 +205,10 @@ class DataManager:
         idx: int,
         widget_mgr: Optional["WidgetManager"] = None,
     ) -> Optional[dict]:
-        """Return the frame at index idx."""        
+        """Return the frame at index idx."""
         for i, frame in enumerate(self.load_frames(file_path, widget_mgr)):
             print(i, idx, frame)
-            
+
             if i == idx:
                 return frame
         return None
@@ -383,43 +383,39 @@ class WidgetManager:
         )
         # Status text showing number of lines read
         self.status = pn.pane.Markdown("", sizing_mode="stretch_width", visible=False)
-        
+
         # Max frames widget
         self.max_frames_input = pn.widgets.IntInput(
-            name='Max Frames',
+            name="Max Frames",
             value=10000,
             step=100,
             start=1,
-            sizing_mode = "stretch_width"
-        )
-        
-        # Sample range widgets
-        self.range_start = pn.widgets.IntInput(
-            name='Range Start',
-            step=100,
-            value=0,
-            sizing_mode = "stretch_width"
-        )
-        
-        self.range_end = pn.widgets.IntInput(
-            name='Range End',
-            step=100,
-            value=1000,
-            sizing_mode = "stretch_width"
+            sizing_mode="stretch_width",
         )
 
-        self.file_filter=pn.WidgetBox("File Sampling", self.max_frames_input, self.range_start, self.range_end)
-        
-        self.pipeline_regex=pn.widgets.TextInput(name="Pipeline Regex",placeholder="Regex to filter pipeline names")
-        
-        
+        # Sample range widgets
+        self.range_start = pn.widgets.IntInput(
+            name="Range Start", step=100, value=0, sizing_mode="stretch_width"
+        )
+
+        self.range_end = pn.widgets.IntInput(
+            name="Range End", step=100, value=10000, sizing_mode="stretch_width"
+        )
+
+        self.file_filter = pn.WidgetBox(
+            "File Sampling", self.max_frames_input, self.range_start, self.range_end
+        )
+
+        self.pipeline_regex = pn.widgets.TextInput(
+            name="Pipeline Regex", placeholder="Regex to filter pipeline names"
+        )
+
         # watch wiring
         self.dataset_input.param.watch(self._on_dataset_change, "value")
         self.fe_input.param.watch(self._on_fe_change, "value")
         self.file_input.param.watch(self._on_file_change, "value")
         self.pipeline_input.param.watch(self._on_pipeline_change, "value")
         self.mode_selector.param.watch(self._on_mode_change, "value")
-        
 
         # small state to allow disabling widgets during long ops
         self._disable_targets = [
@@ -432,7 +428,7 @@ class WidgetManager:
             self.generate_btn,
             self.download_csv,
             self.mode_selector,
-            self.file_filter
+            self.file_filter,
         ]
 
         for w in self._disable_targets:
@@ -449,19 +445,22 @@ class WidgetManager:
                 "Parameters",
                 self.file_input,
                 self.pipeline_input,
+                self.file_filter,
                 self.node_input,
-                self.file_filter
+                
             )
         elif mode == "Network":
             return pn.WidgetBox(
                 "Parameters",
                 self.file_input,
                 self.pipeline_input,
+                self.file_filter,
                 self.graph_slider,
-                self.file_filter
             )
         elif mode == "Scores":
-            return pn.WidgetBox("Parameters", self.file_input, self.pipeline_input, self.file_filter)
+            return pn.WidgetBox(
+                "Parameters", self.file_input, self.pipeline_input, self.file_filter
+            )
         elif mode == "Summary":
             return pn.WidgetBox("Parameters", self.metric_input, self.pipeline_regex)
         return pn.pane.Markdown("Unknown mode")
@@ -583,7 +582,7 @@ class WidgetManager:
 # Plot manager: all plot logic collected here
 # ------------------------------
 class PlotManager:
-    
+
     def __init__(
         self, data_mgr: DataManager, widgets: WidgetManager, container: pn.Column
     ):
@@ -683,7 +682,7 @@ class PlotManager:
                         data_dict["threshold"].append(value)
 
                 concept_idx = str(node["data"].get("concept_idx"))
-                
+
                 if prev_concept != concept_idx or prev_concept is None:
                     prev_concept = concept_idx
                     concept_idx_order.append(concept_idx)
@@ -884,6 +883,7 @@ class PlotManager:
             return
 
         df = self.data_mgr.read_csv(file_path, self.w)
+        print(df.max(axis=0))
 
         fig = go.Figure()
 
@@ -1061,16 +1061,14 @@ class PlotManager:
             for pipeline_file in [
                 str(p.relative_to(file_dir)) for p in file_dir.rglob("*") if p.is_file()
             ]:
-                
-                regex=self.w.pipeline_regex.value
-                
-                if regex!="":
+
+                regex = self.w.pipeline_regex.value
+
+                if regex != "":
                     match = re.search(regex, pipeline_file)
                     if not match:
                         continue
-                        
 
-                
                 csv_path = file_dir / pipeline_file
                 df = pd.read_csv(csv_path)
                 if df.empty:
