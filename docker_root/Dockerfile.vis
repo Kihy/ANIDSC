@@ -54,4 +54,4 @@ USER hostuser
 EXPOSE 5006
 
 # Command to run the application
-CMD ["panel", "serve", "app.py", "--address", "0.0.0.0", "--port", "5006", "--dev"]
+CMD ["panel", "serve", "app.py", "--address", "0.0.0.0", "--port", "5007", "--dev"]

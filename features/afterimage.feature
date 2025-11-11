@@ -31,6 +31,7 @@ Feature: AfterImage
         When the pipeline starts
         Then the pipeline should not fail
         And the components are saved
+        And the results are written
         Examples:
             | model               |
             | torch_model.AE      |

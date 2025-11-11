@@ -2,8 +2,8 @@ from ANIDSC.pipeline import Pipeline
 from ANIDSC.utils.run_script import run_file
 from behave import given, when, then
 from shutil import rmtree
-
-
+import fsspec
+import pandas as pd
 import os
 
 
@@ -22,6 +22,25 @@ def step_given_feature_extractor(context, graph_rep):
 def step_then_data_processed_correctly(context):
     # the pipeline should run
     assert context.failed is False
+
+
+@then("the results are written")
+def step_then_results_saved(context):
+    for pipeline in context.pipelines:
+        
+        p_name=pipeline.name.split("->")
+        for i in p_name:
+            if i.endswith("ResultWriter"):
+                results_path=str(pipeline.get_attr_by_name(i,"feature_path"))
+                if results_path.endswith("csv.zst"):
+                    with fsspec.open(results_path, "rt", compression="zstd") as f:
+                        csv_df=pd.read_csv(f)
+                        assert len(csv_df)>0, f"{results_path} is empty"
+                elif results_path.endswith("ndjson.zst"):
+                    assert os.stat(results_path).st_size > 0, f"{results_path} is empty"
+                        
+        
+        
 
 
 @then("the components are saved")
@@ -92,5 +111,6 @@ def step_given_output_folder_is_empty(context, dataset, fe_name):
     file_dir = f"{dataset}/{fe_name}"
     if os.path.exists(file_dir):
         rmtree(file_dir)
+        
 
 

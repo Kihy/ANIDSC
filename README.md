@@ -45,8 +45,9 @@ docker run --rm --gpus all -it \
   -v "$(pwd)/ANIDSC":/workspace/intrusion_detection/ANIDSC \
   -v "$(pwd)/datasets":/workspace/intrusion_detection/datasets \
   -v "$(pwd)/experiments":/workspace/intrusion_detection/experiments \
+  -v "$(pwd)/features":/workspace/intrusion_detection/features \
   -v "$(pwd)/.vscode":/workspace/intrusion_detection/.vscode\
-  -w /workspace/intrusion_detection/ANIDSC \
+  -w /workspace/intrusion_detection/ \
   -u $(id -u):$(id -g)  \
   kihy/anidsc_image
 ```
@@ -60,7 +61,7 @@ docker run --rm --gpus all -it \
   -v "$(pwd)/visualisations":/workspace/intrusion_detection/visualisations \
   -w /workspace/intrusion_detection/visualisations \
   -u $(id -u):$(id -g)  \
-  -p 5006:5006 \
+  -p 5007:5007 \
   kihy/anidsc_vis_image
 ```
 
@@ -78,7 +79,7 @@ docker run --rm --gpus all -it \
   -w /workspace/intrusion_detection/ \
   -u $(id -u):$(id -g)  \
   kihy/anidsc_image \
-  behave features --stop
+  behave features --stop 
 ```
 
 ## running slurm jobs

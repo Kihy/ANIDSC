@@ -196,6 +196,7 @@ class DataManager:
             finally:
                 self._manage_progress_widget(widget_mgr, visible=False)
 
+
         df = pd.read_csv(io.StringIO(header + "".join(sample)))
         return df.sort_values(by="timestamp")
 
@@ -1071,7 +1072,7 @@ class PlotManager:
 
                 csv_path = file_dir / pipeline_file
                 df = pd.read_csv(csv_path)
-                if df.empty:
+                if len(df)<5:
                     continue
                 df = df.replace([np.inf, -np.inf], np.nan).assign(
                     dataset=self.w.dataset_input.value,

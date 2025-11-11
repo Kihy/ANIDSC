@@ -1,7 +1,7 @@
 import importlib
 import time
 from typing import Dict
-import os 
+import os
 from tqdm import tqdm
 import yaml
 
@@ -20,19 +20,17 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         super().__init__()
 
         self.start_time = None
-        self._components=components
-        
+        self._components = components
 
     def setup(self):
-        for i,comp in enumerate(self.components):
+        for i, comp in enumerate(self.components):
             comp.parent_pipeline = self
-            comp.index=i 
+            comp.index = i
             comp.setup()
-            
+
     def teardown(self):
-        for i,comp in enumerate(self.components):
+        for i, comp in enumerate(self.components):
             comp.teardown()
-        
 
     def process(self, data=None):
         """sequentially process data over each component
@@ -44,17 +42,20 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
             _type_: output data
         """
         self.start_time = time.time()
-        for  component in self.components:
+        for component in self.components:
             data = component.process(data)
 
             if data is None:
                 break
-       
 
     def start(self):
 
-        pbar = tqdm(mininterval=float(os.getenv("TQDM_MININTERVAL", 60)), dynamic_ncols=False, ascii=True)
-        
+        pbar = tqdm(
+            mininterval=float(os.getenv("TQDM_MININTERVAL", 60)),
+            dynamic_ncols=False,
+            ascii=True,
+        )
+
         try:
             while True:
                 self.process()
@@ -65,18 +66,17 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
             self.teardown()
             self.save()
 
-    @property 
+    @property
     def config_attr(self):
-        return {"manifest":[v.to_dict() for v in self.components]}
-        
-       
+        return {"manifest": [v.to_dict() for v in self.components]}
+
     def get_attr(self, index, attr, default=None):
-        for i in range(index-1, -1, -1):  # backward search
+        for i in range(index - 1, -1, -1):  # backward search
             comp = self.components[i]
 
             if hasattr(comp, attr):
                 return getattr(comp, attr)
-        
+
         for i in range(index, len(self.components)):  # forwards search
             comp = self.components[i]
 
@@ -86,7 +86,15 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         # check self
         if hasattr(self, attr):
             return getattr(self, attr)
-        
+
+        return default
+
+    def get_attr_by_name(self, comp_name, attr, default=None):
+        for comp in self.components:  # backward search
+            if comp_name == comp.name:
+
+                if hasattr(comp, attr):
+                    return getattr(comp, attr)
         return default
 
     def __eq__(self, other: "Pipeline"):
