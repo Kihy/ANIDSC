@@ -443,6 +443,7 @@ def standardizer(attr, concepts):
     Returns:
         Standardized attribute values
     """
+    
     concepts_array = np.array(concepts)
     if len(concepts_array.shape) == 1:
         concepts_array = concepts_array.reshape(-1, 1)
@@ -463,6 +464,7 @@ def standardizer(attr, concepts):
 
     if reshaped:
         standardized = standardized[0]
+   
     return standardized
 
 
@@ -648,6 +650,8 @@ class ConceptDetector:
             attr["concept_id"] = -1
             return attr
         
+        
+        
         # Phase 1 & 2: Initialize current and future concepts
         # During initialization, we don't scale - just collect data
         if not self.concepts[self.current_id].is_initialized():
@@ -692,7 +696,8 @@ class ConceptDetector:
             self.current_id = target_id
             return
         
-        # Uncertain - process one at a time
+        
+            
         self.future_concept.add_future_id(self.current_id, 1)
 
 
@@ -896,10 +901,11 @@ class CDD(GraphRepresentation):
         """
 
         scaled_graph = self.concept_store.update(X)
-
+        
         # remove unscaled nodes for model
         filtered_graph = scaled_graph.copy()
-
+        
+        
         to_remove = [
             n
             for n, d in filtered_graph.nodes(data=True)

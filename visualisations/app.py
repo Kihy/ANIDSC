@@ -445,8 +445,8 @@ class WidgetManager:
             return pn.WidgetBox(
                 "Parameters",
                 self.file_input,
-                self.pipeline_input,
                 self.file_filter,
+                self.pipeline_input,
                 self.node_input,
                 
             )
@@ -454,13 +454,13 @@ class WidgetManager:
             return pn.WidgetBox(
                 "Parameters",
                 self.file_input,
-                self.pipeline_input,
                 self.file_filter,
+                self.pipeline_input,
                 self.graph_slider,
             )
         elif mode == "Scores":
             return pn.WidgetBox(
-                "Parameters", self.file_input, self.pipeline_input, self.file_filter
+                "Parameters", self.file_input, self.file_filter, self.pipeline_input
             )
         elif mode == "Summary":
             return pn.WidgetBox("Parameters", self.metric_input, self.pipeline_regex)
@@ -655,7 +655,7 @@ class PlotManager:
         data_dict = defaultdict(list)
         prev_concept = None
         concept_change_indices = []
-        concept_idx_order = []
+        concept_id_order = []
         unique_concepts = set()
         time_val = None
 
@@ -682,13 +682,14 @@ class PlotManager:
                     elif key == "threshold":
                         data_dict["threshold"].append(value)
 
-                concept_idx = str(node["data"].get("concept_idx"))
-
-                if prev_concept != concept_idx or prev_concept is None:
-                    prev_concept = concept_idx
-                    concept_idx_order.append(concept_idx)
-                    concept_change_indices.append(time_val)
-                    unique_concepts.add(concept_idx)
+                concept_id = str(node["data"].get("concept_id"))
+                
+                if concept_id != "-1":        
+                    if prev_concept != concept_id or prev_concept is None:
+                        prev_concept = concept_id
+                        concept_id_order.append(concept_id)
+                        concept_change_indices.append(time_val)
+                        unique_concepts.add(concept_id)
 
                 # collect node fields (safe-get)
                 data_dict["node_as_vals"].append(node["data"].get("node_as"))
@@ -765,7 +766,7 @@ class PlotManager:
                 x=df["times"],
                 y=df["original_count_vals"],
                 mode="markers",
-                name="Scaled Count",
+                name="Original Count",
                 line=dict(color="orange", dash="dot"),
             )
         )
@@ -774,20 +775,20 @@ class PlotManager:
                 x=df["times"],
                 y=df["original_size_vals"],
                 mode="markers",
-                name="Scaled Size",
+                name="Original Size",
                 line=dict(color="green", dash="dot"),
             )
         )
 
         print(len(concept_change_indices))
-        print(concept_idx_order)
+        print(concept_id_order)
 
-        if len(concept_idx_order) < 20:
+        if len(concept_id_order) < 20:
             print("plotting concepts")
             for i, (prev_idx, cur_idx) in enumerate(
                 zip(concept_change_indices[:-1], concept_change_indices[1:])
             ):
-                concept = concept_idx_order[i]
+                concept = concept_id_order[i]
                 fig.add_vrect(
                     x0=prev_idx,
                     x1=cur_idx,
