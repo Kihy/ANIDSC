@@ -44,7 +44,6 @@ class PipelineComponent(ABC):
       
     @property
     def config_attr(self):
-        
         return self._params
     
     

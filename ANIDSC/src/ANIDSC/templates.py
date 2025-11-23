@@ -101,8 +101,8 @@ def make_graph_rep(**kwargs):
     }
 
 
-def make_pipeline(manifest) -> Dict[str, Any]:
-    return {"type": "pipeline", "class": "Pipeline", "attrs": {"manifest": manifest}}
+def make_pipeline(manifest, run_identifier) -> Dict[str, Any]:
+    return {"type": "pipeline", "class": "Pipeline", "attrs": {"manifest": manifest, "run_identifier":run_identifier}}
 
 
 def dict_to_yaml(pipeline_dict):
@@ -124,7 +124,7 @@ def get_template(template_name, **kwargs):
         components.append(
             make_feature_buffer("DictFeatureBuffer", "features", buffer_size=1)
         )
-        pipeline = make_pipeline(components)
+
 
     elif template_name == "feature_extraction":
         components.append(make_data_reader(**kwargs))
@@ -138,14 +138,14 @@ def get_template(template_name, **kwargs):
             components.append(
                 make_feature_buffer("NumpyFeatureBuffer", "features", buffer_size=1024)
             )
-        pipeline = make_pipeline(components)
+
 
     elif template_name == "basic_detection":
         components.append(make_data_reader(**kwargs))
         components.append(make_scaler(**kwargs))
         components.append(make_model(**kwargs))
         components.append(make_evaluator("CSVResultWriter"))
-        pipeline = make_pipeline(components)
+
 
     elif template_name == "lager":
         components = make_data_reader(**kwargs)
@@ -161,7 +161,7 @@ def get_template(template_name, **kwargs):
         name = f"{kwargs['node_encoder']}->{kwargs['model_name']}"
         components.update(make_splitter(inner_components, split_keys, name, **kwargs))
 
-        pipeline = make_pipeline(components)
+
 
     elif template_name == "homogeneous":
 
@@ -183,7 +183,9 @@ def get_template(template_name, **kwargs):
         components.append(make_model(**kwargs))
         components.append(make_evaluator("CSVResultWriter", **kwargs))
         components.append(make_evaluator("GraphResultWriter", **kwargs))
-        pipeline = make_pipeline(components)
+        
     else:
         raise ValueError("Unknown pipeline name")
+    
+    pipeline = make_pipeline(components, kwargs["run_identifier"])
     return dict_to_yaml(pipeline)

@@ -32,6 +32,9 @@ class BaseNodeEmbedder(PickleSaveMixin, PipelineComponent):
             x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr
         )
         
+        # assign inf to all node embeddings 
+        node_embeddings[data.malicious]=torch.inf
+        
         self.model.train_step(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr)
         
         return node_embeddings

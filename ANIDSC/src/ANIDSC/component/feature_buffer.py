@@ -84,8 +84,10 @@ class CompressedOutputWriter(PipelineComponent):
         self.feature_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.save_file = fsspec.open(self.feature_path, "wt", compression="zstd").open()
-
+        
+        
     def teardown(self):
+        self.save_file.flush()
         self.save_file.close()
         
         # check file is valid

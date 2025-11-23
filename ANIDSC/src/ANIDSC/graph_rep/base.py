@@ -43,7 +43,9 @@ class GraphProcessor(PickleSaveMixin, PipelineComponent):
 
         data = from_networkx(X, group_node_attrs=["count", "size"])
         data.x = data.x.float()
-
+        
+        data.malicious=[node[1] or False 
+                  for node in X.nodes(data="malicious_concept")]
         data.label = [node for node in X.nodes]
         data.time_stamp = X.graph["time_stamp"]
 

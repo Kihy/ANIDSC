@@ -196,7 +196,6 @@ class DataManager:
             finally:
                 self._manage_progress_widget(widget_mgr, visible=False)
 
-
         df = pd.read_csv(io.StringIO(header + "".join(sample)))
         return df.sort_values(by="timestamp")
 
@@ -403,10 +402,6 @@ class WidgetManager:
             name="Range End", step=100, value=10000, sizing_mode="stretch_width"
         )
 
-        self.file_filter = pn.WidgetBox(
-            "File Sampling", self.max_frames_input, self.range_start, self.range_end
-        )
-
         self.pipeline_regex = pn.widgets.TextInput(
             name="Pipeline Regex", placeholder="Regex to filter pipeline names"
         )
@@ -429,7 +424,6 @@ class WidgetManager:
             self.generate_btn,
             self.download_csv,
             self.mode_selector,
-            self.file_filter,
         ]
 
         for w in self._disable_targets:
@@ -444,23 +438,31 @@ class WidgetManager:
         if mode == "Node":
             return pn.WidgetBox(
                 "Parameters",
+                self.max_frames_input,
+                self.range_start,
+                self.range_end,
                 self.file_input,
-                self.file_filter,
                 self.pipeline_input,
                 self.node_input,
-                
             )
         elif mode == "Network":
             return pn.WidgetBox(
                 "Parameters",
+                self.max_frames_input,
+                self.range_start,
+                self.range_end,
                 self.file_input,
-                self.file_filter,
                 self.pipeline_input,
                 self.graph_slider,
             )
         elif mode == "Scores":
             return pn.WidgetBox(
-                "Parameters", self.file_input, self.file_filter, self.pipeline_input
+                "Parameters",
+                self.max_frames_input,
+                self.range_start,
+                self.range_end,
+                self.file_input,
+                self.pipeline_input,
             )
         elif mode == "Summary":
             return pn.WidgetBox("Parameters", self.metric_input, self.pipeline_regex)
@@ -683,8 +685,8 @@ class PlotManager:
                         data_dict["threshold"].append(value)
 
                 concept_id = str(node["data"].get("concept_id"))
-                
-                if concept_id != "-1":        
+              
+                if concept_id != "-1":
                     if prev_concept != concept_id or prev_concept is None:
                         prev_concept = concept_id
                         concept_id_order.append(concept_id)
@@ -720,7 +722,7 @@ class PlotManager:
 
         df = pd.DataFrame(data_dict).sort_values("times")
 
-        print("plotting")
+     
 
         # Build the plotly figure (keeps the same traces & names as original)
         fig = go.Figure()
@@ -864,7 +866,12 @@ class PlotManager:
             ylabel="",
             title=f"{graph_idx}",
         )
-        labels = hv.Labels(hv_graph.nodes, ["x", "y"], "name")
+        
+        nodes_data = hv_graph.nodes.data.copy()
+        nodes_data['name'] = nodes_data['name'].map(MAC_TO_DEVICE).fillna(nodes_data['name'])
+
+
+        labels = hv.Labels(nodes_data , ["x", "y"], "name")
         labelled = hv_graph * labels.opts(text_font_size="8pt", text_color="black")
         self.plot_container.append(
             pn.pane.HoloViews(labelled, sizing_mode="stretch_height")
@@ -1017,7 +1024,6 @@ class PlotManager:
                 )
 
                 # Compute AP
-
                 ap = average_precision_score(labels, scores)
                 model_ap[attack_file] = ap
 
@@ -1073,17 +1079,25 @@ class PlotManager:
 
                 csv_path = file_dir / pipeline_file
                 df = pd.read_csv(csv_path)
-                if len(df)<5:
+                if len(df) < 5:
                     continue
+   
                 df = df.replace([np.inf, -np.inf], np.nan).assign(
                     dataset=self.w.dataset_input.value,
                     fe_name=self.w.fe_input.value,
                     file=file,
                     pipeline=simple_pipeline_name(pipeline_file),
                 )
-                scores_dict[simple_pipeline_name(pipeline_file)].update(
-                    {file: df["median_score"]}
-                )
+                
+                # filter 
+                df=df.dropna()
+                
+                if len(df)==0:
+                    print(f"skipping {csv_path} as it contains no finite value")
+                else:
+                    scores_dict[simple_pipeline_name(pipeline_file)].update(
+                        {file: df["median_score"]}
+                    )
 
                 summary = (
                     df.groupby(["dataset", "fe_name", "file", "pipeline"])

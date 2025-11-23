@@ -57,7 +57,7 @@ class BaseTorchModel(torch.nn.Module):
         pass
 
     def predict_step(self, X):
-
+                
         X = self.preprocess(X)
 
         with torch.no_grad():

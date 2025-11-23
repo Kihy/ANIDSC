@@ -44,12 +44,17 @@ To run the experiment container:
 docker run --rm --gpus all -it \
   -v "$(pwd)/ANIDSC":/workspace/intrusion_detection/ANIDSC \
   -v "$(pwd)/datasets":/workspace/intrusion_detection/datasets \
-  -v "$(pwd)/experiments":/workspace/intrusion_detection/experiments \
+  -v "$(pwd)/experiments/scripts":/workspace/intrusion_detection/experiments \
   -v "$(pwd)/features":/workspace/intrusion_detection/features \
   -v "$(pwd)/.vscode":/workspace/intrusion_detection/.vscode\
   -w /workspace/intrusion_detection/ \
   -u $(id -u):$(id -g)  \
   kihy/anidsc_image
+```
+
+Script inside docker 
+```
+python3 real_experiment.py homogeneous uq_dataset --config "{\"fe_name\": \"NetworkAccessGraphExtractor\",\"graph_rep\": \"CDD\", \"reader_type\":\"JsonGraphReader\", \"model_name\": \"MedianDetector\", \"node_embed\": \"PassThroughEmbedder\", \"run_identifier\": \"123456\"}"
 ```
 
 ## running visualisation container

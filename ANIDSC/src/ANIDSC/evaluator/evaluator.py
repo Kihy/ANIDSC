@@ -15,7 +15,7 @@ from . import od_metrics
 from pathlib import Path
 import time
 from torch.utils.tensorboard import SummaryWriter
-
+from datetime import datetime
 
 METRICS = [
     "detection_rate",
@@ -30,12 +30,13 @@ METRICS = [
 ]
 
 class BaseResultWriter(CompressedOutputWriter):
+        
     @property 
     def output_path(self):
         pipeline_name = self.parent_pipeline.name
-
+        
         return Path(
-            f"{self.dataset_name}/{self.comp_name}/{self.folder_name}/{self.file_name}/{pipeline_name}.{self.file_type}"
+            f"{self.dataset_name}/{self.comp_name}-{self.request_attr('run_identifier')}/{self.folder_name}/{self.file_name}/{pipeline_name}.{self.file_type}"
         )
 
 class CSVResultWriter(PickleSaveMixin, BaseResultWriter):
@@ -73,6 +74,8 @@ class CSVResultWriter(PickleSaveMixin, BaseResultWriter):
             result_dict[metric_name] = metric(data)
 
         self.save_file.write(",".join(map(str, result_dict.values())) + "\n")
+        
+        
 
         return data
 

@@ -1,3 +1,4 @@
+from datetime import datetime
 from ANIDSC.pipeline import Pipeline
 from ANIDSC.utils.run_script import run_file
 from behave import given, when, then
@@ -74,6 +75,7 @@ def step_given_dataset_and_file(context):
 
     context.file_iterator = iterate_files
     context.pipeline_vars = {}
+    context.pipeline_vars["run_identifier"] = context.run_identifier
 
 
 @given("Meta Extractor: {meta_extractor}")
@@ -102,15 +104,27 @@ def step_given_pipeline(context, pipeline_name):
 
 @when("the pipeline starts")
 def step_when_pipeline_starts(context):
+    
     context.pipelines=run_file(context.file_iterator, context.pipeline_name, context.pipeline_vars)
 
 
 @given("{dataset} {fe_name} folder is empty")
 def step_given_output_folder_is_empty(context, dataset, fe_name):
 
-    file_dir = f"{dataset}/{fe_name}"
+    file_dir = f"datasets/{dataset}/{fe_name}"
     if os.path.exists(file_dir):
         rmtree(file_dir)
         
+@given("folders that starts with {dataset} {fe_name} are empty")
+def step_given_output_folders_are_empty(context, dataset, fe_name):
+    base_dir = f"datasets/{dataset}"
 
+    if not os.path.exists(base_dir):
+        return
 
+    for name in os.listdir(base_dir):
+        path = os.path.join(base_dir, name)
+
+        # remove only directories whose names start with fe_name
+        if os.path.isdir(path) and name.startswith(fe_name):
+            rmtree(path)

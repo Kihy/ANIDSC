@@ -31,6 +31,7 @@ def run_file(file_iterator, pipeline_name, pipeline_vars):
                 "file_name"
             ]
             manifest["attrs"]["manifest"][0]["file"] = None
+            manifest["attrs"]["run_identifier"] = pipeline_vars["run_identifier"]
 
             pipeline = Pipeline.load(manifest)
             pipeline.setup()

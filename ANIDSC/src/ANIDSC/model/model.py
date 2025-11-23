@@ -1,5 +1,6 @@
-
 import math
+
+import torch
 from ..save_mixin.pickle import PickleSaveMixin
 from ..component.pipeline_component import PipelineComponent
 from collections import deque
@@ -7,9 +8,10 @@ from collections import deque
 from abc import abstractmethod
 import numpy as np
 from ..utils import threshold_func
-from .. scaler import LivePercentile
+from ..scaler import LivePercentile
 
 import importlib
+
 
 class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def __init__(
@@ -29,64 +31,65 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
             profile (bool, optional): whether to profile the model, only available for pytorch models. Defaults to False.
             load_existing (bool, optional): whether to loading existing model. Defaults to False.
         """
-        super().__init__( **kwargs)
-        
-        self.model_name=model_name
+        super().__init__(**kwargs)
+
+        self.model_name = model_name
         self.loss_queue = deque(maxlen=queue_len)
-        
+
         self.warmup = warmup
-        self.percentile=percentile 
-        self.t_func=getattr(threshold_func, t_func)
-                
+        self.percentile = percentile
+        self.t_func = getattr(threshold_func, t_func)
+
         self.batch_trained = 0
         self.batch_evaluated = 0
-        self.model=None 
-        
-        
+        self.model = None
+
     def teardown(self):
-        pass 
-        
+        pass
+
     def setup(self):
-        
+
         if self.model is None:
             if "." in self.model_name:
                 sub_module, class_name = self.model_name.rsplit(".", 1)
-                module_path=f"ANIDSC.model.{sub_module}"
+                module_path = f"ANIDSC.model.{sub_module}"
             else:
-                module_path="ANIDSC.model"
-                class_name=self.model_name
-                
-            module = importlib.import_module(module_path)
-            self.model_cls=getattr(module, class_name)
-                    
-            ndim=self.request_attr("output_dim")
+                module_path = "ANIDSC.model"
+                class_name = self.model_name
 
-            self.model=self.model_cls(ndim)
-        
+            module = importlib.import_module(module_path)
+            self.model_cls = getattr(module, class_name)
+
+            ndim = self.request_attr("output_dim")
+
+            self.model = self.model_cls(ndim)
 
     def process(self, X):
-        threshold=self.get_threshold()
-        
-        
-        
-        # calculate score
-        score = self.model.predict_step(X)
+        threshold = self.get_threshold()
 
-        self.batch_evaluated+=1
-        
+        score = np.full((X.shape[0],), np.inf)
+
+        if isinstance(X, torch.Tensor):
+            mask = ~torch.isinf(X).any(dim=1)
+            # calculate score
+            score[mask.cpu()] = self.model.predict_step(X[mask])
+        else:
+            mask = ~np.isinf(X).any(axis=1)
+            score[mask] = self.model.predict_step(X[mask])
+
+        self.batch_evaluated += 1
+
         # train if mostly benign or less than warmup
         if self.batch_trained < self.warmup or threshold > np.median(score):
             # store score for trained samples only
             if score is not None:
                 self.loss_queue.extend([x for x in score if not math.isinf(x)])
-             
+
             self.model.train_step(X)
-            self.batch_trained+=1
-        
+            self.batch_trained += 1
+
         return {"threshold": threshold, "score": score}
 
-    
-    
     def get_threshold(self) -> float:
         """gets the current threshold value based on previous recorded loss value. By default it is 95th percentile
 
@@ -99,7 +102,5 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
             threshold = np.inf
         return threshold
 
-    
     def __str__(self):
         return f"OnlineOD({self.model_name})"
-

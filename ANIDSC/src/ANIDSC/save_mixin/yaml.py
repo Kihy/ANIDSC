@@ -53,4 +53,4 @@ class YamlSaveMixin(BaseSaveMixin):
         else:
             raise TypeError("Unknown input_data format")
 
-        return cls(load_components(**manifest["attrs"]))
+        return cls(load_components(manifest["attrs"]["manifest"]), manifest["attrs"]["run_identifier"])
