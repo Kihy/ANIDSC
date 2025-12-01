@@ -18,7 +18,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         self,
         model_name,
         queue_len=10000,
-        percentile=0.95,
+        percentile=0.99,
         warmup=1000,
         t_func="log_normal_quantile",
         **kwargs,

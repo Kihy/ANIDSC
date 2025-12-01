@@ -35,7 +35,7 @@ class Concept:
         self.min_length = min_length
         self.max_length = max_length
         self.reservoir = []
-        self.malicious=malicious
+        self.malicious = malicious
         self.count = 0  # Number of items processed so far
 
     def __repr__(self):
@@ -295,7 +295,7 @@ def ks_test_multivariate(X, Y):
         _, p_val = ks_2samp(X[:, i], Y[:, i])
         p_values.append(p_val)
 
-    return np.min(np.array(p_values))  
+    return np.min(np.array(p_values))
 
 
 def min_max_scaler(attr, concepts):
@@ -391,13 +391,12 @@ class ConceptDetector:
         self.current_id = 0
         self.drift_detector = drift_detector
         self.scaler = scaler
-        self.p=0.01
+        self.p = 0.01
         self.future_concept = FutureConcept(min_length)
 
     def __repr__(self):
         return self.name
 
-    
     def update(self, attr):
         """
         Update the concept detector with new attribute data.
@@ -456,13 +455,16 @@ class ConceptDetector:
         current_sample = self.concepts[self.current_id].get_sample()
         future_sample = self.future_concept.get_sample()
 
+        p_value = self.drift_detector(current_sample, future_sample)
+        
+
         # No drift detected with high confidence - assign all to current
-        if self.drift_detector(current_sample, future_sample) > 1-self.p:
+        if p_value > 1 - self.p:
             self.future_concept.add_future_id(self.current_id, len(future_sample))
             return
 
         # Drift detected - find or create matching concept
-        if self.drift_detector(current_sample, future_sample)<self.p:
+        if p_value < self.p:
             target_id = self._find_or_create_matching_concept(future_sample)
             self.future_concept.add_future_id(target_id, len(future_sample))
             self.current_id = target_id
@@ -474,32 +476,38 @@ class ConceptDetector:
         """Helper: Find existing matching concept or create new one"""
         # Find all concepts that match the future sample
 
-        # TODO: measure difference and mark malicious concept
+
         matching_ids = []
-        non_matching_p=[]
+        non_matching_p = []
         for concept_id, concept in self.concepts.items():
             candidate_sample = concept.get_sample()
-            p_value=self.drift_detector(future_sample, np.array(candidate_sample))
-            if p_value<self.p:
+            p_value = self.drift_detector(future_sample, np.array(candidate_sample))
+           
+            if p_value > self.p:
                 matching_ids.append(concept_id)
             else:
                 non_matching_p.append(p_value)
 
         # No matches - create new concept
         if not matching_ids:
-            
-            # check maximum p value, if its still very small, its malicious concept 
-            if np.max(non_matching_p)< 1e-4:
-                malicious=True 
+
+            # check maximum p value, if its still very small, its malicious concept
+            if np.max(non_matching_p) < 1e-3:
+                malicious = True
             else:
-                malicious=False 
-                
+                malicious = False
+
             self.concept_count += 1
             new_id = self.concept_count
-            self.concepts[new_id] = Concept(new_id, self.min_length, self.max_length, malicious)
+            self.concepts[new_id] = Concept(
+                new_id, self.min_length, self.max_length, malicious
+            )
             self.concepts[new_id].add_batch(future_sample)
-            
-            print(f"{self.name}: adding concept {new_id}, malicious: {malicious}, maxp p {np.max(non_matching_p)}", file=sys.stderr)
+
+            print(
+                f"{self.name}: adding concept {new_id}, malicious: {malicious}, maxp p {np.max(non_matching_p)}",
+                file=sys.stderr,
+            )
             return new_id
 
         # One match - use it
@@ -523,7 +531,7 @@ class ConceptDetector:
             self.concepts[primary_id].add_batch(self.concepts[concept_id].get_sample())
             # if any is malicious, all is malicious
             if self.concepts[concept_id].malicious:
-                self.concepts[primary_id].malicious=True
+                self.concepts[primary_id].malicious = True
 
         # Update future_concept queue to remap merged IDs to primary
         id_mapping = {old_id: primary_id for old_id in matching_ids[1:]}
@@ -701,10 +709,9 @@ class CDD(GraphRepresentation):
         filtered_graph = scaled_graph.copy()
 
         to_remove = [
-            n for n, d in filtered_graph.nodes(data=True) if d.get("concept_id") is None 
+            n for n, d in filtered_graph.nodes(data=True) if d.get("concept_id") is None
         ]
-        
-        
+
         # remove them
         filtered_graph.remove_nodes_from(to_remove)
 

@@ -1,24 +1,24 @@
 Feature: Detection with homogeneous models
-    # Scenario: Meta extraction
-    #     Given test_data ProtocolMetaExtractor folder is empty
-    #     Given The test_data file iterator
-    #     And Data Source: PacketReader
-    #     And Meta Extractor: ProtocolMetaExtractor
-    #     And a meta_extraction pipeline
-    #     When the pipeline starts
-    #     Then the pipeline should not fail
-    #     And the components are saved
+    Scenario: Meta extraction
+        Given test_data ProtocolMetaExtractor folder is empty
+        Given The test_data file iterator
+        And Data Source: PacketReader
+        And Meta Extractor: ProtocolMetaExtractor
+        And a meta_extraction pipeline
+        When the pipeline starts
+        Then the pipeline should not fail
+        And the components are saved
 
-    # Scenario: Feature extraction
-    #     Given folders that starts with test_data NetworkAccessGraphExtractor are empty
-    #     Given The test_data file iterator
-    #     And Data Source: CSVReader
-    #     And FE Name: ProtocolMetaExtractor
-    #     And Feature Extractor: NetworkAccessGraphExtractor
-    #     And a feature_extraction pipeline
-    #     When the pipeline starts
-    #     Then the pipeline should not fail
-    #     And the components are saved
+    Scenario: Feature extraction
+        Given folders that starts with test_data NetworkAccessGraphExtractor are empty
+        Given The test_data file iterator
+        And Data Source: CSVReader
+        And FE Name: ProtocolMetaExtractor
+        And Feature Extractor: NetworkAccessGraphExtractor
+        And a feature_extraction pipeline
+        When the pipeline starts
+        Then the pipeline should not fail
+        And the components are saved
 
 
     Scenario Outline: Detection with homogeneous models, ICL and Kitsune does not work well with small dimension input
