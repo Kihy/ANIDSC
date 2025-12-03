@@ -685,7 +685,7 @@ class PlotManager:
                         data_dict["threshold"].append(value)
 
                 concept_id = str(node["data"].get("concept_id"))
-              
+
                 if concept_id != "-1":
                     if prev_concept != concept_id or prev_concept is None:
                         prev_concept = concept_id
@@ -721,8 +721,6 @@ class PlotManager:
         }
 
         df = pd.DataFrame(data_dict).sort_values("times")
-
-     
 
         # Build the plotly figure (keeps the same traces & names as original)
         fig = go.Figure()
@@ -866,12 +864,13 @@ class PlotManager:
             ylabel="",
             title=f"{graph_idx}",
         )
-        
+
         nodes_data = hv_graph.nodes.data.copy()
-        nodes_data['name'] = nodes_data['name'].map(MAC_TO_DEVICE).fillna(nodes_data['name'])
+        nodes_data["name"] = (
+            nodes_data["name"].map(MAC_TO_DEVICE).fillna(nodes_data["name"])
+        )
 
-
-        labels = hv.Labels(nodes_data , ["x", "y"], "name")
+        labels = hv.Labels(nodes_data, ["x", "y"], "name")
         labelled = hv_graph * labels.opts(text_font_size="8pt", text_color="black")
         self.plot_container.append(
             pn.pane.HoloViews(labelled, sizing_mode="stretch_height")
@@ -1001,18 +1000,21 @@ class PlotManager:
 
     def compute_map(self, scores_dict):
         ap_results = {}
+        
 
         for model_name, file_dict in scores_dict.items():
-
+            
             # Identify benign and attack files
             benign_file = [f for f in file_dict if f.startswith("benign")][0]
             attack_files = [f for f in file_dict if f.startswith("attack")]
 
-            benign_scores = file_dict[benign_file].dropna().values
+            
+            benign_scores = file_dict[benign_file].values
+            
 
             model_ap = {}
             for attack_file in attack_files:
-                attack_scores = file_dict[attack_file].dropna().values
+                attack_scores = file_dict[attack_file].values
 
                 # Combine scores and labels
                 scores = np.concatenate([benign_scores, attack_scores])
@@ -1081,18 +1083,18 @@ class PlotManager:
                 df = pd.read_csv(csv_path)
                 if len(df) < 5:
                     continue
-   
+
                 df = df.assign(
                     dataset=self.w.dataset_input.value,
                     fe_name=self.w.fe_input.value,
                     file=file,
                     pipeline=simple_pipeline_name(pipeline_file),
                 )
-                
-                # filter 
-                df=df.dropna()
-                
-                if len(df)==0:
+            
+                # filter
+                df = df.replace(np.inf, np.finfo(np.float64).max).dropna()
+
+                if len(df) == 0:
                     print(f"skipping {csv_path} as it contains no finite value")
                 else:
                     scores_dict[simple_pipeline_name(pipeline_file)].update(

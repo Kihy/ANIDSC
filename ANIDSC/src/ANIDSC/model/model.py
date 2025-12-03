@@ -67,7 +67,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def process(self, X):
         threshold = self.get_threshold()
 
-        score = np.full((X.shape[0],), threshold+1)
+        score = np.full((X.shape[0],), np.finfo(np.float64).max)
 
         if isinstance(X, torch.Tensor):
             mask = ~torch.isinf(X).any(dim=1)
@@ -91,7 +91,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         return {"threshold": threshold, "score": score}
 
     def get_threshold(self) -> float:
-        """gets the current threshold value based on previous recorded loss value. By default it is 95th percentile
+        """gets the current threshold value based on previous recorded loss value. By default it is 99th percentile
 
         Returns:
             float: threshold value
@@ -99,7 +99,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         if len(self.loss_queue) > self.warmup:
             threshold = self.t_func(self.loss_queue, self.percentile)
         else:
-            threshold = np.inf
+            threshold = np.finfo(np.float64).max
         return threshold
 
     def __str__(self):
