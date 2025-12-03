@@ -1082,7 +1082,7 @@ class PlotManager:
                 if len(df) < 5:
                     continue
    
-                df = df.replace([np.inf, -np.inf], np.nan).assign(
+                df = df.assign(
                     dataset=self.w.dataset_input.value,
                     fe_name=self.w.fe_input.value,
                     file=file,

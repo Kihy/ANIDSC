@@ -67,7 +67,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def process(self, X):
         threshold = self.get_threshold()
 
-        score = np.full((X.shape[0],), np.inf)
+        score = np.full((X.shape[0],), threshold+1)
 
         if isinstance(X, torch.Tensor):
             mask = ~torch.isinf(X).any(dim=1)
