@@ -1,4 +1,8 @@
 Feature: Detection with homogeneous models
+    Scenario: Empty folders
+        Given test_data ProtocolMetaExtractor folder is empty
+        Given test_data AfterImage folder is empty
+        
     Scenario: Meta extraction
         Given test_data ProtocolMetaExtractor folder is empty
         Given The test_data file iterator

@@ -351,7 +351,10 @@ class WidgetManager:
             options=[
                 "mAP",
                 "f1",
-                "accuracy",
+                "accuracy_binary",
+                "accuracy_device",
+                "accuracy_attack",
+                "accuracy_full",
                 "hmean_acc",
                 "average time",
                 "total positive",
@@ -1168,39 +1171,60 @@ class PlotManager:
             self.plot_container.append(pane)
             return
 
-        if metric == "accuracy":
+        
+        
+        if metric.startswith("accuracy"):
+            
+            summary_df[["label", "device", "attack"]] = summary_df["file"].str.split("/", expand=True)
+            summary_df["attack"]=summary_df["attack"].astype(str)
+
+            # Define metric-specific configuration
+            metric_config = {
+                "binary": ("label", lambda x: x.startswith("benign")),
+                "device": ("device", lambda x: x.startswith("whole_week")),
+                "attack": ("attack", lambda x: x.startswith("None")),
+                "full": ("file", lambda x: x.startswith("benign"))
+            }
+
+            # Get the appropriate grouping column and negative condition
+            for suffix, (group_col, is_negative) in metric_config.items():
+                if metric.endswith(suffix):
+                    groupby_cols = ["dataset", "fe_name", "pipeline", group_col]
+                    break
+
+            # Process groups
             results = []
-            for (dataset, fe_name, pipeline), group in summary_df.groupby(
-                ["dataset", "fe_name", "pipeline"]
-            ):
-                df_stats = calc_stats(group)
-                df_stats["dataset"] = dataset
-                df_stats["fe_name"] = fe_name
-                df_stats["pipeline"] = pipeline
-                results.append(df_stats)
+            for group_keys, group in summary_df.groupby(groupby_cols):
+                dataset, fe_name, pipeline, label = group_keys
+                
+                # Calculate accuracy
+                ratio = group["pos_count"].sum() / group["batch_size"].sum()
+                accuracy = 1 - ratio if is_negative(label) else ratio
+                
+                # Create result
+                results.append({
+                    "accuracy": accuracy,
+                    "dataset": dataset,
+                    "fe_name": fe_name,
+                    "pipeline": pipeline,
+                    "label": label
+                })
 
-            results_df = pd.concat(results, ignore_index=True)
-
-            df_long = results_df.melt(
-                id_vars="pipeline",
-                value_vars=["acc_benign", "acc_malicious"],
-                var_name="metric",
-                value_name="accuracy",
-            )
+            results_df = pd.concat([pd.DataFrame([r]) for r in results], ignore_index=True)
 
             # Plot
             fig = sns.catplot(
-                data=df_long,
-                y="pipeline",
+                data=results_df,  # Fixed: was df_stats, should be results_df
+                y="label",
                 x="accuracy",
-                hue="metric",
+                hue="pipeline",
                 aspect=1.6,
-                height=0.2 * len(df_long["pipeline"].unique()),
-                kind="bar",  # or "point", "box", etc
+                height=0.2 * len(results_df["label"].unique()),
+                kind="bar",
             )
             pane = pn.pane.Matplotlib(fig.fig, interactive=False)
             self.plot_container.append(pane)
-            return
+            return 
 
         # otherwise compute derived metrics using calc_stats
         results = []

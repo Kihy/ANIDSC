@@ -39,7 +39,8 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         self.warmup = warmup
         self.percentile = percentile
         self.t_func = getattr(threshold_func, t_func)
-
+        self.tolerance=2
+        
         self.batch_trained = 0
         self.batch_evaluated = 0
         self.model = None
@@ -66,40 +67,43 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
 
     def process(self, X):
         threshold = self.get_threshold()
-
         score = np.full((X.shape[0],), np.finfo(np.float64).max)
-
-        if isinstance(X, torch.Tensor):
-            mask = ~torch.isinf(X).any(dim=1)
-            # calculate score
-            score[mask.cpu()] = self.model.predict_step(X[mask])
+        
+        # Ensure X is a tensor
+        if isinstance(X, np.ndarray):
+            X = torch.from_numpy(X)
+        
+        # Get valid samples (no inf values)
+        valid_mask = ~torch.isinf(X).any(dim=1)
+        score[valid_mask.cpu().numpy()] = self.model.predict_step(X[valid_mask])
+        self.batch_evaluated+=1
+        
+        
+        # Determine training mask and scores to queue
+        if self.batch_trained < self.warmup:
+            train_mask = valid_mask    
         else:
-            mask = ~np.isinf(X).any(axis=1)
-            score[mask] = self.model.predict_step(X[mask])
-
-        self.batch_evaluated += 1
-
-        # train if mostly benign or less than warmup
-        if self.batch_trained < self.warmup or threshold > np.median(score):
-            # store score for trained samples only
-            if score is not None:
-                self.loss_queue.extend([x for x in score if not math.isinf(x)])
-
-            self.model.train_step(X)
-            self.batch_trained += 1
-
+            train_mask = valid_mask & (torch.from_numpy(score) < self.tolerance*threshold)
+        
+        queue_scores = score[train_mask.cpu().numpy()]
+        
+        # Update loss queue and train
+        self.loss_queue.extend(queue_scores)
+        self.model.train_step(X[train_mask])
+        self.batch_trained += 1
+        
         return {"threshold": threshold, "score": score}
 
     def get_threshold(self) -> float:
         """gets the current threshold value based on previous recorded loss value. By default it is 99th percentile
-
+        If its in warmup stage, the threshold is -1
         Returns:
             float: threshold value
         """
         if len(self.loss_queue) > self.warmup:
             threshold = self.t_func(self.loss_queue, self.percentile)
         else:
-            threshold = np.finfo(np.float64).max
+            threshold = -1
         return threshold
 
     def __str__(self):
