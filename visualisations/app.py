@@ -1174,7 +1174,7 @@ class PlotManager:
         
         
         if metric.startswith("accuracy"):
-            
+            print(summary_df["file"])
             summary_df[["label", "device", "attack"]] = summary_df["file"].str.split("/", expand=True)
             summary_df["attack"]=summary_df["attack"].astype(str)
 

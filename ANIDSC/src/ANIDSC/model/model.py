@@ -83,7 +83,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         if self.batch_trained < self.warmup:
             train_mask = valid_mask    
         else:
-            train_mask = valid_mask & (torch.from_numpy(score) < self.tolerance*threshold)
+            train_mask = valid_mask & torch.from_numpy(score < self.tolerance*threshold).cuda()
         
         queue_scores = score[train_mask.cpu().numpy()]
         
