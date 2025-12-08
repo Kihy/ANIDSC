@@ -35,6 +35,8 @@ def run_file(file_iterator, pipeline_name, pipeline_vars):
 
             pipeline = Pipeline.load(manifest)
             pipeline.setup()
+        else:
+            raise ValueError("Unknown State", state)
         pipeline.start()
 
         print("Execution completed successfully!")

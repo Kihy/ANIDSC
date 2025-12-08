@@ -709,7 +709,7 @@ class CDD(GraphRepresentation):
         filtered_graph = scaled_graph.copy()
 
         to_remove = [
-            n for n, d in filtered_graph.nodes(data=True) if d.get("concept_id") is None
+            n for n, d in filtered_graph.nodes(data=True) if d.get("concept_id") in [None, -1]
         ]
 
         # remove them

@@ -22,7 +22,7 @@ class MedianDetector(PickleSaveMixin):
         return_score=[]
         for data in X:
             data=data.cpu().detach().numpy()
-            score=-float('inf')
+            score=0
             for x, dim in zip(data, self.model):
                 
                 if np.isnan(dim.mean):

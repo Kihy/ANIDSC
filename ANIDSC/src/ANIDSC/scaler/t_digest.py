@@ -9,13 +9,13 @@ import numpy as np
 
 
 class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
-    def __init__(self):
+    def __init__(self, **kwargs):
         """normalizes input with percentile calculations with tdigest
 
         Args:
             p (List[float], optional): list of percentiles for extraction, in the order lower percentile, median, upper percentile. Defaults to [0.25, 0.5, 0.75].
         """
-        super().__init__()
+        super().__init__(**kwargs)
 
         self.p = [0.16, 0.5, 0.84]
         self.count = 0
@@ -39,7 +39,7 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
 
         self.count += 1
 
-    def process(self, X):
+    def transform(self, X):
         
         # convert to numpy
         if isinstance(X, torch.Tensor):
@@ -56,10 +56,6 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         scaled_features = np.nan_to_num(
             scaled_features, nan=0.0, posinf=0.0, neginf=0.0
         )
-        
-        #update afterwards
-        
-        self.update(X)
 
         return scaled_features
 

@@ -71,7 +71,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         
         # Ensure X is a tensor
         if isinstance(X, np.ndarray):
-            X = torch.from_numpy(X)
+            X = torch.from_numpy(X).cuda()
         
         # Get valid samples (no inf values)
         valid_mask = ~torch.isinf(X).any(dim=1)
@@ -83,12 +83,13 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         if self.batch_trained < self.warmup:
             train_mask = valid_mask    
         else:
-            train_mask = valid_mask & torch.from_numpy(score < self.tolerance*threshold).cuda()
+            train_mask = valid_mask.cuda() & torch.from_numpy(score < self.tolerance*threshold).cuda()
         
         queue_scores = score[train_mask.cpu().numpy()]
         
         # Update loss queue and train
         self.loss_queue.extend(queue_scores)
+        
         self.model.train_step(X[train_mask])
         self.batch_trained += 1
         
