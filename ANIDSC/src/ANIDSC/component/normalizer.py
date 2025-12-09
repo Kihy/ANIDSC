@@ -27,7 +27,7 @@ class BaseOnlineNormalizer(PipelineComponent):
             #update during warmup
             scaled=None
         else:
-            scaled=self.process(X)
-        self.batch_processed+=1
+            scaled=self.transform(X)
+        self.batch_processed+=len(X)
         self.update(X)
         return scaled

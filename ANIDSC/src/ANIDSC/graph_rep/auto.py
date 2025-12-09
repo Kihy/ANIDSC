@@ -492,7 +492,7 @@ class ConceptDetector:
         if not matching_ids:
 
             # check maximum p value, if its still very small, its malicious concept
-            if np.max(non_matching_p) < 1e-3:
+            if np.max(non_matching_p) < 1e-4:
                 malicious = True
             else:
                 malicious = False

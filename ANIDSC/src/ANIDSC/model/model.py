@@ -20,7 +20,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         queue_len=10000,
         percentile=0.99,
         warmup=1000,
-        t_func="log_normal_quantile",
+        t_func="quantile",
         **kwargs,
     ):
         """base interface for online outlier detection model
@@ -67,7 +67,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
 
     def process(self, X):
         threshold = self.get_threshold()
-        score = np.full((X.shape[0],), np.finfo(np.float64).max)
+        score = np.full((X.shape[0],), self.tolerance*threshold+1.)
         
         # Ensure X is a tensor
         if isinstance(X, np.ndarray):

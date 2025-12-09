@@ -33,7 +33,12 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
 
     def update(self, X):
         """Adds another datum"""
-
+        # convert to numpy
+        if isinstance(X, torch.Tensor):
+            X=X.detach().cpu().numpy()
+        else:
+            X=np.array(X)
+        X=np.array(X)
         for i, n in enumerate(X.T):
             self.dims[i].update(n)
 

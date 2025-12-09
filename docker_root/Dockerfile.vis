@@ -33,6 +33,7 @@ RUN pip install --no-cache-dir \
     plotly\
     seaborn\
     ipympl\
+    scapy\
     SciencePlots \
     ipykernel \
     ipywidgets \
@@ -51,7 +52,9 @@ RUN groupadd -g ${GROUP_ID} hostgroup && \
 USER hostuser
 
 # Expose the port the app runs on
-EXPOSE 5006
+EXPOSE 5007
 
 # Command to run the application
-CMD ["panel", "serve", "app.py", "--address", "0.0.0.0", "--port", "5007", "--dev"]
+# CMD ["panel", "serve", "app.py", "--address", "0.0.0.0", "--port", "5007", "--dev"]
+
+CMD ["/bin/bash"]

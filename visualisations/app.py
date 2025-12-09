@@ -1,12 +1,3 @@
-# refactor_dashboard.py
-"""
-Refactored interactive dashboard for network/node/score/summary plotting.
-
-Structure:
- - DataManager: file IO, frame iteration, small parsing helpers
- - WidgetManager: create and keep widgets, wire watchers
- - PlotManager: all plotting routines; mode dispatch
-"""
 from __future__ import annotations
 import re
 from collections import defaultdict
@@ -1083,7 +1074,10 @@ class PlotManager:
                         continue
 
                 csv_path = file_dir / pipeline_file
-                df = pd.read_csv(csv_path)
+                if os.path.getsize(csv_path) > 0:
+                    df = pd.read_csv(csv_path)
+                else: 
+                    print(f"Skipping {csv_path}: file is empty")
                 if len(df) < 5:
                     continue
 
