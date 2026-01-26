@@ -36,7 +36,7 @@ class BaseResultWriter(CompressedOutputWriter):
         pipeline_name = self.parent_pipeline.name
         
         return Path(
-            f"{self.dataset_name}/{self.comp_name}-{self.request_attr('run_identifier')}/{self.folder_name}/{self.file_name}/{pipeline_name}.{self.file_type}"
+            f"{self.dataset_name}/{self.folder_name}/{self.comp_name}-{self.request_attr('run_identifier')}/{self.file_name}/{pipeline_name}.{self.file_type}"
         )
 
 class CSVResultWriter(PickleSaveMixin, BaseResultWriter):

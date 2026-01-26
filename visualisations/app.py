@@ -469,8 +469,13 @@ class WidgetManager:
             return
         self._disable(True)
         try:
+            folder = (
+                "graphs"
+                if self.mode_selector.value in ["Node", "Network"]
+                else "results"
+            )
             self.fe_input.options = self.data_mgr.list_subdirectories(
-                self.data_mgr.root / dataset
+                self.data_mgr.root / dataset / folder
             )
         finally:
             self._disable(False)
@@ -489,7 +494,7 @@ class WidgetManager:
                 if self.mode_selector.value in ["Node", "Network"]
                 else "results"
             )
-            file_path = self.data_mgr.root / dataset / fe / folder
+            file_path = self.data_mgr.root / dataset / folder / fe 
             if file_path.exists():
                 self.file_input.options = self.data_mgr.list_files(file_path)
         finally:
@@ -511,7 +516,7 @@ class WidgetManager:
         self._disable(True)
         try:
             pipelines = self.data_mgr.list_subdirectories(
-                self.data_mgr.root / dataset / fe / folder / file_val
+                self.data_mgr.root / dataset / folder / fe /  file_val
             )
 
             self.pipeline_input.options = {
@@ -637,8 +642,8 @@ class PlotManager:
         file_path = (
             self.data_mgr.root
             / self.w.dataset_input.value
-            / self.w.fe_input.value
             / "graphs"
+            / self.w.fe_input.value
             / self.w.file_input.value
             / self.w.pipeline_input.value
         )
@@ -814,8 +819,8 @@ class PlotManager:
         file_path = (
             self.data_mgr.root
             / self.w.dataset_input.value
-            / self.w.fe_input.value
             / "graphs"
+            / self.w.fe_input.value
             / self.w.file_input.value
             / self.w.pipeline_input.value
         )
@@ -875,8 +880,8 @@ class PlotManager:
         file_path = (
             self.data_mgr.root
             / self.w.dataset_input.value
-            / self.w.fe_input.value
             / "results"
+            / self.w.fe_input.value
             / self.w.file_input.value
             / self.w.pipeline_input.value
         )
@@ -1035,8 +1040,9 @@ class PlotManager:
         base_dir = (
             self.data_mgr.root
             / self.w.dataset_input.value
-            / self.w.fe_input.value
             / "results"
+            / self.w.fe_input.value
+
         )
         if not base_dir.exists():
             self.plot_container.append(
@@ -1137,7 +1143,7 @@ class PlotManager:
                 x="MAP",
                 kind="bar",
                 aspect=1.6,
-                height=0.2 * len(ap_df["model"].unique()),
+                height=max(5,0.2 * len(ap_df["model"].unique())),
                 order=sorted(ap_df["model"].unique()),
             )
             for ax in fig.axes.flat:
@@ -1213,10 +1219,10 @@ class PlotManager:
                 x="accuracy",
                 hue="pipeline",
                 aspect=1.6,
-                height=0.2 * len(results_df["label"].unique()),
+                height=max(5, 0.2 * len(results_df["label"].unique())),
                 kind="bar",
             )
-            pane = pn.pane.Matplotlib(fig.fig, interactive=False)
+            pane = pn.pane.Matplotlib(fig.figure, interactive=False)
             self.plot_container.append(pane)
             return 
 
@@ -1237,8 +1243,8 @@ class PlotManager:
         )
         # for ax in fig.axes.flat:
         #     ax.tick_params(axis="x", rotation=90)
-        plt.close(fig.fig)
-        pane = pn.pane.Matplotlib(fig.fig, interactive=False)
+        plt.close(fig.figure)
+        pane = pn.pane.Matplotlib(fig.figure, interactive=False)
         self.plot_container.append(pane)
 
     # ---------- helper for CSV export of visible traces ----------

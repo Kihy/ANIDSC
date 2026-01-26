@@ -80,7 +80,7 @@ class CompressedOutputWriter(PipelineComponent):
         self.file_name = self.request_attr("file_name")  
         # use the name from the previous component
         self.comp_name = self.request_attr("fe_name")
-        
+        self.run_identifier=self.request_attr('run_identifier')
         self.feature_path.parent.mkdir(parents=True, exist_ok=True)
 
         self.save_file = fsspec.open(self.feature_path, "wt", compression="zstd").open()
@@ -125,7 +125,7 @@ class BaseFeatureBuffer(CompressedOutputWriter):
         
         
         feature_path = Path(
-            f"{self.dataset_name}/{self.comp_name}/{self.folder_name}/{self.file_name}.{self.file_type}"
+            f"{self.dataset_name}/{self.folder_name}/{self.comp_name}-{self.run_identifier}/{self.file_name}.{self.file_type}"
         )
         return feature_path
 

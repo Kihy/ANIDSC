@@ -94,10 +94,14 @@ class Concept:
     def get_sample(self):
         """
         Returns the current sample (the reservoir).
+        If empty, empty np array
 
         Returns:
             list: A list containing the sampled items.
         """
+        
+        if len(self.reservoir)==0:
+            return np.array([])
         return np.vstack(
             self.reservoir
         )  # Return a copy to prevent external modification

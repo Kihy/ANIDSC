@@ -66,7 +66,7 @@ class CSVReader(PickleSaveMixin, PipelineSource):
     
     def setup(self):
         
-        self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.csv.zst"
+        self.path = f"{self.dataset_name}/features/{self.fe_name}/{self.file_name}.csv.zst"
         
         self._file = fsspec.open(self.path, "rt", compression="zstd").open()
 
@@ -108,7 +108,7 @@ class JsonGraphReader(PickleSaveMixin, PipelineSource):
         
 
     def setup(self):
-        self.path = f"{self.dataset_name}/{self.fe_name}/features/{self.file_name}.ndjson.zst"
+        self.path = f"{self.dataset_name}/features/{self.fe_name}/{self.file_name}.ndjson.zst"
         self._file = fsspec.open(self.path, "rt", compression="zstd").open()
         
         self._iter=self.get_json_obj()

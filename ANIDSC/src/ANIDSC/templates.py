@@ -23,8 +23,8 @@ def make_data_reader(
     }
 
 
-def make_feature_extractor(feature_extractor: str, **kwargs) -> dict:
-    return {"type": "feature_extractor", "class": feature_extractor}
+def make_feature_extractor(feature_extractor: str, fe_attr={}, **kwargs) -> dict:
+    return {"type": "feature_extractor", "class": feature_extractor, "attrs":fe_attr}
 
 
 def make_meta_extractor(meta_extractor: str, **kwargs) -> dict:

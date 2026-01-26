@@ -1,7 +1,34 @@
 from ..pipeline import Pipeline
 import yaml
-
+from textwrap import indent
 from ..templates import get_template 
+
+def yaml_align(data, indent=0):
+    lines = []
+
+    if isinstance(data, dict):
+        # Longest key at this level
+        max_len = max(len(str(k)) for k in data.keys())
+
+        for k, v in data.items():
+            key = str(k).ljust(max_len)
+            prefix = " " * indent
+
+            if isinstance(v, dict):
+                lines.append(f"{prefix}{key}:")
+                lines.extend(yaml_align(v, max_len + indent + 2))
+            else:
+                lines.append(f"{prefix}{key}: {v}")
+
+    else:
+        lines.append(" " * indent + str(data))
+
+    return lines
+
+
+def pprint(data):
+    """Return fully aligned YAML-style string for the entire structure."""
+    print("\n".join(yaml_align(data, indent=0)))
 
 def run_file(file_iterator, pipeline_name, pipeline_vars):
     pipelines = []
@@ -11,8 +38,7 @@ def run_file(file_iterator, pipeline_name, pipeline_vars):
         
         print(f"Running {state} pipeline {pipeline_name}:")
         print("-"*50)
-        for k,v in pipeline_vars.items():
-            print(f"{k:<20} {v:<20}")
+        pprint(pipeline_vars)
         print("-"*50)
 
         if state == "new":

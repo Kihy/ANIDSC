@@ -22,11 +22,11 @@ import networkx as nx
 import pandas as pd
 
 
-class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
-    def __init__(self, granularity=1, **kwargs):
+class SingleLayerGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
+    def __init__(self, granularity=1, layer="physical",**kwargs):
         """"""
         super().__init__(**kwargs)
-
+        self.layer=layer
         self.granularity = granularity
         self.time_stamp = None
         self.G = nx.DiGraph()
@@ -70,8 +70,19 @@ class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
 
         time_stamp = traffic_vector.timestamp
         length = traffic_vector.packet_size
-        src_mac = traffic_vector.srcMAC
-        dst_mac = traffic_vector.dstMAC
+        
+        if self.layer=="physical":
+            src = traffic_vector.srcMAC
+            dst = traffic_vector.dstMAC
+        elif self.layer=="internet":
+            src=traffic_vector.srcIP
+            dst=traffic_vector.dstIP
+        elif self.layer=="transport":
+            
+            src=f"{traffic_vector.srcIP}:{traffic_vector.srcport}"
+            dst=f"{traffic_vector.dstIP}:{traffic_vector.dstport}"
+        else:
+            raise ValueError("Unknown layer choice")
 
         if self.time_stamp is None:
             self.time_stamp = time_stamp
@@ -83,18 +94,21 @@ class NetworkAccessGraphExtractor(PickleSaveMixin, BaseFeatureExtractor):
         else:
             graph = None
 
-        if not self.G.has_node(src_mac):
-            self.G.add_node(src_mac, count=0, size=0)
+        if not self.G.has_node(src):
+            self.G.add_node(src, count=0, size=0)
 
-        if not self.G.has_node(dst_mac):
-            self.G.add_node(dst_mac, count=0, size=0)
+        if not self.G.has_node(dst):
+            self.G.add_node(dst, count=0, size=0)
 
-        self.G.nodes[src_mac]["count"] -= 1
-        self.G.nodes[src_mac]["size"] -= length
+        self.G.nodes[src]["count"] -= 1
+        self.G.nodes[src]["size"] -= length
 
-        self.G.nodes[dst_mac]["count"] += 1
-        self.G.nodes[dst_mac]["size"] += length
+        self.G.nodes[dst]["count"] += 1
+        self.G.nodes[dst]["size"] += length
 
-        self.G.add_edge(src_mac, dst_mac)
+        self.G.add_edge(src, dst)
 
         return graph
+
+    def __str__(self):
+        return f"SingleLayerGraphExtractor({self.layer})"

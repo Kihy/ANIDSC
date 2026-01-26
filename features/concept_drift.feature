@@ -1,10 +1,9 @@
 Feature: Detection with homogeneous models
     Scenario: Empty folders
-        Given test_data ProtocolMetaExtractor folder is empty
-        Given test_data AfterImage folder is empty
-        
+    Given folders that starts with test_data SingleLayerGraphExtractor are empty
+    Given folders that starts with test_data ProtocolMetaExtractor are empty
+
     Scenario: Meta extraction
-        Given test_data ProtocolMetaExtractor folder is empty
         Given The test_data file iterator
         And Data Source: PacketReader
         And Meta Extractor: ProtocolMetaExtractor
@@ -13,21 +12,26 @@ Feature: Detection with homogeneous models
         Then the pipeline should not fail
         And the components are saved
 
-    Scenario: Feature extraction
-        Given folders that starts with test_data NetworkAccessGraphExtractor are empty
+    Scenario Outline: Feature extraction
         Given The test_data file iterator
         And Data Source: CSVReader
         And FE Name: ProtocolMetaExtractor
-        And Feature Extractor: NetworkAccessGraphExtractor
+        And Feature Extractor: SingleLayerGraphExtractor
+        And FE attributes: <layer>
         And a feature_extraction pipeline
         When the pipeline starts
         Then the pipeline should not fail
         And the components are saved
+        Examples:
+            | layer     |
+            | transport |
+            | internet  |
+            | physical  |
 
 
     Scenario Outline: Detection with homogeneous models, ICL and Kitsune does not work well with small dimension input
         Given The test_data file iterator
-        And FE Name: NetworkAccessGraphExtractor
+        And FE Name: SingleLayerGraphExtractor(<layer>)
         And Data Source: JsonGraphReader
         And Graph Rep: <graph_rep>
         And Model: <model>
@@ -38,40 +42,23 @@ Feature: Detection with homogeneous models
         And the components are saved
         And the results are written
         Examples:
-            | model            | node_embed          | graph_rep |
-            | torch_model.AE   | PassThroughEmbedder | Plain     |
-            | torch_model.GOAD | PassThroughEmbedder | Plain     |
-            | torch_model.SLAD | PassThroughEmbedder | Plain     |
-            | torch_model.VAE  | PassThroughEmbedder | Plain     |
-            | MedianDetector   | PassThroughEmbedder | Plain     |
-            | torch_model.AE   | MLPEmbedder         | CDD       |
-            | MedianDetector   | MLPEmbedder         | CDD       |
-            | torch_model.GOAD | MLPEmbedder         | CDD       |
-            | torch_model.SLAD | MLPEmbedder         | CDD       |
-            | torch_model.VAE  | MLPEmbedder         | CDD       |
-            | torch_model.AE   | PassThroughEmbedder | CDD       |
-            | torch_model.GOAD | PassThroughEmbedder | CDD       |
-            | torch_model.SLAD | PassThroughEmbedder | CDD       |
-            | torch_model.VAE  | PassThroughEmbedder | CDD       |
-            | MedianDetector   | PassThroughEmbedder | CDD       |
-            | torch_model.AE   | GATEmbedder         | CDD       |
-            | torch_model.GOAD | GATEmbedder         | CDD       |
-            | torch_model.SLAD | GATEmbedder         | CDD       |
-            | torch_model.VAE  | GATEmbedder         | CDD       |
-            | MedianDetector   | GATEmbedder         | CDD       |
-            | torch_model.AE   | MLPEmbedder         | Plain     |
-            | torch_model.GOAD | MLPEmbedder         | Plain     |
-            | torch_model.SLAD | MLPEmbedder         | Plain     |
-            | torch_model.VAE  | MLPEmbedder         | Plain     |
-            | MedianDetector   | MLPEmbedder         | Plain     |
-            | torch_model.AE   | GCNEmbedder         | Filter    |
-            | torch_model.GOAD | GCNEmbedder         | Filter    |
-            | torch_model.SLAD | GCNEmbedder         | Filter    |
-            | torch_model.VAE  | GCNEmbedder         | Filter    |
-            | MedianDetector   | GCNEmbedder         | Filter    |
-            | torch_model.AE   | MLPEmbedder         | Filter    |
-            | torch_model.GOAD | MLPEmbedder         | Filter    |
-            | torch_model.SLAD | MLPEmbedder         | Filter    |
-            | torch_model.VAE  | MLPEmbedder         | Filter    |
-            | MedianDetector   | MLPEmbedder         | Filter    |
+            | model          | node_embed          | graph_rep | layer     |
+            | torch_model.AE | PassThroughEmbedder | Plain     | physical  |
+            | MedianDetector | PassThroughEmbedder | Plain     | physical  |
+            | torch_model.AE | PassThroughEmbedder | CDD       | physical  |
+            | MedianDetector | PassThroughEmbedder | CDD       | physical  |
+            | torch_model.AE | PassThroughEmbedder | Filter    | physical  |
+            | MedianDetector | PassThroughEmbedder | Filter    | physical  |
+            | torch_model.AE | PassThroughEmbedder | Plain     | transport |
+            | MedianDetector | PassThroughEmbedder | Plain     | transport |
+            | torch_model.AE | PassThroughEmbedder | CDD       | transport |
+            | MedianDetector | PassThroughEmbedder | CDD       | transport |
+            | torch_model.AE | PassThroughEmbedder | Filter    | transport |
+            | MedianDetector | PassThroughEmbedder | Filter    | transport |
+            | torch_model.AE | PassThroughEmbedder | Plain     | internet  |
+            | MedianDetector | PassThroughEmbedder | Plain     | internet  |
+            | torch_model.AE | PassThroughEmbedder | CDD       | internet  |
+            | MedianDetector | PassThroughEmbedder | CDD       | internet  |
+            | torch_model.AE | PassThroughEmbedder | Filter    | internet  |
+            | MedianDetector | PassThroughEmbedder | Filter    | internet  |
 

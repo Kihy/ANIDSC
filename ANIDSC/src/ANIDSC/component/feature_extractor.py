@@ -25,7 +25,7 @@ class BaseMetaExtractor(PipelineComponent):
         self.processed = 0
 
         self.last_timestamp = None
-        self.result_folder_name="metadata"
+
         
     
 
@@ -77,7 +77,7 @@ class BaseFeatureExtractor(PipelineComponent):
 
         """
         super().__init__( **kwargs)
-        self.result_folder_name="features"
+
 
 
     @property 

@@ -1,7 +1,7 @@
 Feature: AfterImage
     Scenario: Empty folders
-        Given test_data ProtocolMetaExtractor folder is empty
-        Given test_data AfterImage folder is empty
+        Given folders that starts with test_data AfterImage are empty
+        Given folders that starts with test_data ProtocolMetaExtractor are empty
 
     Scenario: Meta extraction
         Given The test_data file iterator

@@ -42,7 +42,9 @@ RUN pip install --no-cache-dir \
     jupyterlab \
     scikit-learn \
     fsspec \
-    zstandard
+    zstandard\ 
+    dash \ 
+    dash-cytoscape
 
 
 ARG USER_ID

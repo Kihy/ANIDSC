@@ -96,6 +96,12 @@ def step_given_feature_extractor(context, fe_name):
 def step_given_feature_extractor(context, feature_extractor):
     context.pipeline_vars["feature_extractor"] = feature_extractor
 
+
+@given("FE attributes: {layer}")
+def step_given_feature_extractor(context, layer):
+    context.pipeline_vars["fe_attr"]={"layer":layer}
+
+
 @given("a {pipeline_name} pipeline")
 def step_given_pipeline(context, pipeline_name):
 
@@ -104,7 +110,6 @@ def step_given_pipeline(context, pipeline_name):
 
 @when("the pipeline starts")
 def step_when_pipeline_starts(context):
-    
     context.pipelines=run_file(context.file_iterator, context.pipeline_name, context.pipeline_vars)
 
 
@@ -118,13 +123,18 @@ def step_given_output_folder_is_empty(context, dataset, fe_name):
 @given("folders that starts with {dataset} {fe_name} are empty")
 def step_given_output_folders_are_empty(context, dataset, fe_name):
     base_dir = f"datasets/{dataset}"
+    
+    sub_folders=["results", "features","saved_components","graphs"]
+    
+    for sub in sub_folders:
+        subdir=f"{base_dir}/{sub}"
 
-    if not os.path.exists(base_dir):
-        return
+        if not os.path.exists(subdir):
+            return
 
-    for name in os.listdir(base_dir):
-        path = os.path.join(base_dir, name)
+        for name in os.listdir(subdir):
+            path = os.path.join(subdir, name)
 
-        # remove only directories whose names start with fe_name
-        if os.path.isdir(path) and name.startswith(fe_name):
-            rmtree(path)
+            # remove only directories whose names start with fe_name
+            if os.path.isdir(path) and name.startswith(fe_name):
+                rmtree(path)

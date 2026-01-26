@@ -56,7 +56,7 @@ Script inside docker
 ```
 cd experiments
 
-python3 real_experiment.py homogeneous uq_dataset --config "{\"fe_name\": \"NetworkAccessGraphExtractor\",\"graph_rep\": \"CDD\", \"reader_type\":\"JsonGraphReader\", \"model_name\": \"MedianDetector\", \"node_embed\": \"PassThroughEmbedder\", \"run_identifier\": \"demo\"}"
+python3 real_experiment.py homogeneous uq_dataset --config "{\"fe_name\": \"SingleLayerGraphExtractor\",\"graph_rep\": \"CDD\", \"reader_type\":\"JsonGraphReader\", \"model_name\": \"MedianDetector\", \"node_embed\": \"PassThroughEmbedder\", \"run_identifier\": \"demo\"}"
 ```
 
 ## running visualisation container
