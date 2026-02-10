@@ -35,7 +35,6 @@ class PipelineSource(PipelineComponent):
         pass
 
     def process(self, _: None):
-
         # return None if end of iter
         if self.max_records == self.count:
             raise StopIteration("Max records reached")

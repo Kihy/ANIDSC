@@ -1,24 +1,17 @@
 import json
 import os
 from typing import Any, Dict
-
+import networkx as nx
 import fsspec
 from ..save_mixin.pickle import PickleSaveMixin
-import numpy as np
 from scapy.all import PcapReader
 from ..component.pipeline_source import PipelineSource
-from pathlib import Path
 import pandas as pd
 
 
 class PacketReader(PickleSaveMixin,PipelineSource):
-    def __init__(self, fe_name,**kwargs):
+    def __init__(self, **kwargs):
         """reads data from pcap file
-
-        Args:
-            dataset_name (str): name of dataset
-            file_name (str): name of file
-            max_pkts (int, optional): maximum number of packets to read. Defaults to float("inf").
         """
         super().__init__(**kwargs)
 
@@ -65,7 +58,6 @@ class CSVReader(PickleSaveMixin, PipelineSource):
 
     
     def setup(self):
-        
         self.path = f"{self.dataset_name}/features/{self.fe_name}/{self.file_name}.csv.zst"
         
         self._file = fsspec.open(self.path, "rt", compression="zstd").open()
@@ -104,8 +96,6 @@ class JsonGraphReader(PickleSaveMixin, PipelineSource):
 
         # set fe_attrs to self 
         self.fe_name=fe_name
- 
-        
 
     def setup(self):
         self.path = f"{self.dataset_name}/features/{self.fe_name}/{self.file_name}.ndjson.zst"
@@ -115,14 +105,14 @@ class JsonGraphReader(PickleSaveMixin, PipelineSource):
         
     def get_json_obj(self):
         for line in self._file:
-            yield json.loads(line)
+            yield [nx.readwrite.json_graph.node_link_graph(json.loads(line))]
 
     def teardown(self):
         self._file.close()
         
     
     def get_timestamp(self, data):
-        return data["graph"]["time_stamp"]
+        return [g.graph["time_stamp"] for g in data]
     
 
     @property

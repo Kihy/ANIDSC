@@ -10,13 +10,10 @@ import os
 
    
 
-@given("Model: {model_name}")
-def step_given_feature_extractor(context, model_name):
-    context.pipeline_vars["model_name"]=model_name 
+@given("Pipeline variable: {var_name} -> {var_value}")
+def step_given_feature_extractor(context, var_name, var_value):
+    context.pipeline_vars[var_name]=var_value 
     
-@given("Graph Rep: {graph_rep}")
-def step_given_feature_extractor(context, graph_rep):
-    context.pipeline_vars["graph_rep"]=graph_rep 
 
 
 @then("the pipeline should not fail")
@@ -78,28 +75,6 @@ def step_given_dataset_and_file(context):
     context.pipeline_vars["run_identifier"] = context.run_identifier
 
 
-@given("Meta Extractor: {meta_extractor}")
-def step_given_feature_extractor(context, meta_extractor):
-    context.pipeline_vars["meta_extractor"] = meta_extractor
-
-
-@given("Data Source: {reader_type}")
-def step_given_feature_extractor(context, reader_type):
-    context.pipeline_vars["reader_type"] = reader_type
-    
-@given("FE Name: {fe_name}")
-def step_given_feature_extractor(context, fe_name):
-    context.pipeline_vars["fe_name"] = fe_name
-
-
-@given("Feature Extractor: {feature_extractor}")
-def step_given_feature_extractor(context, feature_extractor):
-    context.pipeline_vars["feature_extractor"] = feature_extractor
-
-
-@given("FE attributes: {layer}")
-def step_given_feature_extractor(context, layer):
-    context.pipeline_vars["fe_attr"]={"layer":layer}
 
 
 @given("a {pipeline_name} pipeline")
@@ -110,7 +85,7 @@ def step_given_pipeline(context, pipeline_name):
 
 @when("the pipeline starts")
 def step_when_pipeline_starts(context):
-    context.pipelines=run_file(context.file_iterator, context.pipeline_name, context.pipeline_vars)
+    context.pipelines=run_file(context.file_iterator, context.pipeline_name, context.pipeline_vars, return_pipeline=True)
 
 
 @given("{dataset} {fe_name} folder is empty")

@@ -1,6 +1,8 @@
 from abc import abstractmethod
-from .pipeline_component import PipelineComponent
 
+from ..converters.decorator import auto_cast_method
+from .pipeline_component import PipelineComponent
+import numpy as np 
 import copy 
 
 class BaseOnlineNormalizer(PipelineComponent):
@@ -22,7 +24,8 @@ class BaseOnlineNormalizer(PipelineComponent):
     def reset(self):
         pass 
     
-    def process(self, X):
+    @auto_cast_method
+    def process(self, X:np.ndarray):
         if self.batch_processed<self.warmup:
             #update during warmup
             scaled=None

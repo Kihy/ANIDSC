@@ -20,6 +20,7 @@ RUN pip install --no-cache-dir \
     pytz \
     scapy \
     scipy \
+    scikit-learn\
     torch_geometric  \
     tqdm \
     tensorboard \

@@ -1,5 +1,6 @@
 from abc import abstractmethod
 
+
 from ..save_mixin.pickle import PickleSaveMixin
 
 from ..save_mixin.null import NullSaveMixin
@@ -46,8 +47,8 @@ class BaseMetaExtractor(PipelineComponent):
         pass
     
     
-
-    def process(self, packet: Packet, peek=False) -> Tuple[List[float], List[Any]]:
+    
+    def process(self, packet: Packet, peek=False) -> Dict:
         """The main entry point of feature extractor, this function
         should define the process of extracting a single packet
 
@@ -111,9 +112,11 @@ class BaseFeatureExtractor(PipelineComponent):
         """
         pass
     
-
-
-    def process(self, meta_vector) -> Tuple[List[float], List[Any]]:
+    def process(self, meta_vector:Dict) -> Any:
         features=self.update(meta_vector)
         return features
-            
+    
+    @property
+    def output_dim(self):
+        return len(self.headers)
+    

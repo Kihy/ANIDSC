@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from ..model.torch_model.base_torch_model import BaseTorchModel
 
 from ..save_mixin.pickle import PickleSaveMixin
+from torch_geometric.data import Data
 
 from ..component.pipeline_component import PipelineComponent
 from ..save_mixin.torch import TorchSaveMixin
@@ -10,7 +11,7 @@ import sys
 import torch
 from ..model.gnnids import SWLoss
 from torch_geometric.nn.models import GAT, GAE, MLP, GCN
-
+from ..converters import auto_cast_method
 
 class BaseNodeEmbedder(PickleSaveMixin, PipelineComponent):
     def __init__(self, model_name, **kwargs):
@@ -27,13 +28,14 @@ class BaseNodeEmbedder(PickleSaveMixin, PipelineComponent):
 
             self.model=self.model_cls(ndim)
 
-    def process(self, data):
+    @auto_cast_method
+    def process(self, data: Data):
         node_embeddings, _ = self.model.predict_step(
             x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr
         )
         
         # assign inf to all node embeddings 
-        node_embeddings[data.malicious]=torch.inf
+        # node_embeddings[data.malicious]=torch.inf
         
         self.model.train_step(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr)
         

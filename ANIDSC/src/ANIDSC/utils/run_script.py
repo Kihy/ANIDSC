@@ -1,3 +1,4 @@
+import gc
 from ..pipeline import Pipeline
 import yaml
 from textwrap import indent
@@ -30,11 +31,12 @@ def pprint(data):
     """Return fully aligned YAML-style string for the entire structure."""
     print("\n".join(yaml_align(data, indent=0)))
 
-def run_file(file_iterator, pipeline_name, pipeline_vars):
+def run_file(file_iterator, pipeline_vars, return_pipeline=False):
     pipelines = []
     for state, file, dataset in file_iterator():        
         pipeline_vars["file_name"] = file
         pipeline_vars["dataset_name"] = dataset
+        pipeline_name=pipeline_vars["pipeline_name"]
         
         print(f"Running {state} pipeline {pipeline_name}:")
         print("-"*50)
@@ -66,7 +68,11 @@ def run_file(file_iterator, pipeline_name, pipeline_vars):
         pipeline.start()
 
         print("Execution completed successfully!")
-        pipelines.append(pipeline)
+        if return_pipeline:
+            pipelines.append(pipeline)
+        else:
+            del pipeline 
+            gc.collect()
 
     return pipelines
 

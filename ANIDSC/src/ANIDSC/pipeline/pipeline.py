@@ -51,7 +51,6 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
                 break
 
     def start(self):
-        print(f"{self.components[0].file_name}", file=sys.stderr)
         
         pbar = tqdm(
             mininterval=float(os.getenv("TQDM_MININTERVAL", 60)),

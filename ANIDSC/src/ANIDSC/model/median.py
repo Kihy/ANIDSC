@@ -5,6 +5,7 @@ from ..save_mixin.pickle import PickleSaveMixin
 import numpy as np
 
 from pytdigest import TDigest
+from ..converters.decorator import auto_cast_method
 
 
 class MedianDetector(PickleSaveMixin):
@@ -18,10 +19,11 @@ class MedianDetector(PickleSaveMixin):
     def get_total_params(self):
         return 0
     
-    def predict_step(self, X):
+    @auto_cast_method
+    def predict_step(self, X: np.ndarray):
         return_score=[]
         for data in X:
-            data=data.cpu().detach().numpy()
+            
             score=0
             for x, dim in zip(data, self.model):
                 
@@ -36,11 +38,12 @@ class MedianDetector(PickleSaveMixin):
             return_score.append(score)
         return np.array(return_score)
 
-    def train_step(self, X):
+    @auto_cast_method
+    def train_step(self, X: np.ndarray):
         
             
         for data in X:
-            data=data.cpu().detach().numpy()
+
             
             for x, dim in zip(data, self.model):
                 dim.update(x)

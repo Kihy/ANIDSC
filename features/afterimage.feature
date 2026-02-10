@@ -5,7 +5,6 @@ Feature: AfterImage
 
     Scenario: Meta extraction
         Given The test_data file iterator
-        And test_data ProtocolMetaExtractor folder is empty
         And Data Source: PacketReader
         And Meta Extractor: ProtocolMetaExtractor
         And a meta_extraction pipeline
@@ -15,7 +14,6 @@ Feature: AfterImage
 
     Scenario: Feature extraction
         Given The test_data file iterator
-        And folders that starts with test_data AfterImage are empty
         And Data Source: CSVReader
         And FE Name: ProtocolMetaExtractor
         And Feature Extractor: AfterImage

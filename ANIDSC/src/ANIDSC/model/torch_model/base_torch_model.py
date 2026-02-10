@@ -2,12 +2,13 @@ from abc import abstractmethod
 import importlib
 import torch
 from torch_geometric.data import Data
-
+from ...converters.decorator import auto_cast_method
+import numpy as np 
 
 class BaseTorchModel(torch.nn.Module):
     def __init__(self, input_dims, device="cuda", **kwargs):
         super().__init__()
-        self.preprocessors = [self.to_tensor, self.to_device]
+        self.preprocessors = [self.to_float, self.to_device]
         self.device = device
         self.optimizer = None
         self.input_dims=input_dims
@@ -33,30 +34,20 @@ class BaseTorchModel(torch.nn.Module):
         return X
 
     def to_device(self, X: torch.Tensor) -> torch.Tensor:
-        """preprocessor that converts X to particular device
-
-        Args:
-            X (torch.Tensor): the input data
-
-        Returns:
-            torch.Tensor: output tensor
-        """
         return X.to(self.device)
 
-    def to_tensor(self, X):
-        
-        if not isinstance(X, torch.Tensor):
-            X=torch.tensor(X)
+    def to_float(self, X: torch.Tensor)-> torch.Tensor:
         return X.float()
 
-    def to_numpy(self, X: torch.Tensor):
+    def to_numpy(self, X: torch.Tensor)-> np.ndarray:
         return X.detach().cpu().numpy()
 
     @abstractmethod
     def forward(self, X, inference=False):
         pass
 
-    def predict_step(self, X):
+    @auto_cast_method
+    def predict_step(self, X:torch.Tensor)-> np.ndarray:
                 
         X = self.preprocess(X)
 
@@ -66,11 +57,10 @@ class BaseTorchModel(torch.nn.Module):
         if loss is None:
             return None
 
-        return loss.detach().cpu().numpy()
+        return self.to_numpy(loss)
 
-    def train_step(self, X):
-        
-
+    @auto_cast_method
+    def train_step(self, X:torch.Tensor)-> np.ndarray:
         X = self.preprocess(X)
         
         # Kitsune creates optimizer later
@@ -84,13 +74,12 @@ class BaseTorchModel(torch.nn.Module):
         if loss is None:
             return None
         
-        loss = loss.mean()
+        mean_loss = loss.mean()
 
-
-        loss.backward()
+        mean_loss.backward()
         self.optimizer.step()
         
-        return loss.detach().cpu().item()
+        return self.to_numpy(loss)
 
     def get_total_params(self):
         return sum(p.numel() for p in self.parameters() if p.requires_grad)

@@ -6,7 +6,7 @@ from ..save_mixin.pickle import PickleSaveMixin
 from ..component.normalizer import BaseOnlineNormalizer
 from pytdigest import TDigest
 import numpy as np
-
+from ..converters import auto_cast_method
 
 class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
     def __init__(self, **kwargs):
@@ -31,27 +31,18 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
     def teardown(self):
         pass 
 
-    def update(self, X):
+    @auto_cast_method
+    def update(self, X:np.ndarray):
         """Adds another datum"""
         # convert to numpy
-        if isinstance(X, torch.Tensor):
-            X=X.detach().cpu().numpy()
-        else:
-            X=np.array(X)
-        X=np.array(X)
+        
         for i, n in enumerate(X.T):
             self.dims[i].update(n)
 
         self.count += 1
 
-    def transform(self, X):
+    def transform(self, X:np.ndarray):
         
-        # convert to numpy
-        if isinstance(X, torch.Tensor):
-            X=X.detach().cpu().numpy()
-        else:
-            X=np.array(X)
-                
         percentiles = self.quantiles()
 
         if percentiles is None:

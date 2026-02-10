@@ -16,6 +16,7 @@ class GraphProcessor(PickleSaveMixin, PipelineComponent):
         super().__init__(**kwargs)
         self.rep_name = rep_name
         self.graph_rep = None
+        
 
     def setup(self):
         if self.graph_rep is None:
@@ -28,28 +29,13 @@ class GraphProcessor(PickleSaveMixin, PipelineComponent):
         return 2
 
     @property
-    def networkx(self):
-        return self.graph
+    def transformed_graph(self):
+        return self._graph
 
     def process(self, X):
-        X = json_graph.node_link_graph(X)
+        self._graph = self.graph_rep.transform(X)
 
-        X = self.graph_rep.transform(X)
-
-        if X is None:
-            return
-
-        self.graph = X
-
-        data = from_networkx(X, group_node_attrs=["count", "size"])
-        data.x = data.x.float()
-        
-        data.malicious=[node[1] or False 
-                  for node in X.nodes(data="malicious_concept")]
-        data.label = [node for node in X.nodes]
-        data.time_stamp = X.graph["time_stamp"]
-
-        return data.to("cuda")
+        return self._graph
 
     def teardown(self):
         return super().teardown()

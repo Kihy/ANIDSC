@@ -3,7 +3,6 @@ import re
 from collections import defaultdict
 from dataclasses import dataclass
 import io
-import csv
 from pathlib import Path
 import json
 import os
@@ -12,7 +11,6 @@ import re
 import time
 import traceback
 from typing import Dict, Iterable, List, Optional
-from panel.widgets import Tqdm
 import networkx as nx
 import numpy as np
 import pandas as pd
@@ -20,12 +18,14 @@ import panel as pn
 import plotly.graph_objects as go
 import seaborn as sns
 import holoviews as hv
-from networkx.readwrite import json_graph
 import matplotlib.pyplot as plt
-import scienceplots
-
+import scienceplots #leave this in
 from sklearn.metrics import average_precision_score
 import fsspec
+from bokeh.plotting import figure
+from bokeh.models import (HoverTool, Circle, MultiLine, CustomJS, VeeHead, ArrowHead,
+                          Label, ColumnDataSource, PointDrawTool)
+
 
 # keep your plotting style lines (you used scienceplots earlier)
 plt.style.use(["science", "ieee"])
@@ -33,6 +33,57 @@ plt.style.use(["science", "ieee"])
 pn.extension("tabulator", "plotly", "ipywidgets")
 hv.extension("bokeh")
 
+
+def horizontal_band_layout(G):
+    """
+    For each layer, compute a force-directed layout on the subgraph containing
+    only nodes of that layer, then place the resulting mini-layout onto a fixed
+    horizontal band.
+    """
+
+    # Group nodes by layer
+    groups = {}
+    for node, data in G.nodes(data=True):
+        key = data.get("layer")
+        groups.setdefault(key, []).append(node)
+
+    # Fixed y-positions per layer
+    layer_y = {
+        'Physical': 0,
+        'Internet': 200,
+        'Transport': 400
+    }
+
+    pos = {}
+    
+
+
+    for layer, nodes in groups.items():
+        # Extract subgraph for this layer
+        subG = G.subgraph(nodes)
+
+        # Force-directed positions *within the layer*
+        sub_pos = nx.kamada_kawai_layout(subG)   # deterministic layout
+
+        # Normalize/shift x positions so nodes spread out nicely
+        xs = [p[0] for p in sub_pos.values()]
+        min_x, max_x = min(xs), max(xs)
+        span = max(max_x - min_x, 1e-6)
+        
+        # Normalize/shift y positions so nodes spread out nicely
+        ys = [p[1] for p in sub_pos.values()]
+        min_y, max_y = min(ys), max(ys)
+        span_y = max(max_y - min_y, 1e-6)
+
+        
+        for node in nodes:
+            x = (sub_pos[node][0] - min_x) / span * 800   # scale to width ~800
+            y = (sub_pos[node][1] - min_y) / span_y * 100   # scale to width ~100
+            # vertically shift y
+            y = y+layer_y[layer]
+            
+            pos[node] = (x, y)
+    return pos
 
 # ------------------------------
 # Config / constants
@@ -77,6 +128,7 @@ class DataManager:
         folder = Path(folder)
         leaves = []
         for p in folder.rglob("*"):
+            
             if p.is_dir() and not any(child.is_dir() for child in p.iterdir()):
                 leaves.append(str(p.relative_to(folder)))
         return leaves
@@ -122,7 +174,7 @@ class DataManager:
         file_path: Path,
         widget_mgr: Optional["WidgetManager"] = None,
     ) -> Iterable[dict]:
-        """Yield JSON frames from a file, sampling by prob, with optional progress updates."""
+        """Yield JSON frames from a file and parse it to networkx graph, sampling by prob, with optional progress updates."""
         file_path = Path(file_path)
         if not file_path.exists():
             return
@@ -143,7 +195,7 @@ class DataManager:
             with fsspec.open(file_path, "rt", compression="zstd") as f:
                 sample = self._reservoir_sample(f, max_frames, sample_range, widget_mgr)
 
-            frames = [json.loads(line) for line in sample]
+            frames = [nx.readwrite.json_graph.node_link_graph(json.loads(line),edges="links") for line in sample]
             self.frames[cache_key] = frames
             yield from frames
 
@@ -198,7 +250,7 @@ class DataManager:
     ) -> Optional[dict]:
         """Return the frame at index idx."""
         for i, frame in enumerate(self.load_frames(file_path, widget_mgr)):
-            print(i, idx, frame)
+          
 
             if i == idx:
                 return frame
@@ -282,7 +334,6 @@ def calc_stats(df: pd.DataFrame) -> pd.DataFrame:
     )
     return pd.DataFrame([stats])
 
-
 # ------------------------------
 # Widget manager
 # ------------------------------
@@ -291,39 +342,12 @@ class WidgetManager:
     data_mgr: DataManager
 
     def __post_init__(self):
-        # main controls
-        self.dataset_input = pn.widgets.AutocompleteInput(
-            name="Dataset",
-            options=self.data_mgr.list_subdirectories(self.data_mgr.root),
-            case_sensitive=False,
-            search_strategy="includes",
-            min_characters=0,
-            placeholder="Search",
-        )
-        self.fe_input = pn.widgets.AutocompleteInput(
-            name="Feature Extractor",
-            options=self.data_mgr.list_subdirectories(None),
-            case_sensitive=False,
-            search_strategy="includes",
-            min_characters=0,
-            placeholder="Search",
-        )
-        self.file_input = pn.widgets.AutocompleteInput(
-            name="File",
-            options=self.data_mgr.list_subdirectories(None),
-            case_sensitive=False,
-            search_strategy="includes",
-            min_characters=0,
-            placeholder="Search",
-        )
-        self.pipeline_input = pn.widgets.AutocompleteInput(
-            name="Pipeline",
-            options=self.data_mgr.list_subdirectories(None),
-            case_sensitive=False,
-            search_strategy="includes",
-            min_characters=0,
-            placeholder="Search",
-        )
+        # Dynamic path selectors
+        self.path_selectors = []
+        self.path_container = pn.Column(sizing_mode="stretch_width")
+        
+        # Initialize with root selector
+        self._add_path_selector(self.data_mgr.root, level=0)
 
         # numeric and mode controls
         self.mode_selector = pn.widgets.RadioButtonGroup(
@@ -336,7 +360,7 @@ class WidgetManager:
 
         # per-mode controls
         self.node_input = pn.widgets.Select(name="Node", options=["None"])
-        self.graph_slider = pn.widgets.IntSlider(name="Graph Index", start=0, end=0)
+        self.graph_slider = pn.widgets.EditableIntSlider(name="Graph Index", start=0, end=0)
         self.metric_input = pn.widgets.Select(
             name="Metric",
             options=[
@@ -397,22 +421,19 @@ class WidgetManager:
         )
 
         self.pipeline_regex = pn.widgets.TextInput(
-            name="Pipeline Regex", placeholder="Regex to filter pipeline names"
+            name="Pipeline Regex", placeholder="Regex to filter pipeline names",
+            sizing_mode="stretch_width"
+        )
+        
+        self.plot_height = pn.widgets.IntInput(
+            name="Plot Height", step=1, value=2, sizing_mode="stretch_width"
         )
 
         # watch wiring
-        self.dataset_input.param.watch(self._on_dataset_change, "value")
-        self.fe_input.param.watch(self._on_fe_change, "value")
-        self.file_input.param.watch(self._on_file_change, "value")
-        self.pipeline_input.param.watch(self._on_pipeline_change, "value")
         self.mode_selector.param.watch(self._on_mode_change, "value")
 
         # small state to allow disabling widgets during long ops
         self._disable_targets = [
-            self.dataset_input,
-            self.fe_input,
-            self.file_input,
-            self.pipeline_input,
             self.metric_input,
             self.node_input,
             self.generate_btn,
@@ -423,9 +444,120 @@ class WidgetManager:
         for w in self._disable_targets:
             w.sizing_mode = "stretch_width"
 
+    def _add_path_selector(self, current_path, level=0):
+        """Add a new path selector at the given level"""
+        # Get items at current path
+        items = []
+        if current_path.exists() and current_path.is_dir():
+            items = sorted([
+                item.name for item in current_path.iterdir()
+                if not item.name.startswith('.')
+            ])
+        
+        # Create selector
+        selector = pn.widgets.Select(
+            name=f"Level {level}: {current_path.name if level > 0 else 'Root'}",
+            options=[""] + items,
+            value="",
+            sizing_mode="stretch_width"
+        )
+        
+        # Store selector info
+        selector_info = {
+            'widget': selector,
+            'level': level,
+            'path': current_path
+        }
+        
+        # Trim selectors beyond this level
+        self.path_selectors = self.path_selectors[:level]
+        self.path_selectors.append(selector_info)
+        
+        # Watch for changes
+        selector.param.watch(
+            lambda event, lvl=level: self._on_path_change(event, lvl),
+            'value'
+        )
+        
+        # Update container
+        self._update_path_container()
+        
+        return selector
+
+    def _update_path_container(self):
+        """Update the visual container with current selectors"""
+        self.path_container.clear()
+        for selector_info in self.path_selectors:
+            self.path_container.append(selector_info['widget'])
+
+    def _on_path_change(self, event, level):
+        """Handle path selector change"""
+        if not event.new:
+            # Empty selection - remove subsequent selectors
+            self.path_selectors = self.path_selectors[:level + 1]
+            self._update_path_container()
+            return
+        
+        # Build current path
+        current_path = self.path_selectors[level]['path'] / event.new
+        
+        # Remove selectors after this level
+        self.path_selectors = self.path_selectors[:level + 1]
+        
+        # Check if this is a file or directory
+        if current_path.is_file():
+            # It's a file - we're done, update dependent widgets
+            self._update_path_container()
+            self._on_file_selected()
+        elif current_path.is_dir():
+            # It's a directory - add another selector
+            self._add_path_selector(current_path, level + 1)
+            
+    def _on_file_selected(self):
+        """Called when a complete file path is selected"""
+        file_path = self.get_selected_path()
+        if file_path is None or not file_path.is_file():
+            return
+            
+        self._disable(True)
+        try:
+            # Update mode-specific widgets based on the selected file
+            if self.mode_selector.value in ["Node", "Network"]:
+                # Load frames and populate node/graph controls
+                frames = list(self.data_mgr.load_frames(file_path, self))
+                if frames:
+
+                    # Collect unique node ids
+                    node_ids = {nx.get_node_attributes(fr, "id").values() for fr in frames}
+                    self.node_input.options = [MAC_TO_DEVICE.get(h, h) for h in node_ids]
+                    self.graph_slider.start = 0
+                    self.graph_slider.end = max(0, len(frames) - 1)
+        finally:
+            self._disable(False)
+
+    def get_selected_path(self):
+        """Get the currently selected full path"""
+        if not self.path_selectors:
+            return None
+            
+        path = self.data_mgr.root
+        for selector_info in self.path_selectors:
+            value = selector_info['widget'].value
+            if value:
+                path = path / value
+            else:
+                break
+                
+        return path if path != self.data_mgr.root else None
+    
+    def get_selected_path_level(self, n):
+        return self.path_selectors[n]['widget'].value
+
     def _disable(self, state: bool):
         for w in self._disable_targets:
             w.disabled = state
+        for selector_info in self.path_selectors:
+            selector_info['widget'].disabled = state
 
     # --------- widget layout switching ----------
     def _switch_widget(self, mode: str):
@@ -435,8 +567,6 @@ class WidgetManager:
                 self.max_frames_input,
                 self.range_start,
                 self.range_end,
-                self.file_input,
-                self.pipeline_input,
                 self.node_input,
             )
         elif mode == "Network":
@@ -445,8 +575,6 @@ class WidgetManager:
                 self.max_frames_input,
                 self.range_start,
                 self.range_end,
-                self.file_input,
-                self.pipeline_input,
                 self.graph_slider,
             )
         elif mode == "Scores":
@@ -455,119 +583,22 @@ class WidgetManager:
                 self.max_frames_input,
                 self.range_start,
                 self.range_end,
-                self.file_input,
-                self.pipeline_input,
             )
         elif mode == "Summary":
-            return pn.WidgetBox("Parameters", self.metric_input, self.pipeline_regex)
+            return pn.WidgetBox("Parameters", self.metric_input, self.pipeline_regex, self.plot_height)
         return pn.pane.Markdown("Unknown mode")
 
-    # --------- watchers (populate dependent options) ----------
-    def _on_dataset_change(self, _):
-        dataset = self.dataset_input.value
-        if dataset is None:
-            return
-        self._disable(True)
-        try:
-            folder = (
-                "graphs"
-                if self.mode_selector.value in ["Node", "Network"]
-                else "results"
-            )
-            self.fe_input.options = self.data_mgr.list_subdirectories(
-                self.data_mgr.root / dataset / folder
-            )
-        finally:
-            self._disable(False)
-
-    def _on_fe_change(self, _):
-        """Select a feature extractor - update file listing depending on mode"""
-        dataset = self.dataset_input.value
-        fe = self.fe_input.value
-        if dataset is None or fe is None:
-            return
-
-        self._disable(True)
-        try:
-            folder = (
-                "graphs"
-                if self.mode_selector.value in ["Node", "Network"]
-                else "results"
-            )
-            file_path = self.data_mgr.root / dataset / folder / fe 
-            if file_path.exists():
-                self.file_input.options = self.data_mgr.list_files(file_path)
-        finally:
-            self._disable(False)
-
-    def _on_file_change(self, _):
-        """When a file (leaf) is selected, update pipeline dropdown"""
-        dataset = self.dataset_input.value
-        fe = self.fe_input.value
-        file_val = self.file_input.value
-
-        if dataset is None or fe is None or file_val is None:
-            return
-
-        folder = (
-            "graphs" if self.mode_selector.value in ["Node", "Network"] else "results"
-        )
-
-        self._disable(True)
-        try:
-            pipelines = self.data_mgr.list_subdirectories(
-                self.data_mgr.root / dataset / folder / fe /  file_val
-            )
-
-            self.pipeline_input.options = {
-                simple_pipeline_name(p): p for p in pipelines
-            }
-        finally:
-            self._disable(False)
-
-    def _on_pipeline_change(self, _):
-        """Populate node options and graph slider when pipeline is chosen."""
-        dataset = self.dataset_input.value
-        fe = self.fe_input.value
-        file_val = self.file_input.value
-        pipeline = self.pipeline_input.value
-
-        if dataset is None or fe is None or file_val is None or pipeline is None:
-            return
-
-        self._disable(True)
-        try:
-            file_path = (
-                self.data_mgr.root / dataset / fe / "graphs" / file_val / pipeline
-            )
-
-            frames = list(self.data_mgr.load_frames(file_path, self))
-
-            # collect unique node ids from frames
-            node_ids = sorted(
-                {n["data"]["id"] for fr in frames for n in fr["elements"]["nodes"]}
-            )
-            self.node_input.options = [MAC_TO_DEVICE.get(h, h) for h in node_ids]
-            self.graph_slider.start = 0
-            self.graph_slider.end = max(0, len(frames) - 1)
-
-        finally:
-            self._disable(False)
-
     def _on_mode_change(self, _):
-        # The mode affects the folders listed under fe->file
-        self._on_fe_change(None)
-
-    def _on_percent_change(self, _):
-        # percent changed — refresh node options if pipeline is set
-        self._on_pipeline_change(None)
+        # Mode change might affect which files are relevant
+        # Could reset path selectors or filter differently
+        pass
 
     # expose a simple layout helper
     def sidebar(self):
         return pn.Column(
-            self.dataset_input,
-            self.fe_input,
             self.mode_selector,
+            pn.pane.Markdown("**Select Path:**"),
+            self.path_container,
             self.dynamic_widget,
             pn.Row(
                 self.generate_btn,
@@ -642,7 +673,7 @@ class PlotManager:
         file_path = (
             self.data_mgr.root
             / self.w.dataset_input.value
-            / "graphs"
+            / "features"
             / self.w.fe_input.value
             / self.w.file_input.value
             / self.w.pipeline_input.value
@@ -816,81 +847,218 @@ class PlotManager:
     # ---------- Network (graph) plot ----------
     def network_plot(self):
         graph_idx = self.w.graph_slider.value
-        file_path = (
-            self.data_mgr.root
-            / self.w.dataset_input.value
-            / "graphs"
-            / self.w.fe_input.value
-            / self.w.file_input.value
-            / self.w.pipeline_input.value
-        )
+        file_path = file_path = self.w.get_selected_path()
+        
         graph = self.data_mgr.get_frame(file_path, graph_idx, self.w)
         if graph is None:
             self.plot_container.append(pn.pane.Markdown("⚠️ Graph not found"))
             return
+                
+        # Layer colors
+        layer_colors = {'Physical': '#FF8C42', 'Internet': '#4ECDC4', 'Transport': '#95E06C'}
+        
+        # Calculate node positions for each layer
+        pos = horizontal_band_layout(graph)
+        # pos=nx.multipartite_layout(self.graph, subset_key="layer")
+        
+        # Prepare node data
+        node_x, node_y, node_colors, node_labels, node_layers = [], [], [], [], []
+        node_indices = {}
+        
+        for idx, node in enumerate(graph.nodes()):
+            layer = graph.nodes[node].get("layer", "Unknown")
+            x, y = pos[node]
+            
+            node_x.append(x * 500)
+            node_y.append(y * 500)
+            node_colors.append(layer_colors.get(layer, '#CCCCCC'))
+            node_labels.append(str(node))
+            node_layers.append(layer)
+            node_indices[node] = idx
+    
+        
+        # Prepare edge data
+        edge_xs, edge_ys, edge_colors, edge_widths, edge_dashes = [], [], [], [], []
+        edge_sources, edge_targets = [], []
+        edge_sizes, edge_counts = [], []
 
-        # convert to networkx (same approach)
-        G = nx.cytoscape_graph(graph)
-        threshold = G.graph.get("threshold", "N/A")
-        # compute divergent values
-        divergent_values = np.log10(
-            [
-                max(n.get("node_as", 1e-12), 1e-12)
-                / (threshold if threshold not in [0, "N/A"] else 1)
-                for n in G.nodes.values()
-            ]
+        for u, v, data in graph.edges(data=True):
+            lu = graph.nodes[u].get("layer", None)
+            lv = graph.nodes[v].get("layer", None)
+            x0, y0 = pos[u]
+            x1, y1 = pos[v]
+            
+            # Draw straight edge
+            edge_xs.append([x0 * 500, x1 * 500])
+            edge_ys.append([y0 * 500, y1 * 500])
+            
+            edge_sources.append(node_indices[u])
+            edge_targets.append(node_indices[v])
+            
+            # Extract edge attributes
+            edge_sizes.append(data.get('size', 'N/A'))
+            edge_counts.append(data.get('count', 'N/A'))
+            
+            if lu == lv:
+                edge_colors.append('#666666')
+                edge_dashes.append('solid')
+            else:
+                edge_colors.append('#999999')
+                edge_dashes.append('dashed')
+            edge_widths.append(2)
+            
+        # Create figure
+        plot = figure(
+            title="Multilayer Network Visualization (Drag nodes to move)",
+            width=1000,
+            height=600,
+            tools="pan,wheel_zoom,box_zoom,reset,save",
+            toolbar_location="above"
         )
-        max_abs = np.max(np.abs(divergent_values)) if divergent_values.size > 0 else 1.0
-        clim = (-max_abs, max_abs)
+        
+        # Create data sources
+        edge_source = ColumnDataSource(data=dict(
+            xs=edge_xs, ys=edge_ys, colors=edge_colors,
+            widths=edge_widths, line_dash=edge_dashes,
+            sources=edge_sources, targets=edge_targets,
+            sizes=edge_sizes, counts=edge_counts
+        ))
+        
+        node_source = ColumnDataSource(data=dict(
+            x=node_x,
+            y=node_y,
+            colors=node_colors,
+            labels=node_labels,
+            layers=node_layers
+        ))
+        
+        # Draw edges first (so they're behind nodes)
+        edge_renderer = plot.multi_line('xs', 'ys', source=edge_source,
+                    line_width='widths', color='colors',
+                    line_dash='line_dash', alpha=0.6)
+                
+        # Draw nodes - 
+        node_renderer = plot.scatter('x', 'y', size=20, source=node_source,
+                        fill_color='colors', line_color='black',
+                        line_width=2, alpha=0.9)
+        
+        # Add labels to nodes
+        labels = plot.text('x', 'y', text='labels', source=node_source,
+                        text_align='center', text_baseline='top',
+                        y_offset=-25, text_font_size='10pt')
+        
+        # Add hover tool for nodes
+        node_hover = HoverTool(renderers=[node_renderer], tooltips=[
+            ("Node", "@labels"),
+            ("Layer", "@layers")
+        ])
+        plot.add_tools(node_hover)
+        
+        # Add hover tool for edges
+        edge_hover = HoverTool(renderers=[edge_renderer], tooltips=[
+            ("Size", "@sizes"),
+            ("Count", "@counts")
+        ], line_policy='interp')
+        plot.add_tools(edge_hover)
+        
+        # Add PointDrawTool for dragging nodes
+        draw_tool = PointDrawTool(renderers=[node_renderer], add=False)
+        plot.add_tools(draw_tool)
+        plot.toolbar.active_tap = draw_tool
+        
+        # Style the plot
+        plot.axis.visible = False
+        plot.grid.visible = False
+        plot.outline_line_color = None        
 
-        for n, val in zip(G.nodes(), divergent_values):
-            G.nodes[n]["divergent"] = val
+        # Updated callback to handle arrows
+        callback_args = dict(node_source=node_source, edge_source=edge_source)
 
-        hv_graph = hv.Graph.from_networkx(G, nx.layout.circular_layout).opts(
-            node_color="divergent",
-            node_size=50,
-            edge_color="gray",
-            arrowhead_length=0.1,
-            directed=True,
-            cmap="RdBu",
-            tools=["hover"],
-            width=900,
-            colorbar=True,
-            clim=clim,
-            xaxis=None,
-            yaxis=None,
-            xlabel="",
-            ylabel="",
-            title=f"{graph_idx}",
-        )
-
-        nodes_data = hv_graph.nodes.data.copy()
-        nodes_data["name"] = (
-            nodes_data["name"].map(MAC_TO_DEVICE).fillna(nodes_data["name"])
-        )
-
-        labels = hv.Labels(nodes_data, ["x", "y"], "name")
-        labelled = hv_graph * labels.opts(text_font_size="8pt", text_color="black")
+        callback_code = """
+            const node_data = node_source.data;
+            const edge_data = edge_source.data;
+            
+            // Update edge positions based on new node positions
+            for (let i = 0; i < edge_data.sources.length; i++) {
+                const src_idx = edge_data.sources[i];
+                const tgt_idx = edge_data.targets[i];
+                
+                const x0 = node_data.x[src_idx];
+                const y0 = node_data.y[src_idx];
+                const x1 = node_data.x[tgt_idx];
+                const y1 = node_data.y[tgt_idx];
+                
+                // Draw straight edge
+                edge_data.xs[i] = [x0, x1];
+                edge_data.ys[i] = [y0, y1];
+                
+            }
+            
+            edge_source.change.emit();
+        """
+        
+        callback = CustomJS(args=callback_args, code=callback_code)
+        
+        # Attach callback to node source changes
+        node_source.js_on_change('data', callback)
+        
         self.plot_container.append(
-            pn.pane.HoloViews(labelled, sizing_mode="stretch_height")
+            pn.pane.Bokeh(plot, sizing_mode="stretch_height")
         )
+        
+        # threshold = G.graph.get("threshold", "N/A")
+        # # compute divergent values
+        # divergent_values = np.log10(
+        #     [
+        #         max(n.get("node_as", 1e-12), 1e-12)
+        #         / (threshold if threshold not in [0, "N/A"] else 1)
+        #         for n in G.nodes.values()
+        #     ]
+        # )
+        # max_abs = np.max(np.abs(divergent_values)) if divergent_values.size > 0 else 1.0
+        # clim = (-max_abs, max_abs)
+
+        # for n, val in zip(G.nodes(), divergent_values):
+        #     G.nodes[n]["divergent"] = val
+
+        # hv_graph = hv.Graph.from_networkx(G, nx.layout.circular_layout).opts(
+        #     node_color="divergent",
+        #     node_size=50,
+        #     edge_color="gray",
+        #     arrowhead_length=0.1,
+        #     directed=True,
+        #     cmap="RdBu",
+        #     tools=["hover"],
+        #     width=900,
+        #     colorbar=True,
+        #     clim=clim,
+        #     xaxis=None,
+        #     yaxis=None,
+        #     xlabel="",
+        #     ylabel="",
+        #     title=f"{graph_idx}",
+        # )
+
+        # nodes_data = hv_graph.nodes.data.copy()
+        # nodes_data["name"] = (
+        #     nodes_data["name"].map(MAC_TO_DEVICE).fillna(nodes_data["name"])
+        # )
+
+        # labels = hv.Labels(nodes_data, ["x", "y"], "name")
+        # labelled = hv_graph * labels.opts(text_font_size="8pt", text_color="black")
+        # self.plot_container.append(
+        #     pn.pane.HoloViews(labelled, sizing_mode="stretch_height")
+        # )
 
     # ---------- Scores plot ----------
     def scores_plot(self):
-        file_path = (
-            self.data_mgr.root
-            / self.w.dataset_input.value
-            / "results"
-            / self.w.fe_input.value
-            / self.w.file_input.value
-            / self.w.pipeline_input.value
-        )
+        file_path = file_path = self.w.get_selected_path()
+        
         if not file_path.exists():
             self.plot_container.append(pn.pane.Markdown("⚠️ Score CSV not found"))
             return
 
         df = self.data_mgr.read_csv(file_path, self.w)
-        print(df.max(axis=0))
 
         fig = go.Figure()
 
@@ -963,7 +1131,7 @@ class PlotManager:
         )
 
         fig.update_layout(
-            title=f"{self.w.pipeline_input.value}",
+            title=f"{self.w.get_selected_path_level(-1)}",
             xaxis_title="X",
             yaxis_title="Score",
             hovermode="x unified",
@@ -999,17 +1167,14 @@ class PlotManager:
 
     def compute_map(self, scores_dict):
         ap_results = {}
-        
 
         for model_name, file_dict in scores_dict.items():
-            
+
             # Identify benign and attack files
             benign_file = [f for f in file_dict if f.startswith("benign")][0]
             attack_files = [f for f in file_dict if f.startswith("attack")]
 
-            
             benign_scores = file_dict[benign_file].values
-            
 
             model_ap = {}
             for attack_file in attack_files:
@@ -1037,13 +1202,8 @@ class PlotManager:
 
     # ---------- Summary plot ----------
     def summary_plot(self):
-        base_dir = (
-            self.data_mgr.root
-            / self.w.dataset_input.value
-            / "results"
-            / self.w.fe_input.value
-
-        )
+        base_dir = self.w.get_selected_path()
+        
         if not base_dir.exists():
             self.plot_container.append(
                 pn.pane.Markdown("⚠️ Results directory not found")
@@ -1082,18 +1242,18 @@ class PlotManager:
                 csv_path = file_dir / pipeline_file
                 if os.path.getsize(csv_path) > 0:
                     df = pd.read_csv(csv_path)
-                else: 
+                else:
                     print(f"Skipping {csv_path}: file is empty")
                 if len(df) < 5:
                     continue
 
                 df = df.assign(
-                    dataset=self.w.dataset_input.value,
-                    fe_name=self.w.fe_input.value,
+                    dataset=self.w.get_selected_path_level(0),
+                    fe_name=self.w.get_selected_path_level(-1),
                     file=file,
                     pipeline=simple_pipeline_name(pipeline_file),
                 )
-            
+
                 # filter
                 df = df.replace(np.inf, np.finfo(np.float64).max).dropna()
 
@@ -1125,7 +1285,7 @@ class PlotManager:
                 x="process_time",
                 kind="bar",
                 aspect=1.6,
-                height=2,
+                height=self.w.plot_height.value,
             )
             for ax in fig.axes.flat:
                 ax.tick_params(axis="x", rotation=45)
@@ -1143,7 +1303,7 @@ class PlotManager:
                 x="MAP",
                 kind="bar",
                 aspect=1.6,
-                height=max(5,0.2 * len(ap_df["model"].unique())),
+                height=self.w.plot_height.value,
                 order=sorted(ap_df["model"].unique()),
             )
             for ax in fig.axes.flat:
@@ -1171,19 +1331,18 @@ class PlotManager:
             self.plot_container.append(pane)
             return
 
-        
-        
         if metric.startswith("accuracy"):
-            print(summary_df["file"])
-            summary_df[["label", "device", "attack"]] = summary_df["file"].str.split("/", expand=True)
-            summary_df["attack"]=summary_df["attack"].astype(str)
+            summary_df[["label", "device", "attack"]] = summary_df["file"].str.split(
+                "/", expand=True
+            )
+            summary_df["attack"] = summary_df["attack"].astype(str)
 
             # Define metric-specific configuration
             metric_config = {
                 "binary": ("label", lambda x: x.startswith("benign")),
                 "device": ("device", lambda x: x.startswith("whole_week")),
                 "attack": ("attack", lambda x: x.startswith("None")),
-                "full": ("file", lambda x: x.startswith("benign"))
+                "full": ("file", lambda x: x.startswith("benign")),
             }
 
             # Get the appropriate grouping column and negative condition
@@ -1196,21 +1355,25 @@ class PlotManager:
             results = []
             for group_keys, group in summary_df.groupby(groupby_cols):
                 dataset, fe_name, pipeline, label = group_keys
-                
+
                 # Calculate accuracy
                 ratio = group["pos_count"].sum() / group["batch_size"].sum()
                 accuracy = 1 - ratio if is_negative(label) else ratio
-                
-                # Create result
-                results.append({
-                    "accuracy": accuracy,
-                    "dataset": dataset,
-                    "fe_name": fe_name,
-                    "pipeline": pipeline,
-                    "label": label
-                })
 
-            results_df = pd.concat([pd.DataFrame([r]) for r in results], ignore_index=True)
+                # Create result
+                results.append(
+                    {
+                        "accuracy": accuracy,
+                        "dataset": dataset,
+                        "fe_name": fe_name,
+                        "pipeline": pipeline,
+                        "label": label,
+                    }
+                )
+
+            results_df = pd.concat(
+                [pd.DataFrame([r]) for r in results], ignore_index=True
+            )
 
             # Plot
             fig = sns.catplot(
@@ -1219,12 +1382,12 @@ class PlotManager:
                 x="accuracy",
                 hue="pipeline",
                 aspect=1.6,
-                height=max(5, 0.2 * len(results_df["label"].unique())),
+                height=self.w.plot_height.value,
                 kind="bar",
             )
             pane = pn.pane.Matplotlib(fig.figure, interactive=False)
             self.plot_container.append(pane)
-            return 
+            return
 
         # otherwise compute derived metrics using calc_stats
         results = []

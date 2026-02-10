@@ -140,11 +140,11 @@ class BaseFeatureBuffer(CompressedOutputWriter):
         
         
 
-    def process(self, data: Tuple[List[Any], List[Any]]) -> Union[None, NDArray]:
+    def process(self, data: List[Any]) -> Union[None, NDArray]:
         """process input data
 
         Args:
-            data (Tuple[List[Any], List[Any]]): the input data, which must be a tuple of feature values and meta_data
+            data (List[Any]): the input data, which must be a tuple of feature values and meta_data
 
         Returns:
             Union[None, NDArray]: returns buffered feature if buffer is full, other wise None

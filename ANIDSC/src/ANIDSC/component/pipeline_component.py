@@ -5,8 +5,9 @@ import inspect
 
 import io
 import pickle
+import sys
 
-
+from ..converters import auto_cast_method
 from ..utils.helper import compare_dicts
 
 import collections
@@ -62,7 +63,7 @@ class PipelineComponent(ABC):
     def teardown(self):
         pass
     
-    
+    @auto_cast_method
     @abstractmethod
     def process(self, data):
         pass
@@ -104,12 +105,12 @@ class PipelineComponent(ABC):
                 continue
             
             if isinstance(v, io.IOBase):
-                print(f"{k}:{v} of {self.__class__.__name__} is file. If it is created during setup, its fine")
+                print(f"{k}:{v} of {self.__class__.__name__} is file. If it is created during setup, its fine", file=sys.stderr)
                 
                 continue
             
             if isinstance(v, collections.abc.Iterator):
-                print(f"{k}:{v} of {self.__class__.__name__} is an iterator. If it is created during setup, its fine")
+                print(f"{k}:{v} of {self.__class__.__name__} is an iterator. If it is created during setup, its fine", file=sys.stderr  )
                 continue 
             state[k] = v
         return state

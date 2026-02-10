@@ -16,12 +16,6 @@ import panel as pn
 pn.extension()
 
 
-def update_connection(G, src, dst, payload_len):
-    if G.has_edge(src, dst):
-        G[src][dst]["size"] += payload_len
-        G[src][dst]["count"] += 1
-    else:
-        G.add_edge(src, dst, size=payload_len, count=1)
 
 def horizontal_band_layout(G):
     """
@@ -80,89 +74,7 @@ class MultilayerNetworkGraph:
         # NetworkX graphs for each layer
         self.graph=nx.DiGraph()
     
-    def parse_pcap(self):
-        """Parse PCAP file and extract network information"""
-        packets = scapy.rdpcap(self.pcap_file)
-        
-        # Limit number of packets if specified
-        if self.max_packets:
-            packets = packets[:self.max_packets]
-            print(f"Processing {len(packets)} packets (limited by max_packets={self.max_packets})")
-        else:
-            print(f"Processing {len(packets)} packets")
-        
-        for packet in packets:
-            # Extract MAC layer information
-            if Ether in packet:
-                src_mac = packet[Ether].src
-                dst_mac = packet[Ether].dst
-                
-                # add nodes
-                self.graph.add_node(src_mac, layer="Physical")
-                self.graph.add_node(dst_mac, layer="Physical")
-                
-                ether_len=len(packet[Ether].payload)
-                
-                # Add horizontal connection, update if exists
-                update_connection(self.graph, src_mac, dst_mac, ether_len)
-            
-            # Extract IP layer information
-            if IP in packet:
-                src_ip = packet[IP].src
-                dst_ip = packet[IP].dst
-                
-                # add nodes
-                self.graph.add_node(src_ip, layer="Internet")
-                self.graph.add_node(dst_ip, layer="Internet")
-                
-                ip_len=len(packet[IP].payload)
-                
-                # Add horizontal connection, update if exists
-                update_connection(self.graph, src_ip, dst_ip, ether_len)
-                
-                # Add interlayer connection (MAC to IP)
-                if Ether in packet:
-                    update_connection(self.graph, src_ip,src_mac,ip_len)
-                    
-                    update_connection(self.graph, dst_mac,dst_ip,ether_len)
-                    
-                    
-                
-                # Extract transport layer information
-                port_src, port_dst = None, None
-                if TCP in packet:
-                    port_src = packet[TCP].sport
-                    port_dst = packet[TCP].dport
-                    transport_len=len(packet[TCP].payload)
-                elif UDP in packet:
-                    port_src = packet[UDP].sport
-                    port_dst = packet[UDP].dport
-                    transport_len=len(packet[UDP].payload)
-                
-                if port_src and port_dst:
-                    src_socket = f"{src_ip}:{port_src}"
-                    dst_socket = f"{dst_ip}:{port_dst}"
-                    
-                    # add nodes
-                    self.graph.add_node(src_socket, layer="Transport")
-                    self.graph.add_node(dst_socket, layer="Transport")
-                    
-                    update_connection(self.graph, src_socket,dst_socket,transport_len)
-                    
-                    update_connection(self.graph, src_socket,src_ip,transport_len)
-                    update_connection(self.graph, dst_ip,dst_socket,ip_len)
-        
 
-    def get_stats(self):
-        """Get network statistics"""
-        stats = {
-            'total_nodes': self.graph.number_of_nodes(),
-            'total_edges': self.graph.number_of_edges(),
-            'physical_nodes': len([n for n, d in self.graph.nodes(data=True) if d.get('layer') == 'Physical']),
-            'internet_nodes': len([n for n, d in self.graph.nodes(data=True) if d.get('layer') == 'Internet']),
-            'transport_nodes': len([n for n, d in self.graph.nodes(data=True) if d.get('layer') == 'Transport']),
-        }
-        return stats
 
     def visualize(self):
         """Create visualization of multilayer network using Bokeh"""

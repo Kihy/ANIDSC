@@ -1,3 +1,5 @@
+from itertools import product
+from typing import Any, Dict, List
 import numpy as np
 from pytdigest import TDigest
 import torch
@@ -6,101 +8,106 @@ from collections import deque
 import torch_geometric
 import pandas as pd
 import networkx as nx
+from functools import singledispatch
 
 
-def compare_dicts(dict1, dict2, comp_class=None):
-    # Check if keys are the same
-    if dict1.keys() != dict2.keys():
+
+# -------------------------
+# Generic entry point
+# -------------------------
+def compare_dicts(d1, d2, ctx=None):
+    if d1.keys() != d2.keys():
         print("different number of keys")
         return False
 
-    is_same = True
-    # Compare values for each key
-    for key in dict1:
-        val1 = dict1[key]
-        val2 = dict2[key]
+    for k in d1:
+        if not compare(d1[k], d2[k], ctx):
+            print(f"different key: {k} for {ctx}")
+            print(f"val1 ({type(d1[k])}): {d1[k]}")
+            print(f"val2 ({type(d2[k])}): {d2[k]}")
+            return False
+    return True
 
-        # Handle NumPy arrays
-        if isinstance(val1, np.ndarray) or isinstance(val2, np.ndarray):
-            if not (isinstance(val1, np.ndarray) and isinstance(val2, np.ndarray)):
-                is_same = False
-                break
-            if not np.array_equal(val1, val2):
-                is_same = False
-                break
 
-        # Handle nested dictionaries recursively
-        elif isinstance(val1, dict) and isinstance(val2, dict):
-            if not compare_dicts(val1, val2, comp_class):
-                is_same = False
-                break
+# -------------------------
+# Generic comparator
+# -------------------------
+@singledispatch
+def compare(a, b, ctx=None):
+    return a == b
 
-        # Handle lists/tuples (if they contain arrays)
-        elif isinstance(val1, (list, tuple, deque)) and isinstance(
-            val2, (list, tuple, deque)
-        ):
-            if len(val1) != len(val2):
-                is_same = False
-                break
-            for v1, v2 in zip(val1, val2):
-                if isinstance(v1, np.ndarray) or isinstance(v2, np.ndarray):
-                    if not (np.array_equal(v1, v2)):
-                        is_same = False
-                        val1 = v1
-                        val2 = v2
-                        break
-                elif callable(v1):
-                    if v1.__qualname__ != v2.__qualname__:
-                        is_same = False
-                        val1 = v1
-                        val2 = v2
-                        break
-                elif str(v1) != str(v2):
-                    is_same = False
-                    val1 = v1
-                    val2 = v2
-                    break
 
-        # Default comparison for non-array types
-        elif isinstance(val1, torch.nn.Module):
-            sdA = val1.state_dict()
-            sdB = val2.state_dict()
-            for i in sdA:
-                if not torch.isclose(sdA[i], sdB[i], equal_nan=True).all():
-                    is_same = False
-                    val1 = sdA[i]
-                    val2 = sdB[i]
-                    break
-            if not is_same:
-                break
-        elif isinstance(val1, nx.Graph):
-            if not (
-                list(val1.nodes(data=True)) == list(val2.nodes(data=True))
-                and list(val1.edges(data=True)) == list(val2.edges(data=True))
-            ):
-                
-                is_same = False
-                break
+# -------------------------
+# NumPy
+# -------------------------
+@compare.register(np.ndarray)
+def _(a, b, ctx=None):
+    return isinstance(b, np.ndarray) and np.array_equal(a, b)
 
-        elif isinstance(val1, torch_geometric.data.Data):
-            compare_dicts(val1.to_dict(), val2.to_dict(), comp_class)
 
-        elif isinstance(val1, torch.Tensor):
-            is_same= torch.allclose(val1, val2)
-        
-        elif isinstance(val1, pd.Series):
-            is_same=val1.equals(val2)
-        
-        elif val1 != val2:
-            is_same = False
-            break
+# -------------------------
+# Torch
+# -------------------------
+@compare.register(torch.Tensor)
+def _(a, b, ctx=None):
+    return isinstance(b, torch.Tensor) and torch.allclose(a, b, equal_nan=True)
 
-    if not is_same:
-        print(f"different {key} for {comp_class}")
-        print(f"val1: {type(val1)} {val1}")
-        print(f"val2: {type(val1)} {val2}")
 
-    return is_same
+@compare.register(torch.nn.Module)
+def _(a, b, ctx=None):
+    if not isinstance(b, torch.nn.Module):
+        return False
+    sdA, sdB = a.state_dict(), b.state_dict()
+    return all(
+        torch.allclose(sdA[k], sdB[k], equal_nan=True)
+        for k in sdA
+    )
+
+
+# -------------------------
+# pandas
+# -------------------------
+@compare.register(pd.Series)
+def _(a, b, ctx=None):
+    return isinstance(b, pd.Series) and a.equals(b)
+
+
+# -------------------------
+# Containers
+# -------------------------
+@compare.register(list)
+@compare.register(tuple)
+@compare.register(deque)
+def _(a, b, ctx=None):
+    if type(a) is not type(b) or len(a) != len(b):
+        return False
+    return all(compare(x, y, ctx) for x, y in zip(a, b))
+
+
+@compare.register(dict)
+def _(a, b, ctx=None):
+    return compare_dicts(a, b, ctx)
+
+
+# -------------------------
+# NetworkX
+# -------------------------
+@compare.register(nx.Graph)
+def _(a, b, ctx=None):
+    if not isinstance(b, nx.Graph):
+        return False
+    return (
+        list(a.nodes(data=True)) == list(b.nodes(data=True)) and
+        list(a.edges(data=True)) == list(b.edges(data=True))
+    )
+
+
+# -------------------------
+# PyG
+# -------------------------
+@compare.register(torch_geometric.data.Data)
+def _(a, b, ctx=None):
+    return compare_dicts(a.to_dict(), b.to_dict(), ctx)
 
 
 def uniqueXT(
@@ -161,3 +168,41 @@ def uniqueXT(
             return_counts=return_counts,
             dim=dim,
         )
+
+
+def generate_cartesian_configs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
+    """
+    Generate cartesian product of all array-valued elements in config.
+    
+    Args:
+        config: Dictionary with array and non-array values
+        
+    Returns:
+        List of dictionaries with all combinations
+    """
+    # Separate array and non-array fields
+    array_fields = {}
+    static_fields = {}
+    
+    for key, value in config.items():
+        if isinstance(value, list):
+            array_fields[key] = value
+        else:
+            static_fields[key] = value
+    
+    # If no array fields, return original config
+    if not array_fields:
+        return [config]
+    
+    # Generate cartesian product
+    keys = list(array_fields.keys())
+    values = [array_fields[k] for k in keys]
+    
+    configs = []
+    for combination in product(*values):
+        # Create new config with this combination
+        new_config = static_fields.copy()
+        new_config.update(dict(zip(keys, combination)))
+        configs.append(new_config)
+    
+    return configs

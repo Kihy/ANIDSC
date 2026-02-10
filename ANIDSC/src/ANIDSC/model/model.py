@@ -1,16 +1,15 @@
-import math
 
-import torch
 from ..save_mixin.pickle import PickleSaveMixin
 from ..component.pipeline_component import PipelineComponent
 from collections import deque
+from ..converters.decorator import auto_cast_method
 
-from abc import abstractmethod
 import numpy as np
 from ..utils import threshold_func
-from ..scaler import LivePercentile
+
 
 import importlib
+
 
 
 class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
@@ -65,17 +64,14 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
 
             self.model = self.model_cls(ndim)
 
-    def process(self, X):
+    @auto_cast_method
+    def process(self, X: np.ndarray):
         threshold = self.get_threshold()
         score = np.full((X.shape[0],), self.tolerance*threshold+1.)
         
-        # Ensure X is a tensor
-        if isinstance(X, np.ndarray):
-            X = torch.from_numpy(X).cuda()
-        
         # Get valid samples (no inf values)
-        valid_mask = ~torch.isinf(X).any(dim=1)
-        score[valid_mask.cpu().numpy()] = self.model.predict_step(X[valid_mask])
+        valid_mask = ~np.isinf(X).any(axis=1)
+        score[valid_mask] = self.model.predict_step(X[valid_mask])
         self.batch_evaluated+=1
         
         
@@ -83,14 +79,16 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         if self.batch_trained < self.warmup:
             train_mask = valid_mask    
         else:
-            train_mask = valid_mask.cuda() & torch.from_numpy(score < self.tolerance*threshold).cuda()
+            train_mask = valid_mask & (score < self.tolerance*threshold)
         
-        queue_scores = score[train_mask.cpu().numpy()]
+        queue_scores = score[train_mask]
         
         # Update loss queue and train
         self.loss_queue.extend(queue_scores)
         
-        self.model.train_step(X[train_mask])
+        if score[train_mask].size != 0:
+            self.model.train_step(X[train_mask])
+            
         self.batch_trained += 1
         
         return {"threshold": threshold, "score": score}
@@ -101,7 +99,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         Returns:
             float: threshold value
         """
-        if len(self.loss_queue) > self.warmup:
+        if self.batch_trained >= self.warmup:
             threshold = self.t_func(self.loss_queue, self.percentile)
         else:
             threshold = -1

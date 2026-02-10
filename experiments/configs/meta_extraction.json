@@ -1,0 +1,4 @@
+{
+    "reader_type": "PacketReader",
+    "meta_extractor": "ProtocolMetaExtractor"
+}

@@ -72,6 +72,13 @@ docker run --rm --gpus all -it \
   kihy/anidsc_vis_image
 ```
 
+
+run whatever app you have
+```
+panel serve app.py --address 0.0.0.0 --port 5007 --dev
+panel serve multi-layer.py --address 0.0.0.0 --port 5007 --dev
+```
+
 Note:
 The permissions are set as follows:
 - within the docker container, the user is hostuser and hostgroup
@@ -91,7 +98,35 @@ docker run --rm --gpus all -it \
 
 ## running slurm jobs
 ```
-sbatch experiments/jobs/meta_extraction.slurm
-sbatch experiments/jobs/feature_extraction.slurm
-sbatch experiments/jobs/detection.slurm
+sbatch experiments/jobs/run_experiment.slurm test_dataset "experiments/configs/multi_feature.json"
 ```
+
+Use `--dependency=afterok:xxxx` straight after `sbatch` to ensure dependency is correct
+
+# Predefined Pipelines
+Predefined pipelines are written in `templates.py`. Here we list some
+
+## Meta Extraction
+Extracts metadata (e.g., payload, size) for each packet, can be in any form but we use Dictionary and save as CSV
+
+DataReader(pcap file) --> MetaExtractor --> FeatureBuffer(CSV)
+
+## Feature Extraction 
+Extracts features from metadata, either to tabular (CSV) or graph (NDJSON)
+
+DataReader(CSV) --> FeatureExtractor --> FeatureBuffer(CSV/NDJSON)
+
+## Detection
+
+Detection is most complex, as many different methods of detection exists. At the most basic level, we have the basic detection pipeline:
+
+DataReader --> Scaler --> Model --> Evaluator
+
+For graph-based detection, we have lager:
+
+DataReader --> Splitter (Scaler --> Node Embedder --> Model --> Evaluator) 
+
+For generic graph based detection, we have:
+
+DataReader --> GraphRepresentation --> Node Embedder --> Scaler (optional) --> Model --> Evaluator
+

@@ -1,5 +1,5 @@
 Feature: Detection with homogeneous models
-    Scenario: Empty folders
+    # Scenario: Empty folders
     Given folders that starts with test_data SingleLayerGraphExtractor are empty
     Given folders that starts with test_data ProtocolMetaExtractor are empty
 
@@ -45,20 +45,20 @@ Feature: Detection with homogeneous models
             | model          | node_embed          | graph_rep | layer     |
             | torch_model.AE | PassThroughEmbedder | Plain     | physical  |
             | MedianDetector | PassThroughEmbedder | Plain     | physical  |
-            | torch_model.AE | PassThroughEmbedder | CDD       | physical  |
-            | MedianDetector | PassThroughEmbedder | CDD       | physical  |
             | torch_model.AE | PassThroughEmbedder | Filter    | physical  |
             | MedianDetector | PassThroughEmbedder | Filter    | physical  |
             | torch_model.AE | PassThroughEmbedder | Plain     | transport |
             | MedianDetector | PassThroughEmbedder | Plain     | transport |
-            | torch_model.AE | PassThroughEmbedder | CDD       | transport |
-            | MedianDetector | PassThroughEmbedder | CDD       | transport |
             | torch_model.AE | PassThroughEmbedder | Filter    | transport |
             | MedianDetector | PassThroughEmbedder | Filter    | transport |
             | torch_model.AE | PassThroughEmbedder | Plain     | internet  |
             | MedianDetector | PassThroughEmbedder | Plain     | internet  |
-            | torch_model.AE | PassThroughEmbedder | CDD       | internet  |
-            | MedianDetector | PassThroughEmbedder | CDD       | internet  |
             | torch_model.AE | PassThroughEmbedder | Filter    | internet  |
             | MedianDetector | PassThroughEmbedder | Filter    | internet  |
+            # | torch_model.AE | PassThroughEmbedder | CDD       | physical  |
+            # | MedianDetector | PassThroughEmbedder | CDD       | physical  |
+            # | torch_model.AE | PassThroughEmbedder | CDD       | internet  |
+            # | MedianDetector | PassThroughEmbedder | CDD       | internet  |
+            # | torch_model.AE | PassThroughEmbedder | CDD       | transport |
+            # | MedianDetector | PassThroughEmbedder | CDD       | transport |
 

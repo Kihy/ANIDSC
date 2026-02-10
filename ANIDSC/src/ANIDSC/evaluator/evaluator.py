@@ -66,7 +66,7 @@ class CSVResultWriter(PickleSaveMixin, BaseResultWriter):
         result_dict = {
             "process_time": duration,
             "batch_num": self.request_attr("batch_evaluated"),
-            "timestamp": self.request_attr("timestamp"),
+            "timestamp": self.request_attr("timestamp")[-1],
         }
 
         for metric_name, metric in zip(METRICS, self.metrics):
@@ -74,8 +74,6 @@ class CSVResultWriter(PickleSaveMixin, BaseResultWriter):
             result_dict[metric_name] = metric(data)
 
         self.save_file.write(",".join(map(str, result_dict.values())) + "\n")
-        
-        
 
         return data
 
@@ -90,37 +88,18 @@ class GraphResultWriter(PickleSaveMixin, BaseResultWriter):
     def file_type(self):
         return "ndjson"
 
-    def __init__(self, graph_period=1):
+    def __init__(self):
         super().__init__()
-        self.graph_period = graph_period
-        self.last_timestamp = None
+
 
     def process(self, data):
-        cur_time = self.request_attr("timestamp")
+        graphs = self.request_attr("transformed_graph")
+        
+        for g, score in zip(graphs, data["score"]):
+            # get threshold
+            g.graph["threshold"] = data["threshold"]
+            g.graph["graph_as"]=score
+        
 
-        if self.last_timestamp is None:
-            self.last_timestamp = self.request_attr("timestamp")
-
-        if cur_time - self.last_timestamp > self.graph_period:
-            self.save_graph(data)
-
-            self.last_timestamp = cur_time
-
-        return data
-
-    def save_graph(self, data):
-        G = self.request_attr("networkx")
-
-        # get threshold
-        G.graph["threshold"] = data["threshold"]
-
-        # add anomaly score
-        if data["score"] is None:
-            nx.set_node_attributes(G, float("inf"), "node_as")
-        else:
-            # assign edge nodes
-            score_map = {i: float(v) for i, v in zip(G.nodes, data["score"])}
-            nx.set_node_attributes(G, score_map, "node_as")
-
-        json.dump(nx.cytoscape_data(G), self.save_file)
-        self.save_file.write("\n")
+            json.dump(nx.cytoscape_data(g), self.save_file)
+            self.save_file.write("\n")

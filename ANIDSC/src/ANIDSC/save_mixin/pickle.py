@@ -3,6 +3,7 @@
 from abc import abstractmethod
 from pathlib import Path
 import pickle
+import sys
 
 from ..save_mixin.basemixin import BaseSaveMixin
 
@@ -46,7 +47,7 @@ class PickleSaveMixin(BaseSaveMixin):
         if not isinstance(obj, cls):
             raise TypeError(f"Loaded object is not of type {cls.__name__}")
         
-        print(f"Object loaded from {file_path}")
+        print(f"Object loaded from {file_path}", file=sys.stderr)
         return obj
 
     

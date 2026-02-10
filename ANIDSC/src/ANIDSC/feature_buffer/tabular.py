@@ -76,8 +76,6 @@ class DictFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
         for data in self.data_list:
             self.save_file.write(",".join(map(str, data.values()))+"\n")
         
-        
-        
         self.data_list = []
         
         return batched
