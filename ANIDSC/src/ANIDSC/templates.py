@@ -157,7 +157,7 @@ def packet_reader(
 def graph_reader(
     dataset_name: str,
     file_name: str,
-    fe_name: str,
+    prev_pipeline: str,
     **kwargs
 ) -> dict:
     return {
@@ -166,7 +166,7 @@ def graph_reader(
         "attrs": {
             "dataset_name": dataset_name,
             "file_name": file_name,
-            "fe_name": fe_name
+            "prev_pipeline": prev_pipeline
         },
     }
 
@@ -180,7 +180,6 @@ def protocol_meta_extractor(**kwargs) -> dict:
     
 @ComponentRegistry.register("dict_feature_buffer", category="feature_buffer")
 def feature_buffer(
-    folder_name: str,
     buffer_size: int,
     **kwargs
 ) -> dict:
@@ -188,7 +187,6 @@ def feature_buffer(
         "type": "feature_buffer",
         "class": "DictFeatureBuffer",
         "attrs": {
-            "folder_name": folder_name,
             "buffer_size": buffer_size,
         },
     }
@@ -196,7 +194,6 @@ def feature_buffer(
         
 @ComponentRegistry.register("json_feature_buffer", category="feature_buffer")
 def json_feature_buffer(
-    folder_name: str,
     buffer_size: int,
     **kwargs
 ) -> dict:
@@ -204,7 +201,6 @@ def json_feature_buffer(
         "type": "feature_buffer",
         "class": "JsonFeatureBuffer",
         "attrs": {
-            "folder_name": folder_name,
             "buffer_size": buffer_size,
         },
     }
@@ -213,7 +209,6 @@ def json_feature_buffer(
     
 @ComponentRegistry.register("numpy_feature_buffer", category="feature_buffer")
 def numpy_feature_buffer(
-    folder_name: str,
     buffer_size: int,
     **kwargs
 ) -> dict:
@@ -221,7 +216,6 @@ def numpy_feature_buffer(
         "type": "feature_buffer",
         "class": "NumpyFeatureBuffer",
         "attrs": {
-            "folder_name": folder_name,
             "buffer_size": buffer_size,
         },
     }
@@ -231,7 +225,7 @@ def numpy_feature_buffer(
 def csv_reader(
     dataset_name: str,
     file_name: str,
-    fe_name:str,
+    prev_pipeline:str,
     **kwargs
 ) -> dict:
     return {
@@ -240,7 +234,7 @@ def csv_reader(
         "attrs": {
             "dataset_name": dataset_name,
             "file_name": file_name,
-            "fe_name": fe_name
+            "prev_pipeline": prev_pipeline
         },
     }
 
@@ -279,11 +273,11 @@ def lp_scaler(**kwargs) -> dict:
 
 
 @ComponentRegistry.register("od_model", category="model")
-def od_model(model_name: str, **kwargs) -> dict:
+def od_model(model_name: str, model_params: dict, **kwargs) -> dict:
     return {
         "type": "model",
         "class": "BaseOnlineODModel",
-        "attrs": {"model_name": model_name},
+        "attrs": {"model_name": model_name, "model_params": model_params},
     }
 
 
@@ -316,11 +310,12 @@ def graph_rep(graph_rep: str, **kwargs) -> dict:
 
 
 @ComponentRegistry.register("pipeline", category="pipeline")
-def pipeline(manifest: Any, run_identifier: str, **kwargs) -> dict:
+def pipeline(name:str, manifest: Any, run_identifier: str, **kwargs) -> dict:
     return {
         "type": "pipeline",
         "class": "Pipeline",
         "attrs": {
+            "name": name,
             "manifest": manifest,
             "run_identifier": run_identifier,
         },
@@ -397,7 +392,7 @@ class PipelineRegistry:
             )
 
         components = info["function"](**kwargs)
-        pipeline_dict = pipeline(components, kwargs["run_identifier"])
+        pipeline_dict = pipeline(name, components, kwargs["run_identifier"])
         return yaml.safe_dump(
             pipeline_dict,
             sort_keys=False,
@@ -433,7 +428,7 @@ def meta_extraction_template(**kwargs) -> List[dict]:
     return [
         create_component("packet_reader", **kwargs),
         create_component("protocol_meta_extractor", **kwargs),
-        create_component("dict_feature_buffer", folder_name="features", buffer_size=1),
+        create_component("dict_feature_buffer", buffer_size=1),
     ]
 
 
@@ -446,8 +441,7 @@ def feature_extraction_template(**kwargs) -> List[dict]:
 
     return [create_component("csv_reader", **kwargs), 
             create_component("feature_extractor", **kwargs),
-            create_component("numpy_feature_buffer", 
-                            folder_name="features", buffer_size=1)]
+            create_component("numpy_feature_buffer", buffer_size=1)]
 
 
 @PipelineRegistry.register(
@@ -459,8 +453,7 @@ def graph_feature_extraction(**kwargs) -> List[dict]:
 
     return [create_component("csv_reader", **kwargs), 
                   create_component("multi_feature_extractor", **kwargs),
-                  create_component("json_feature_buffer", 
-                                 folder_name="features", buffer_size=1)]
+                  create_component("json_feature_buffer", buffer_size=1)]
 
 
 
@@ -539,7 +532,7 @@ def basic_detection_template(**kwargs) -> List[dict]:
 
 
 @PipelineRegistry.register(
-    "multilayer-graph-feature",
+    "multilayer_graph_feature",
     "Multilayer graph representation with feature pipeline"
 )
 def multilayer_template(**kwargs) -> List[dict]:
@@ -548,6 +541,21 @@ def multilayer_template(**kwargs) -> List[dict]:
         create_component("graph_reader", **kwargs),
         create_component("graph_rep", **kwargs),
         create_component("graph_feature_extractor", **kwargs),
+        create_component("od_model", **kwargs),
+        create_component("csv_evaluator", **kwargs),
+        create_component("graph_evaluator", **kwargs),
+    ]
+
+
+@PipelineRegistry.register(
+    "multilayer_graph_recon",
+    "Multilayer graph representation with reconstruction based learning"
+)
+def multilayer_template(**kwargs) -> List[dict]:
+    """Create multilayer pipeline components."""
+    return [
+        create_component("graph_reader", **kwargs),
+        create_component("graph_rep", **kwargs),
         create_component("od_model", **kwargs),
         create_component("csv_evaluator", **kwargs),
         create_component("graph_evaluator", **kwargs),

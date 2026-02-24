@@ -44,7 +44,8 @@ RUN pip install --no-cache-dir \
     fsspec \
     zstandard\ 
     dash \ 
-    dash-cytoscape
+    dash-cytoscape \
+    optuna-dashboard
 
 
 ARG USER_ID

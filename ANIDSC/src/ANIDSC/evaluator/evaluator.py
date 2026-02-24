@@ -31,25 +31,17 @@ METRICS = [
 
 class BaseResultWriter(CompressedOutputWriter):
         
-    @property 
-    def output_path(self):
-        pipeline_name = self.parent_pipeline.name
-        
-        return Path(
-            f"{self.dataset_name}/{self.folder_name}/{self.comp_name}-{self.request_attr('run_identifier')}/{self.file_name}/{pipeline_name}.{self.file_type}"
-        )
+    @property
+    def output_file_name(self):
+        return "results"
 
 class CSVResultWriter(PickleSaveMixin, BaseResultWriter):
-    @property
-    def folder_name(self):
-        return "results"
+
 
     @property
     def file_type(self):
         return "csv"
 
-
-    
     def setup(self):
         super().setup()
 
@@ -81,8 +73,8 @@ class CSVResultWriter(PickleSaveMixin, BaseResultWriter):
 class GraphResultWriter(PickleSaveMixin, BaseResultWriter):
 
     @property
-    def folder_name(self):
-        return "graphs"
+    def output_file_name(self):
+        return "output_graphs"
 
     @property
     def file_type(self):
@@ -98,7 +90,7 @@ class GraphResultWriter(PickleSaveMixin, BaseResultWriter):
         for g, score in zip(graphs, data["score"]):
             # get threshold
             g.graph["threshold"] = data["threshold"]
-            g.graph["graph_as"]=score
+            g.graph["graph_as"]=float(score)
         
 
             json.dump(nx.cytoscape_data(g), self.save_file)

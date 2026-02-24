@@ -28,7 +28,8 @@ RUN pip install --no-cache-dir \
     ijson \
     pytest \
     fsspec  \
-    zstandard 
+    zstandard \
+    optuna 
 
 # Copy your ANIDSC into the image
 COPY ANIDSC ./ANIDSC

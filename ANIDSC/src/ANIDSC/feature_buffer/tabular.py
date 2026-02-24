@@ -12,6 +12,10 @@ class NumpyFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
     def file_type(self):
         return "csv"
     
+    @property
+    def output_file_name(self):
+        return "features"
+    
     def setup(self):
         super().setup()
         # write header when file is empty
@@ -43,7 +47,7 @@ class NumpyFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
         return batch_data
     
     def __str__(self):
-        return f"NumpyFeatureBuffer({self.folder_name})"
+        return f"NumpyFeatureBuffer"
 
 
 
@@ -52,6 +56,10 @@ class DictFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
     @property 
     def file_type(self):
         return "csv"
+    
+    @property
+    def output_file_name(self):
+        return "features"
     
     def setup(self):
         super().setup()
@@ -81,4 +89,4 @@ class DictFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
         return batched
     
     def __str__(self):
-        return f"DictFeatureBuffer({self.folder_name})"
+        return f"DictFeatureBuffer"

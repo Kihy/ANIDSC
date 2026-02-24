@@ -1,4 +1,6 @@
 from itertools import product
+import json
+from pathlib import Path
 from typing import Any, Dict, List
 import numpy as np
 from pytdigest import TDigest
@@ -206,3 +208,29 @@ def generate_cartesian_configs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
         configs.append(new_config)
     
     return configs
+
+
+def load_json(input_str):
+    """
+    If input_str is valid JSON, return parsed object.
+    Otherwise, treat it as a file path and load JSON from file.
+    """
+
+    # 1️⃣ Try parsing as JSON string
+    try:
+        return json.loads(input_str)
+    except json.JSONDecodeError:
+        pass  # Not a JSON string
+
+    # 2️⃣ Try treating it as a file path
+
+    path = Path(input_str)
+
+    if not path.exists():
+        raise ValueError(f"Input is neither valid JSON nor a valid file path: {input_str}")
+
+    try:
+        with path.open("r", encoding="utf-8") as f:
+            return json.load(f)
+    except json.JSONDecodeError as e:
+        raise ValueError(f"File exists but does not contain valid JSON: {input_str}") from e

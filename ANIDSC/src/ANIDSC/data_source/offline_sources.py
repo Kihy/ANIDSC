@@ -1,6 +1,7 @@
+from abc import abstractmethod
 import json
 import os
-from typing import Any, Dict
+from typing import Any, Dict, Iterator
 import networkx as nx
 import fsspec
 from ..save_mixin.pickle import PickleSaveMixin
@@ -17,7 +18,7 @@ class PacketReader(PickleSaveMixin,PipelineSource):
 
     def setup(self):
         # Try both extensions
-        base_path = f"{self.dataset_name}/pcap/{self.file_name}"
+        base_path = f"datasets/{self.dataset_name}/{self.file_name}"
         pcap_path = f"{base_path}.pcap"
         pcapng_path = f"{base_path}.pcapng"
 
@@ -42,83 +43,84 @@ class PacketReader(PickleSaveMixin,PipelineSource):
         return None
         
         
-        
+class PipelineReader(PickleSaveMixin, PipelineSource):
+    """Base class for readers that read from a previous pipeline's output."""
 
-class CSVReader(PickleSaveMixin, PipelineSource):
-    def __init__(self, fe_name: str, **kwargs):
-        """reads data from CSV file
-
-        Args:
-            fe_cls (str): class of the feature extractor
-            fe_name (str): name of feature extractor
-
-        """
+    def __init__(self, prev_pipeline: str, **kwargs):
         super().__init__(**kwargs)
-        self.fe_name=fe_name 
+        self.prev_pipeline = prev_pipeline
 
-    
-    def setup(self):
-        self.path = f"{self.dataset_name}/features/{self.fe_name}/{self.file_name}.csv.zst"
-        
-        self._file = fsspec.open(self.path, "rt", compression="zstd").open()
+    @property
+    @abstractmethod
+    def input_file_name(self):
+        pass
 
-        self._iter = pd.read_csv(
-            self._file, chunksize=self.batch_size, nrows=self.max_records, header=0
-        )
-    
-    def get_timestamp(self, data):
-        if "timestamp" in data.columns:            
-            return data["timestamp"]
-        else:
-            return None
+    @property
+    def path(self) -> str:
+        return f"runs/{self.dataset_name}/{self.prev_pipeline}/{self.file_name}/{self.input_file_name}"
     
     @property
-    def batch_size(self):
-        return 1024
+    @abstractmethod
+    def batch_size(self) -> int:
+        pass 
     
+    @property
+    @abstractmethod
+    def output_dim(self):
+        pass 
+    
+    @abstractmethod
+    def get_iterator(self, file) -> Iterator:
+        pass
+
+    @abstractmethod
+    def get_timestamp(self, data):
+        pass 
+
+    def setup(self):
+        self._file = fsspec.open(self.path, "rt", compression="zstd").open()
+        self._iter = self.get_iterator(self._file)
+
+    def teardown(self):
+        self._file.close()
+
+
+class CSVReader(PipelineReader):
+    @property 
+    def input_file_name(self):
+        return "features.csv.zst"
+
+    @property
+    def batch_size(self) -> int:
+        return 1024
+
     @property
     def output_dim(self):
-        return len(self.iter._engine.names)
-    
-    def teardown(self):
-        self._file.close()
+        return len(self._iter._engine.names)
 
-class JsonGraphReader(PickleSaveMixin, PipelineSource):
-    def __init__(self, fe_name: str, **kwargs):
-        """reads data from JSON file
+    def get_iterator(self, file) -> Iterator:
+        return pd.read_csv(file, chunksize=self.batch_size, nrows=self.max_records, header=0)
 
-        Args:
-            fe_cls (str): class of the feature extractor
-            fe_name (str): name of feature extractor
-
-        """
-        super().__init__(**kwargs)
-
-        # set fe_attrs to self 
-        self.fe_name=fe_name
-
-    def setup(self):
-        self.path = f"{self.dataset_name}/features/{self.fe_name}/{self.file_name}.ndjson.zst"
-        self._file = fsspec.open(self.path, "rt", compression="zstd").open()
-        
-        self._iter=self.get_json_obj()
-        
-    def get_json_obj(self):
-        for line in self._file:
-            yield [nx.readwrite.json_graph.node_link_graph(json.loads(line))]
-
-    def teardown(self):
-        self._file.close()
-        
-    
     def get_timestamp(self, data):
-        return [g.graph["time_stamp"] for g in data]
-    
+        return data["timestamp"] if "timestamp" in data.columns else None
 
-    @property
-    def batch_size(self):
-        return 1
+
+class JsonGraphReader(PipelineReader):
+    @property 
+    def input_file_name(self):
+        return "input_graph_features.ndjson.zst"
     
+    @property
+    def batch_size(self) -> int:
+        return 1
+
     @property
     def output_dim(self):
         return None
+
+    def get_iterator(self, file) -> Iterator:
+        for line in file:
+            yield [nx.readwrite.json_graph.node_link_graph(json.loads(line))]
+
+    def get_timestamp(self, data):
+        return [g.graph["time_stamp"] for g in data]

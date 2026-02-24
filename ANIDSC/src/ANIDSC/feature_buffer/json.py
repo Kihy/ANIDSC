@@ -9,6 +9,10 @@ class JsonFeatureBuffer(PickleSaveMixin, BaseFeatureBuffer):
     @property 
     def file_type(self):
         return "ndjson"
+
+    @property
+    def output_file_name(self):
+        return "input_graph_features"
     
     @property
     def buffer_size(self):

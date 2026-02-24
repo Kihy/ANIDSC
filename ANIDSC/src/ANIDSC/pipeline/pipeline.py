@@ -14,15 +14,20 @@ from ..save_mixin.yaml import YamlSaveMixin
 class Pipeline(YamlSaveMixin, PipelineComponent):
 
     @property
+    def pipeline_name(self):
+        return self._name
+
+    @property
     def components(self):
         return self._components
 
-    def __init__(self, components, run_identifier):
+    def __init__(self, name, components, run_identifier):
         super().__init__()
 
         self.start_time = None
         self._components = components
         self.run_identifier=run_identifier
+        self._name = name
 
     def setup(self):
         for i, comp in enumerate(self.components):
@@ -54,6 +59,7 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         
         pbar = tqdm(
             mininterval=float(os.getenv("TQDM_MININTERVAL", 60)),
+            file=sys.stderr,
             dynamic_ncols=False,
             ascii=True,
         )
@@ -74,6 +80,14 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         del attribute["components"]
         attribute["manifest"]=[v.to_dict() for v in self.components]
         return attribute
+    
+    @property
+    def information_dict(self):
+        attrs=["dataset_name", "file_name", "pipeline_name", "run_identifier"]
+        return_dict={attr:self.request_attr(attr) for attr in attrs}
+        return_dict["result_path"]= self.request_attr("feature_path")
+        
+        return return_dict
 
     def get_attr(self, index, attr, default=None):
         for i in range(index - 1, -1, -1):  # backward search

@@ -4,15 +4,20 @@
 # Setting up directory
 It is recommended to add code to existing code structure
 
-- ANIDSC folder contains all source code
-- docker_root folder contains docker setup files
-- experiments contains code to run experiments in slurm, but can be easily modified to run with docker 
-- features folder contains feature files with behave for basic testing 
-- visualisations folder contains visualisation code to analyse data.
 
-The dataset folder structure should be something like datasets/{dataset_name}/pcap/{filename}
+The dataset folder structure should be something like datasets/{dataset_name}/{filename}
+If you have labels, you can use that as part of filename, such as attack/file1.pcap 
+
 Any pcap file should work, the main dataset used for testing is the UQ-IoT-IDS dataset: https://espace.library.uq.edu.au/view/UQ:17b44bb
-Some test data are also available in datasets/test_data/pcap folder
+
+Some test data are also available in datasets/test_data folder
+
+All files should be run under the first ANIDSC directory. You will get file not found error if you dont.
+
+# Examples
+Running examples are in experiments folder, where it contains slurm and python script to run experiments and hyperparameter tuning.
+
+Features files are also available for testing and debugging. The conversion is essentially put Pipeline variable to json file in configs file, and Hyperparameter Tuning variable to hyper_specs json file.
 
 
 # Setting Up environment
@@ -44,7 +49,8 @@ To run the experiment container:
 docker run --rm --gpus all -it \
   -v "$(pwd)/ANIDSC":/workspace/intrusion_detection/ANIDSC \
   -v "$(pwd)/datasets":/workspace/intrusion_detection/datasets \
-  -v "$(pwd)/experiments/scripts":/workspace/intrusion_detection/experiments \
+  -v "$(pwd)/runs":/workspace/intrusion_detection/runs \
+  -v "$(pwd)/experiments":/workspace/intrusion_detection/experiments \
   -v "$(pwd)/features":/workspace/intrusion_detection/features \
   -v "$(pwd)/.vscode":/workspace/intrusion_detection/.vscode\
   -w /workspace/intrusion_detection/ \
@@ -52,11 +58,16 @@ docker run --rm --gpus all -it \
   kihy/anidsc_image
 ```
 
-Script inside docker 
-```
-cd experiments
+Run with:
+```python3 experiments/scripts/tune_model.py test_dataset --config experiments/configs/multilayer_graph_recon.json --hyperparam_spec experiments/hyper_specs/gae.json``` 
 
-python3 real_experiment.py homogeneous uq_dataset --config "{\"fe_name\": \"SingleLayerGraphExtractor\",\"graph_rep\": \"CDD\", \"reader_type\":\"JsonGraphReader\", \"model_name\": \"MedianDetector\", \"node_embed\": \"PassThroughEmbedder\", \"run_identifier\": \"demo\"}"
+```python3 experiments/scripts/run_experiment.py test_dataset --config experiments/configs/multilayer_graph_recon.json``` 
+
+## Running slurm jobs 
+Note that slurm scripts is configured to not have any "--config", so you would have to call it with
+```
+sbatch experiments/jobs/run_experiment.slurm uq_dataset experiments/configs/meta_extr
+action.json
 ```
 
 ## running visualisation container
@@ -64,11 +75,12 @@ python3 real_experiment.py homogeneous uq_dataset --config "{\"fe_name\": \"Sing
 To run the visualisation container:
 ```
 docker run --rm --gpus all -it \
-  -v "$(pwd)/datasets":/workspace/intrusion_detection/datasets \
+  -v "$(pwd)/runs":/workspace/intrusion_detection/runs \
   -v "$(pwd)/visualisations":/workspace/intrusion_detection/visualisations \
   -w /workspace/intrusion_detection/visualisations \
   -u $(id -u):$(id -g)  \
   -p 5007:5007 \
+  -p 8080:8080 \
   kihy/anidsc_vis_image
 ```
 
@@ -77,6 +89,8 @@ run whatever app you have
 ```
 panel serve app.py --address 0.0.0.0 --port 5007 --dev
 panel serve multi-layer.py --address 0.0.0.0 --port 5007 --dev
+
+optuna-dashboard --host 0.0.0.0 --port 8080 sqlite:///optuna.db
 ```
 
 Note:
@@ -98,7 +112,14 @@ docker run --rm --gpus all -it \
 
 ## running slurm jobs
 ```
-sbatch experiments/jobs/run_experiment.slurm test_dataset "experiments/configs/multi_feature.json"
+sbatch experiments/jobs/run_experiment.slurm test_dataset "experiments/configs/meta_extraction.json"
+
+sbatch experiments/jobs/run_experiment.slurm test_dataset "experiments/configs/graph_feature_extraction.json"
+
+sbatch experiments/jobs/run_experiment.slurm test_dataset "experiments/configs/multilayer_graph_recon.json"
+
+sbatch experiments/jobs/tune_model.slurm test_dataset "experiments/configs/multilayer_graph_recon.json" "experiments/hyper_specs/gae.json"
+
 ```
 
 Use `--dependency=afterok:xxxx` straight after `sbatch` to ensure dependency is correct
@@ -129,4 +150,57 @@ DataReader --> Splitter (Scaler --> Node Embedder --> Model --> Evaluator)
 For generic graph based detection, we have:
 
 DataReader --> GraphRepresentation --> Node Embedder --> Scaler (optional) --> Model --> Evaluator
+
+# Structure 
+
+```
+ANIDSC
+├── ANIDSC # source code
+├── datasets # stores different datasets
+├── docker_root # docker build files
+├── experiments # experiments
+│   ├── configs # experiment configs in json
+│   ├── hyper_specs # hyperparameter configs for tuning with optuna
+│   ├── jobs # slurm jobs
+│   ├── logs # slurm logs
+│   └── scripts # python scripts to run experiments
+├── features # feature files for behaviour testing
+│   └── steps # step file in python
+├── runs # contains results from different runs
+└── visualisations # visualisation scripts 
+```
+
+Directories:
+Each run consists of three parts: 
+- the file, which can be further decomposed into:
+  - dataset
+  - label (possibly multiple, e.g., attack/device)
+  - file
+- the pipeline, by default the name comes from the template 
+- a run indentifier 
+
+Depending on the parts of the pipeline, there might be different outputs:
+- features folder from NumpyFeatureBuffer and DictFeatureBuffer
+- graphs folder from JsonFeatureBuffer
+- results folder from Evaluator
+
+
+The structure of `runs` folder would be:
+
+```
+runs
+└── {dataset}
+    └── {pipeline}
+        └── {run_id}
+            ├── logs.out               # logs from slurm
+            ├── optuna.db              # optuna database for tuning over the pipeline 
+            └── {label}
+                └── {file}
+                    ├── features.csv   # from NumpyFeatureBuffer, DictFeatureBuffer
+                    ├── graphs.ndjson  # from JsonFeatureBuffer
+                    └── results.csv    # from Evaluator
+                    
+```
+Changing the structure require modifications in OutputWriter and BaseSaveMixin
+
 

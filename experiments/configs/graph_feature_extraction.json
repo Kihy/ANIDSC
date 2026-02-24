@@ -1,4 +1,5 @@
 {
+    "pipeline_name": "graph_feature_extraction",
     "reader_type": "CSVReader",
-    "fe_name": "ProtocolMetaExtractor-1344"
+    "prev_pipeline": "meta_extraction-1382"
 }

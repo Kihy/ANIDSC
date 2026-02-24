@@ -1308,6 +1308,8 @@ class PlotManager:
             )
             for ax in fig.axes.flat:
                 ax.tick_params(axis="x", rotation=45)
+                ax.set_xlim(0, 1)
+                
             plt.close(fig.fig)
             pane = pn.pane.Matplotlib(fig.fig, interactive=False)
             self.plot_container.append(pane)
@@ -1387,6 +1389,7 @@ class PlotManager:
             )
             pane = pn.pane.Matplotlib(fig.figure, interactive=False)
             self.plot_container.append(pane)
+            fig.set(xlim=(0, 1))
             return
 
         # otherwise compute derived metrics using calc_stats

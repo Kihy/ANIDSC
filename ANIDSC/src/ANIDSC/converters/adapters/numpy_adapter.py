@@ -1,6 +1,7 @@
 """Adapter for NumPy arrays - AUTO-REGISTERED"""
 from typing import Any
 from ..base import AutoRegisterAdapter
+import networkx as nx
 
 try:
     import numpy as np
@@ -23,6 +24,11 @@ try:
             if isinstance(value, np.ndarray):
                 return value
             elif isinstance(value, (list, tuple)):
+                if isinstance(value[0],nx.Graph): # handle list of graphs for torch geometric
+                    graphs_array = np.empty(len(value), dtype=object)
+                    for i, graph in enumerate(value):
+                        graphs_array[i] = graph
+                    return graphs_array
                 return np.array(value)
             else:
                 try:

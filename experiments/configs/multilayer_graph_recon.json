@@ -1,0 +1,8 @@
+{
+    "pipeline_name": "multilayer_graph_recon",
+    "reader_type": "JsonGraphReader",
+    "prev_pipeline": "graph_feature_extraction/test_run",
+    "graph_rep": "Barebone",
+    "model_name": "torch_graph_model.StructuralGAE",
+    "model_params":{"latent_dim":16, "hidden_dim":32, "num_layers":2}
+}

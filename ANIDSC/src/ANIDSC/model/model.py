@@ -16,6 +16,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def __init__(
         self,
         model_name,
+        model_params,
         queue_len=10000,
         percentile=0.99,
         warmup=1000,
@@ -33,6 +34,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         super().__init__(**kwargs)
 
         self.model_name = model_name
+        self.model_params= model_params
         self.loss_queue = deque(maxlen=queue_len)
 
         self.warmup = warmup
@@ -62,24 +64,22 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
 
             ndim = self.request_attr("output_dim")
 
-            self.model = self.model_cls(ndim)
+            self.model = self.model_cls(input_dims=ndim, **self.model_params)
 
     @auto_cast_method
     def process(self, X: np.ndarray):
         threshold = self.get_threshold()
-        score = np.full((X.shape[0],), self.tolerance*threshold+1.)
+        score = np.full(X.shape[0], self.tolerance*threshold+1.)
         
-        # Get valid samples (no inf values)
-        valid_mask = ~np.isinf(X).any(axis=1)
-        score[valid_mask] = self.model.predict_step(X[valid_mask])
+        score = self.model.predict_step(X)
         self.batch_evaluated+=1
         
         
         # Determine training mask and scores to queue
         if self.batch_trained < self.warmup:
-            train_mask = valid_mask    
+            train_mask = np.ones(len(X), dtype=bool)
         else:
-            train_mask = valid_mask & (score < self.tolerance*threshold)
+            train_mask = score < self.tolerance*threshold
         
         queue_scores = score[train_mask]
         
