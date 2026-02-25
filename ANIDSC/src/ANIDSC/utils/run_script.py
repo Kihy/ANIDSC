@@ -127,7 +127,7 @@ def compute_ap(
         "weighted_ap": weighted_ap,
     }
 
-def run_file(file_iterator, pipeline_vars, return_pipeline=False, gen_summary=False):
+def run_file(file_iterator, pipeline_vars, return_pipeline=False):
     pipelines = []
     results=[]
     for state, file in file_iterator:        
@@ -173,11 +173,17 @@ def run_file(file_iterator, pipeline_vars, return_pipeline=False, gen_summary=Fa
             del pipeline 
             gc.collect()
 
-    if gen_summary:
-        summary=generate_summary(results)
-    else:
-        summary=None
-
+    # save summary as dataframe
+    summary=generate_summary(results)
+    summary["dataset_name"] = pipeline_vars["dataset_name"]
+    summary["pipeline_name"] = pipeline_vars["pipeline_name"]
+    summary["run_identifier"] = pipeline_vars["run_identifier"]
+    
+    summary = pd.DataFrame([summary])
+    summary_path = Path(f"runs/{file_iterator.location}/{pipeline_vars['pipeline_name']}/{pipeline_vars['run_identifier']}/summary.csv")
+    summary.to_csv(summary_path, index=False)
+    
+    
     return pipelines, summary
 
 def sample_from_spec(trial, hyperparam_spec):
@@ -230,7 +236,7 @@ def make_objective(pipeline_vars, file_iterator, hyperparam_spec):
         
         trial_vars["run_identifier"] = f"{trial_vars['run_identifier']}/trial_{trial.number}"
 
-        _, summary = run_file(file_iterator, trial_vars, gen_summary=True)
+        _, summary = run_file(file_iterator, trial_vars)
 
         return summary["pooled_ap"]+summary["macro_ap"]+summary["weighted_ap"]
 

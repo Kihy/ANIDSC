@@ -63,12 +63,6 @@ Run with:
 
 ```python3 experiments/scripts/run_experiment.py test_dataset --config experiments/configs/multilayer_graph_recon.json``` 
 
-## Running slurm jobs 
-Note that slurm scripts is configured to not have any "--config", so you would have to call it with
-```
-sbatch experiments/jobs/run_experiment.slurm uq_dataset experiments/configs/meta_extr
-action.json
-```
 
 ## running visualisation container
 
@@ -77,18 +71,18 @@ To run the visualisation container:
 docker run --rm --gpus all -it \
   -v "$(pwd)/runs":/workspace/intrusion_detection/runs \
   -v "$(pwd)/visualisations":/workspace/intrusion_detection/visualisations \
-  -w /workspace/intrusion_detection/visualisations \
+  -v "$(pwd)/.vscode":/workspace/intrusion_detection/.vscode\
   -u $(id -u):$(id -g)  \
   -p 5007:5007 \
   -p 8080:8080 \
+  -w /workspace/intrusion_detection \
   kihy/anidsc_vis_image
 ```
 
 
 run whatever app you have
 ```
-panel serve app.py --address 0.0.0.0 --port 5007 --dev
-panel serve multi-layer.py --address 0.0.0.0 --port 5007 --dev
+panel serve main.py --address 0.0.0.0 --port 5007 --dev
 
 optuna-dashboard --host 0.0.0.0 --port 8080 sqlite:///optuna.db
 ```
@@ -112,14 +106,7 @@ docker run --rm --gpus all -it \
 
 ## running slurm jobs
 ```
-sbatch experiments/jobs/run_experiment.slurm test_dataset "experiments/configs/meta_extraction.json"
-
-sbatch experiments/jobs/run_experiment.slurm test_dataset "experiments/configs/graph_feature_extraction.json"
-
-sbatch experiments/jobs/run_experiment.slurm test_dataset "experiments/configs/multilayer_graph_recon.json"
-
-sbatch experiments/jobs/tune_model.slurm test_dataset "experiments/configs/multilayer_graph_recon.json" "experiments/hyper_specs/gae.json"
-
+sbatch experiments/jobs/run_experiment.slurm <python script> [anything passed to the script]
 ```
 
 Use `--dependency=afterok:xxxx` straight after `sbatch` to ensure dependency is correct
@@ -170,6 +157,8 @@ ANIDSC
 └── visualisations # visualisation scripts 
 ```
 
+Each run (pipeline_name + run_identifier) refers to a single model. This is because each model may have different hyperparameters to tune. 
+
 Directories:
 Each run consists of three parts: 
 - the file, which can be further decomposed into:
@@ -194,6 +183,7 @@ runs
         └── {run_id}
             ├── logs.out               # logs from slurm
             ├── optuna.db              # optuna database for tuning over the pipeline 
+            ├── summary.csv            # summary of average precision across all files
             └── {label}
                 └── {file}
                     ├── features.csv   # from NumpyFeatureBuffer, DictFeatureBuffer
@@ -202,5 +192,4 @@ runs
                     
 ```
 Changing the structure require modifications in OutputWriter and BaseSaveMixin
-
 

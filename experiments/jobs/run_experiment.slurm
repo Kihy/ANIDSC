@@ -9,8 +9,8 @@
 
 
 # Get command and config path from positional arguments
-DATASET="$1"
-config_path="$2"
+script="$1"
+shift
 
 # Pass JSON content as string directly
 docker run --rm \
@@ -24,6 +24,5 @@ docker run --rm \
     -w /workspace/intrusion_detection \
     -u $(id -u):$(id -g) \
     kihy/anidsc_image \
-    python3 experiments/scripts/run_experiment.py $DATASET --config $config_path
-
+    python3 "$script" "$@"
 
