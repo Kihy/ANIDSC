@@ -45,6 +45,7 @@ Feature: Detection with multilayer models
         And Pipeline variable: prev_pipeline -> graph_feature_extraction/test_run
         And Pipeline variable: reader_type -> JsonGraphReader
         And Pipeline variable: graph_rep -> Barebone
+        And Pipeline variable: gen_summary -> true
         And Pipeline variable: model_name -> <model>
         And Pipeline variable: model_params -> {"latent_dim":16, "hidden_dim":32, "num_layers":2}
         And a multilayer_graph_recon pipeline
@@ -62,6 +63,7 @@ Feature: Detection with multilayer models
         And Pipeline variable: prev_pipeline -> graph_feature_extraction/test_run
         And Pipeline variable: reader_type -> JsonGraphReader
         And Pipeline variable: graph_rep -> Barebone
+        And Pipeline variable: gen_summary -> true
         And Pipeline variable: model_name -> torch_graph_model.StructuralGAE
         And Hyperparameter Tuning variable: latent_dim -> {"type": "int", "low": 1,"high": 100}
         And Hyperparameter Tuning variable: hidden_dim -> {"type": "int", "low": 1,"high": 100}

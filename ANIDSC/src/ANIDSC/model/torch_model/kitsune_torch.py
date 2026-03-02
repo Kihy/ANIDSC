@@ -254,11 +254,14 @@ class RMSELoss(torch.nn.Module):
 
 class Kitsune(BaseTorchModel):
 
-    def __init__(self, *args, **kwargs) -> None:
-        self.compression_rate = 0.75
+    def __init__(self, compression_rate, max_features_per_cluster, *args, **kwargs) -> None:
+        # self.compression_rate = 0.75
         self.dropout_rate = 0
-        self.max_features_per_cluster = 10
-        self.grace_period=40
+        # self.max_features_per_cluster = 10
+        self.compression_rate = compression_rate
+        self.max_features_per_cluster = max_features_per_cluster 
+        
+        self.grace_period=800
         
         self.optimizer=None
         self.head = None

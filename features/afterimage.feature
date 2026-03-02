@@ -1,44 +1,74 @@
-Feature: AfterImage
+Feature: Detection with AfterImage Features
+    Background:
+        Given The test_data file iterator
+        And Pipeline variable: run_identifier -> afterimage_test
+
     Scenario: Empty folders
-        Given folders that starts with test_data AfterImage are empty
-        Given folders that starts with test_data ProtocolMetaExtractor are empty
+        Given folders in test_data with run identifier are empty
 
     Scenario: Meta extraction
-        Given The test_data file iterator
-        And Data Source: PacketReader
-        And Meta Extractor: ProtocolMetaExtractor
-        And a meta_extraction pipeline
+        Given Pipeline variable: reader_type -> PacketReader
+        And Pipeline variable: meta_extractor -> ProtocolMetaExtractor
+        And Pipeline variable: template_name -> metadata-extraction-template
+        And Pipeline variable: pipeline_name -> protocol-meta-extraction
+        And the pipeline variables are saved to config
         When the pipeline starts
         Then the pipeline should not fail
         And the components are saved
+
 
     Scenario: Feature extraction
-        Given The test_data file iterator
-        And Data Source: CSVReader
-        And FE Name: ProtocolMetaExtractor
-        And Feature Extractor: AfterImage
-        And a feature_extraction pipeline
+        Given Pipeline variable: reader_type -> CSVReader
+        And Pipeline variable: prev_pipeline -> afterimage_test/protocol-meta-extraction
+        And Pipeline variable: feature_extractor -> AfterImage
+        And Pipeline variable: template_name -> feature-extraction-template
+        And Pipeline variable: pipeline_name -> afterimage
+        And the pipeline variables are saved to config
         When the pipeline starts
         Then the pipeline should not fail
         And the components are saved
 
-    Scenario Outline: Model Detection from CSV Features
-        Given The test_data file iterator
-        And FE Name: AfterImage
-        And Data Source: CSVReader
-        And Model: <model>
-        And a basic_detection pipeline
+
+
+    Scenario Outline: Model Detection
+        Given Pipeline variable: prev_pipeline -> afterimage_test/afterimage
+        And Pipeline variable: reader_type -> CSVReader
+        And Pipeline variable: gen_summary -> true
+        And Pipeline variable: model_name -> <model>
+        And Pipeline variable: model_params -> <model_params>
+        And Pipeline variable: template_name -> scaled-detection-template
+        And Pipeline variable: pipeline_name -> <model_name>
+        And the pipeline variables are saved to config
         When the pipeline starts
         Then the pipeline should not fail
         And the components are saved
         And the results are written
         Examples:
-            | model               |
-            | torch_model.AE      |
-            | torch_model.GOAD    |
-            | torch_model.ICL     |
-            | torch_model.Kitsune |
-            | torch_model.SLAD    |
-            | torch_model.VAE     |
+            | model               | model_name | model_params                          |
+            | torch_model.AE      | AE         | experiments/model_config/AE.yaml      |
+            | torch_model.GOAD    | GOAD       | experiments/model_config/GOAD.yaml    |
+            | torch_model.ICL     | ICL        | experiments/model_config/ICL.yaml     |
+            | torch_model.Kitsune | Kitsune    | experiments/model_config/Kitsune.yaml |
+            | torch_model.SLAD    | SLAD       | experiments/model_config/SLAD.yaml    |
+            | torch_model.VAE     | VAE        | experiments/model_config/VAE.yaml     |
 
-
+    Scenario Outline: Test Model Tuning
+        Given Pipeline variable: run_identifier -> afterimage_test_tuning
+        And Pipeline variable: prev_pipeline -> afterimage_test/afterimage
+        And Pipeline variable: reader_type -> CSVReader
+        And Pipeline variable: gen_summary -> true
+        And Pipeline variable: model_name -> <model>
+        And Pipeline variable: model_params -> <model_params>
+        And Pipeline variable: template_name -> scaled-detection-template
+        And Pipeline variable: pipeline_name -> <model_name>
+        When the pipeline starts with optuna tuning enabled with 20 trials
+        Then the pipeline should not fail
+        And the optuna database is created
+        Examples:
+            | model               | model_name | model_params                          |
+            | torch_model.AE      | AE         | experiments/model_config/AE.yaml      |
+            | torch_model.GOAD    | GOAD       | experiments/model_config/GOAD.yaml    |
+            | torch_model.ICL     | ICL        | experiments/model_config/ICL.yaml     |
+            | torch_model.Kitsune | Kitsune    | experiments/model_config/Kitsune.yaml |
+            | torch_model.SLAD    | SLAD       | experiments/model_config/SLAD.yaml    |
+            | torch_model.VAE     | VAE        | experiments/model_config/VAE.yaml     |

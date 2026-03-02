@@ -1,0 +1,12 @@
+latent_dim:
+  default: 2 
+  type: int
+  low: 1
+  high: 100
+hidden_dim:
+  default: 8
+  type: int
+  low: 1
+  high: 100 
+
+  

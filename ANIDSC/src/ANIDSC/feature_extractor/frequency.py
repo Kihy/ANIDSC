@@ -14,12 +14,26 @@ class FrequencyState:
         self.sliding_window=deque()
         self.last_timestamp=None
     
+    
     def update(self, traffic_vector):
-        self.sliding_window.append(traffic_vector['timestamp'])
-        self.last_timestamp=traffic_vector['timestamp']
-        while (self.sliding_window[-1]-self.sliding_window[0])>self.time_window:
-            self.sliding_window.popleft()
-        return np.array([[len(self.sliding_window)]])
+        self.sliding_window.extend(traffic_vector['timestamp'])
+        if self.last_timestamp is None:
+            self.last_timestamp = self.sliding_window[0]
+
+        frequencies = []
+        while self.sliding_window and (self.sliding_window[-1] - self.last_timestamp) > self.time_window:
+            window_end = self.last_timestamp + self.time_window
+
+            # evict entries that are older than the current window start
+            while self.sliding_window and self.sliding_window[0] < self.last_timestamp:
+                self.sliding_window.popleft()
+
+            # count entries that fall within [last_timestamp, window_end)
+            count = sum(1 for t in self.sliding_window if t < window_end)
+            frequencies.append([self.last_timestamp, count])
+            self.last_timestamp = window_end
+
+        return np.array(frequencies) if frequencies else None
     
     def __eq__(self, other):
         # 1) Ensure same type
@@ -29,7 +43,7 @@ class FrequencyState:
         return compare_dicts(self.__dict__, other.__dict__, self.__class__)
 
 class FrequencyExtractor(PickleSaveMixin, BaseFeatureExtractor):
-    def __init__(self, time_window=10, **kwargs):
+    def __init__(self, time_window=1, **kwargs):
         """simple frequency feature extractor based on time windows
 
         Args:
@@ -40,15 +54,21 @@ class FrequencyExtractor(PickleSaveMixin, BaseFeatureExtractor):
         
         self.state=FrequencyState(self.time_window)     # collection of timestamps
         
-        self.feature_buffer = NumpyFeatureBuffer(buffer_size=256)
-        self.feature_buffer.attach_to(self)
+        
     
     def peek(self, traffic_vectors):
         pass
     
-    def get_headers(self):
-        return ["frequency"]
-
+    @property
+    def headers(self):
+        return ["timestamp", "frequency"]
+    
+    def setup(self):
+        pass 
+    
+    def teardown(self):
+        pass
+  
     
     def update(self, traffic_vector):
         return self.state.update(traffic_vector)

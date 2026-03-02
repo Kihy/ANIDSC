@@ -59,9 +59,9 @@ docker run --rm --gpus all -it \
 ```
 
 Run with:
-```python3 experiments/scripts/tune_model.py test_dataset --config experiments/configs/multilayer_graph_recon.json --hyperparam_spec experiments/hyper_specs/gae.json``` 
-
-```python3 experiments/scripts/run_experiment.py test_dataset --config experiments/configs/multilayer_graph_recon.json``` 
+```
+python3 run_experiment.py run test_data --config experiments/config/metadata-extraction-template/protocol-meta-extraction.yaml --run_identifier meta_extraction
+``` 
 
 
 ## running visualisation container
@@ -92,17 +92,7 @@ The permissions are set as follows:
 - within the docker container, the user is hostuser and hostgroup
 - within the host system, it is the user and group that runs the command
 
-## running behave jobs 
-```
-docker run --rm --gpus all -it \
-  -v "$(pwd)/ANIDSC":/workspace/intrusion_detection/ANIDSC \
-  -v "$(pwd)/datasets":/workspace/intrusion_detection/datasets \
-  -v "$(pwd)/features":/workspace/intrusion_detection/features \
-  -w /workspace/intrusion_detection/ \
-  -u $(id -u):$(id -g)  \
-  kihy/anidsc_image \
-  behave features --stop 
-```
+
 
 ## running slurm jobs
 ```

@@ -105,12 +105,12 @@ class PipelineComponent(ABC):
                 continue
             
             if isinstance(v, io.IOBase):
-                print(f"{k}:{v} of {self.__class__.__name__} is file. If it is created during setup, its fine", file=sys.stderr)
+                print(f"{k}:{v} of {self.__class__.__name__} is file. If it is created during setup, its fine")
                 
                 continue
             
             if isinstance(v, collections.abc.Iterator):
-                print(f"{k}:{v} of {self.__class__.__name__} is an iterator. If it is created during setup, its fine", file=sys.stderr  )
+                print(f"{k}:{v} of {self.__class__.__name__} is an iterator. If it is created during setup, its fine")
                 continue 
             state[k] = v
         return state

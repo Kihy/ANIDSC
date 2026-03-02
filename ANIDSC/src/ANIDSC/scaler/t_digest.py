@@ -20,6 +20,7 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         self.p = [0.16, 0.5, 0.84]
         self.count = 0
         self.ndim=None
+        self.abs_limit=1e6
     
 
     def setup(self):
@@ -49,9 +50,14 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
             percentiles = np.quantile(X, self.p, axis=0)
 
         scaled_features = (X - percentiles[1]) / (percentiles[2] - percentiles[0])
+        
+        # replace inf and nan with 0.0, this is when percentiles[2] == percentiles[0], which means all the values are the same, so we can just return 0.0 for all the scaled features
         scaled_features = np.nan_to_num(
             scaled_features, nan=0.0, posinf=0.0, neginf=0.0
         )
+        
+        # limit the absolute value of the scaled features to prevent gradient explosion
+        scaled_features = np.clip(scaled_features, -self.abs_limit, self.abs_limit)
 
         return scaled_features
 

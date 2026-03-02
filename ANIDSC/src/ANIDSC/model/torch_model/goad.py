@@ -10,18 +10,22 @@ class GOAD(BaseTorchModel):
     Classification-Based Anomaly Detection for General Data (ICLR'20)
     """
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, n_trans, trans_dim, hidden_dim, n_layers, *args, **kwargs):
 
-        self.n_trans = 32
-        self.trans_dim = 16
+        # self.n_trans = 32
+        # self.trans_dim = 16
 
+        self.n_trans=n_trans
+        self.trans_dim=trans_dim 
         self.alpha = 0.1
         self.margin = 1.0
         self.eps = 0
 
         self.kernel_size = 1
-        self.hidden_dim = 10
-        self.n_layers = 4
+        self.hidden_dim = hidden_dim
+        self.n_layers = n_layers
+        # self.hidden_dim = 10
+        # self.n_layers = 4
 
         self.total = 0
 

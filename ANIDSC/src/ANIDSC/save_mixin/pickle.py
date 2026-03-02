@@ -47,7 +47,7 @@ class PickleSaveMixin(BaseSaveMixin):
         if not isinstance(obj, cls):
             raise TypeError(f"Loaded object is not of type {cls.__name__}")
         
-        print(f"Object loaded from {file_path}", file=sys.stderr)
+        print(f"Object loaded from {file_path}")
         return obj
 
     

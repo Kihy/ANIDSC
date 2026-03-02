@@ -1,0 +1,23 @@
+n_trans:
+  default: 32 
+  type: int
+  low: 1
+  high: 50
+trans_dim:
+  default: 16
+  type: int
+  low: 1
+  high: 50 
+hidden_dim:
+  default: 10
+  type: int
+  low: 1
+  high: 100 
+n_layers:
+  default: 4
+  type: int
+  low: 1
+  high: 10
+
+
+  

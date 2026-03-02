@@ -1,5 +1,0 @@
-{
-    "pipeline_name": "graph_feature_extraction",
-    "reader_type": "CSVReader",
-    "prev_pipeline": "meta_extraction/1528"
-}

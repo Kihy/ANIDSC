@@ -1,8 +1,8 @@
 """Widget manager: path navigation and shared sidebar controls.
 
-The manager owns *shared* widgets (progress, max-frames, etc.) and the
-path-breadcrumb navigator.  Plot-specific widgets live in each BasePlot
-subclass and are injected into the sidebar by PlotManager.
+The manager owns navigation widgets (path breadcrumbs), action buttons
+(generate, clear, download), and progress/status indicators. 
+Plot-specific widgets are defined in each BasePlot subclass.
 """
 from __future__ import annotations
 
@@ -10,10 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, TYPE_CHECKING
 
-import networkx as nx
 import panel as pn
-
-from config import MAC_TO_DEVICE
 
 if TYPE_CHECKING:
     from data_manager import DataManager
@@ -30,53 +27,7 @@ class WidgetManager:
         self.path_container = pn.Column(sizing_mode="stretch_width")
         self._add_selector(self.data_mgr.root, level=0)
 
-        # ── Shared controls used by multiple plots ───────────────────────
-        self.max_frames_input = pn.widgets.IntInput(
-            name="Max Frames", value=10_000, step=100, start=1,
-            sizing_mode="stretch_width",
-        )
-        self.range_start = pn.widgets.IntInput(
-            name="Range Start", step=100, value=0, start=0,
-            sizing_mode="stretch_width",
-        )
-        self.range_end = pn.widgets.IntInput(
-            name="Range End", step=100, value=10_000, start=1,
-            sizing_mode="stretch_width",
-        )
-
-        # Node plot
-        self.node_input = pn.widgets.Select(
-            name="Node", options=["None"], sizing_mode="stretch_width",
-        )
-        # Network plot
-        self.graph_slider = pn.widgets.EditableIntSlider(
-            name="Graph Index", start=0, end=0, sizing_mode="stretch_width",
-        )
-        # Summary plot
-        self.metric_input = pn.widgets.Select(
-            name="Metric",
-            options=[
-                "mAP", "f1", "accuracy_binary", "accuracy_device",
-                "accuracy_attack", "accuracy_full", "hmean_acc",
-                "average time", "total positive",
-            ],
-            sizing_mode="stretch_width",
-        )
-        self.pipeline_regex = pn.widgets.TextInput(
-            name="Pipeline Regex", placeholder="Regex to filter pipeline names",
-            sizing_mode="stretch_width",
-        )
-        self.plot_height = pn.widgets.IntInput(
-            name="Plot Height", step=1, value=2, sizing_mode="stretch_width",
-        )
-
-        # ── Progress / status ────────────────────────────────────────────
-        self.progress = pn.widgets.Progress(
-            name="Loading", sizing_mode="stretch_width", visible=False,
-        )
-        self.status = pn.pane.Markdown("", sizing_mode="stretch_width", visible=False)
-
-        # ── Action buttons ───────────────────────────────────────────────
+        # ── Action buttons and progress indicators ──────────────────────────
         self.generate_btn = pn.widgets.Button(
             name="Generate", icon="caret-right",
             button_type="primary", sizing_mode="stretch_width",
@@ -92,6 +43,10 @@ class WidgetManager:
             label="⬇️ Download Visible Traces (CSV)",
             sizing_mode="stretch_width",
         )
+        self.progress = pn.widgets.Progress(
+            name="Loading", sizing_mode="stretch_width", visible=False,
+        )
+        self.status = pn.pane.Markdown("", sizing_mode="stretch_width", visible=False)
 
         # ── Widgets to disable during loading ────────────────────────────
         self._disable_targets = [
@@ -149,33 +104,9 @@ class WidgetManager:
             self._add_selector(current_path, level + 1)
 
     def _on_file_selected(self, file_path: Path):
-        """Populate widgets based on the selected file and current plot type."""
-        self.disable(True)
-        try:
-            # Get current plot's file type preference
-            current_plot = self.current_plot_callback() if self.current_plot_callback else None
-            file_type = current_plot.file_type if current_plot else "graph"
-            
-            if file_type == "graph":
-                # Load graph files and populate node/graph widgets
-                frames = list(self.data_mgr.load_frames(file_path, self))
-                if frames:
-                    ids: set = set()
-                    for fr in frames:
-                        ids.update(nx.get_node_attributes(fr, "id").values())
-                    self.node_input.options = [MAC_TO_DEVICE.get(h, h) for h in ids]
-                    self.graph_slider.start = 0
-                    self.graph_slider.end = max(0, len(frames) - 1)
-            elif file_type == "csv":
-                # For CSV files, just validate the file can be read
-                # The actual loading happens in the plot's render() method
-                try:
-                    df = self.data_mgr.read_csv(file_path, self)
-                    # CSV loaded successfully - no specific widgets to populate
-                except Exception as e:
-                    print(f"Warning: Could not load CSV file {file_path}: {e}")
-        finally:
-            self.disable(False)
+        """Handle file selection (loading is deferred to Generate button click)."""
+        # Just update the breadcrumb; actual data loading happens on Generate
+        self._refresh_path_container()
 
     # ── Path accessors ───────────────────────────────────────────────────────
 

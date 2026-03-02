@@ -13,16 +13,33 @@ from plots.base import BasePlot
 class ScoresPlot(BasePlot):
     label = "Scores"
     description = "Score distribution (median / IQR / range) over time"
-    file_type = "csv"
+    file_type = ["results.csv"]
+
+    def __init__(self, data_mgr, widgets):
+        super().__init__(data_mgr, widgets)
+        
+        # Plot-specific widgets
+        self.max_frames_input = pn.widgets.IntInput(
+            name="Max Frames", value=10_000, step=100, start=1,
+            sizing_mode="stretch_width",
+        )
+        self.range_start = pn.widgets.IntInput(
+            name="Range Start", step=100, value=0, start=0,
+            sizing_mode="stretch_width",
+        )
+        self.range_end = pn.widgets.IntInput(
+            name="Range End", step=100, value=10_000, start=1,
+            sizing_mode="stretch_width",
+        )
 
     # ── Sidebar ──────────────────────────────────────────────────────────────
 
     def sidebar_widgets(self) -> pn.viewable.Viewable:
         return pn.WidgetBox(
             "Parameters",
-            self.w.max_frames_input,
-            self.w.range_start,
-            self.w.range_end,
+            self.max_frames_input,
+            self.range_start,
+            self.range_end,
         )
 
     # ── Render ───────────────────────────────────────────────────────────────
@@ -30,8 +47,11 @@ class ScoresPlot(BasePlot):
     def render(self, selected_path: Path) -> pn.viewable.Viewable:
         if not selected_path.exists():
             return self._warn(f"Score CSV not found: {selected_path}")
+        
+        if not any(selected_path.name.startswith(f) for f in self.file_type):
+            return self._warn(f"Expected file starting with {self.file_type[0]}, got {selected_path.name}")
 
-        df = self.data_mgr.read_csv(selected_path, self.w)
+        df = self.data_mgr.read_csv(selected_path, self)
         times = pd.to_datetime(df["timestamp"], unit="s")
 
         fig = go.Figure()

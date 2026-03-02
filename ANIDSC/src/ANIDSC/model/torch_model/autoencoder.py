@@ -4,27 +4,30 @@ from .base_torch_model import BaseTorchModel
 
 
 class AE(BaseTorchModel):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, hidden_dim, latent_dim, *args, **kwargs):
         """a base autoencoder
 
         Args:
             device (str, optional): device for this model. Defaults to "cuda".
             node_encoder (Dict[str,Any], optional): the node encoder to encode features. Defaults to None.
         """
+        self.hidden_dim = hidden_dim
+        self.latent_dim = latent_dim 
+        
         super().__init__(*args, **kwargs)
 
     def init_model(self):
-
+        
         self.encoder = torch.nn.Sequential(
-            torch.nn.Linear(self.input_dims, 8),
+            torch.nn.Linear(self.input_dims, self.hidden_dim),
             torch.nn.ReLU(),
-            torch.nn.Linear(8, 2),
+            torch.nn.Linear(self.hidden_dim, self.latent_dim),
         ).to(self.device)
 
         self.decoder = torch.nn.Sequential(
-            torch.nn.Linear(2, 8),
+            torch.nn.Linear(self.latent_dim, self.hidden_dim),
             torch.nn.ReLU(),
-            torch.nn.Linear(8, self.input_dims),
+            torch.nn.Linear(self.hidden_dim, self.input_dims),
         ).to(self.device)
 
         self.criterion = torch.nn.MSELoss(reduction="none").to(self.device)
@@ -47,22 +50,24 @@ class AE(BaseTorchModel):
 
 
 class VAE(BaseTorchModel):
-    def __init__(self, *args, **kwargs):
+    def __init__(self, hidden_dim, latent_dim, *args, **kwargs):
+        self.hidden_dim = hidden_dim
+        self.latent_dim = latent_dim
         super().__init__(*args, **kwargs)
 
     def init_model(self):
         self.encoder = torch.nn.Sequential(
-            torch.nn.Linear(self.input_dims, 8),
+            torch.nn.Linear(self.input_dims, self.hidden_dim),
             torch.nn.ReLU(),
         ).to(self.device)
 
-        self.fc_mu = torch.nn.Linear(8, 2).to(self.device)
-        self.fc_logvar = torch.nn.Linear(8, 2).to(self.device)
+        self.fc_mu = torch.nn.Linear(self.hidden_dim, self.latent_dim).to(self.device)
+        self.fc_logvar = torch.nn.Linear(self.hidden_dim, self.latent_dim).to(self.device)
 
         self.decoder = torch.nn.Sequential(
-            torch.nn.Linear(2, 8),
+            torch.nn.Linear(self.latent_dim, self.hidden_dim),
             torch.nn.ReLU(),
-            torch.nn.Linear(8, self.input_dims),
+            torch.nn.Linear(self.hidden_dim, self.input_dims),
         ).to(self.device)
 
         self.mse = torch.nn.MSELoss(reduction="none").to(self.device)

@@ -1,5 +1,0 @@
-{
-    "pipeline_name": "meta_extraction",
-    "reader_type": "PacketReader",
-    "meta_extractor": "ProtocolMetaExtractor"
-}

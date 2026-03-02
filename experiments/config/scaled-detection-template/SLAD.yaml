@@ -1,0 +1,6 @@
+reader_type: CSVReader
+gen_summary: true
+model_name: torch_model.SLAD
+model_params: experiments/model_config/SLAD.yaml
+template_name: scaled-detection-template
+pipeline_name: SLAD

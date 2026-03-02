@@ -11,10 +11,12 @@ class ICL(BaseTorchModel):
      (ICLR'22)
     """
     
-    def __init__(self, *args, **kwargs):
-        self.hidden_dims = '16,4'
-        self.rep_dim = 32
+    def __init__(self, hidden_dim, latent_dim, rep_dim, *args, **kwargs):
+        # self.hidden_dims = '16,4'
+        # self.rep_dim = 32
 
+        self.hidden_dims = [hidden_dim, latent_dim] # assuming two hidden layers
+        self.rep_dim = rep_dim
         
         self.tau = 0.01
         self.max_negatives = 1000

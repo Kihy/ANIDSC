@@ -1,0 +1,6 @@
+reader_type: CSVReader
+gen_summary: true
+model_name: torch_model.VAE
+model_params: experiments/model_config/VAE.yaml
+template_name: scaled-detection-template
+pipeline_name: VAE

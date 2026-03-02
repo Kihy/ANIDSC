@@ -23,7 +23,8 @@ dashboard/
 ## Running
 
 ```bash
-panel serve main.py --show          # live-reloading dev server
+panel serve main.py --address 0.0.0.0 --port 5007 --dev
+
 # or
 python main.py                      # single-process
 ```

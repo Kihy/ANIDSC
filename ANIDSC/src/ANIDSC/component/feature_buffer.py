@@ -28,7 +28,7 @@ class OutputWriter(PipelineComponent):
     @property
     def output_path(self):
         feature_path = Path(
-            f"runs/{self.dataset_name}/{self.pipeline_name}/{self.request_attr('run_identifier')}/{self.file_name}/{self.output_file_name}.{self.file_type}"
+            f"runs/{self.dataset_name}/{self.request_attr('run_identifier')}/{self.pipeline_name}/{self.file_name}/{self.output_file_name}.{self.file_type}"
         )
         return feature_path
     

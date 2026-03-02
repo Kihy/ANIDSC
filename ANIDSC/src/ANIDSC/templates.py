@@ -239,8 +239,20 @@ def csv_reader(
     }
 
 
-@ComponentRegistry.register("multi_feature_extractor", category="feature_extractor")
+@ComponentRegistry.register("feature_extractor", category="feature_extractor")
 def feature_extractor(
+    feature_extractor: str,
+    fe_attr: Optional[dict] = None,
+    **kwargs
+) -> dict:
+    return {
+        "type": "feature_extractor",
+        "class": feature_extractor,
+        "attrs": fe_attr or {},
+    }
+
+@ComponentRegistry.register("multi_feature_extractor", category="feature_extractor")
+def multi_feature_extractor(
     fe_attr: Optional[dict] = None,
     **kwargs
 ) -> dict:
@@ -306,6 +318,15 @@ def graph_rep(graph_rep: str, **kwargs) -> dict:
         "type": "graph_rep",
         "class": "GraphProcessor",
         "attrs": {"rep_name": graph_rep},
+    }
+    
+@ComponentRegistry.register("time_remover", category="misc_component")
+def time_remover(**kwargs) -> dict:
+    return {
+        "type": "misc_component",
+        "class": "RemoveTimestamp",
+        "attrs": {},
+
     }
 
 
@@ -379,20 +400,20 @@ class PipelineRegistry:
         return decorator
 
     @classmethod
-    def get_template(cls, name: str, **kwargs) -> str:
-        if name not in cls._templates:
-            raise ValueError(f"Unknown pipeline template '{name}'. Available templates {cls._templates}")
+    def get_template(cls, template_name: str, **kwargs) -> str:
+        if template_name not in cls._templates:
+            raise ValueError(f"Unknown pipeline template '{template_name}'. Available templates {cls._templates}")
 
-        info = cls._templates[name]
+        info = cls._templates[template_name]
         missing = set(info["required"]) - kwargs.keys()
         if missing:
             raise ValueError(
-                f"❌ Pipeline '{name}' missing required parameters: "
+                f"❌ Pipeline '{template_name}' missing required parameters: "
                 f"{sorted(missing)}"
             )
 
         components = info["function"](**kwargs)
-        pipeline_dict = pipeline(name, components, kwargs["run_identifier"])
+        pipeline_dict = pipeline(kwargs["pipeline_name"], components, kwargs["run_identifier"])
         return yaml.safe_dump(
             pipeline_dict,
             sort_keys=False,
@@ -417,11 +438,12 @@ def create_pipeline(template_name: str, **kwargs) -> str:
 
 # ============================================================================
 # REGISTER STANDARD TEMPLATES WITH REQUIRED KWARGS
+# Templates should end with template
 # ============================================================================
 
 @PipelineRegistry.register(
-    "meta_extraction",
-    "Extract metadata from data",
+    "metadata-extraction-template",
+    "Extract metadata from pcap files",
 )
 def meta_extraction_template(**kwargs) -> List[dict]:
     """Create meta extraction pipeline components."""
@@ -432,36 +454,63 @@ def meta_extraction_template(**kwargs) -> List[dict]:
     ]
 
 
+
 @PipelineRegistry.register(
-    "feature_extraction",
-    "Extract features from data",
+    "feature-extraction-template",
+    "Extract features from metadata",
 )
 def feature_extraction_template(**kwargs) -> List[dict]:
     """Create feature extraction pipeline components."""
 
     return [create_component("csv_reader", **kwargs), 
             create_component("feature_extractor", **kwargs),
-            create_component("numpy_feature_buffer", buffer_size=1)]
+            create_component("numpy_feature_buffer", buffer_size=512)]
 
 
 @PipelineRegistry.register(
-    "graph_feature_extraction",
+    "graph-feature-extraction-template",
     "Extract features from data",
 )
 def graph_feature_extraction(**kwargs) -> List[dict]:
     """Create feature extraction pipeline components."""
 
     return [create_component("csv_reader", **kwargs), 
-                  create_component("multi_feature_extractor", **kwargs),
-                  create_component("json_feature_buffer", buffer_size=1)]
+            create_component("multi_feature_extractor", **kwargs),
+            create_component("json_feature_buffer", buffer_size=1)]
 
+@PipelineRegistry.register(
+    "basic-detection-template",
+    "Basic anomaly detection pipeline"
+)
+def boxplot_detection_template(**kwargs) -> List[dict]:
+    """Create basic detection pipeline components."""
+    return [
+        create_component("csv_reader", **kwargs),
+        create_component("od_model", **kwargs),
+        create_component("csv_evaluator"),
+    ]
+    
+
+@PipelineRegistry.register(
+    "scaled-detection-template",
+    "Basic anomaly detection pipeline"
+)
+def tabular_detection_template(**kwargs) -> List[dict]:
+    """Create basic detection pipeline components."""
+    return [
+        create_component("csv_reader", **kwargs),
+        create_component("time_remover", **kwargs),
+        create_component("lp_scaler", **kwargs),
+        create_component("od_model", **kwargs),
+        create_component("csv_evaluator"),
+    ]
 
 
 @PipelineRegistry.register(
-    "basic_detection",
+    "basic-graph-detection-template",
     "Basic anomaly detection pipeline"
 )
-def basic_detection_template(**kwargs) -> List[dict]:
+def basic_graph_detection_template(**kwargs) -> List[dict]:
     """Create basic detection pipeline components."""
     return [
         create_component("graph_reader", **kwargs),
@@ -532,10 +581,10 @@ def basic_detection_template(**kwargs) -> List[dict]:
 
 
 @PipelineRegistry.register(
-    "multilayer_graph_feature",
+    "multilayer-graph-feature-template",
     "Multilayer graph representation with feature pipeline"
 )
-def multilayer_template(**kwargs) -> List[dict]:
+def multilayer_graph_feature_template(**kwargs) -> List[dict]:
     """Create multilayer pipeline components."""
     return [
         create_component("graph_reader", **kwargs),
@@ -548,10 +597,10 @@ def multilayer_template(**kwargs) -> List[dict]:
 
 
 @PipelineRegistry.register(
-    "multilayer_graph_recon",
+    "multilayer-graph-recon-template",
     "Multilayer graph representation with reconstruction based learning"
 )
-def multilayer_template(**kwargs) -> List[dict]:
+def multilayer_graph_recon_template(**kwargs) -> List[dict]:
     """Create multilayer pipeline components."""
     return [
         create_component("graph_reader", **kwargs),

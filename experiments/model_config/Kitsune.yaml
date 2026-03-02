@@ -1,0 +1,11 @@
+compression_rate:
+  default: 0.75
+  type: float
+  low: 0.5
+  high: 1.0
+max_features_per_cluster:
+  default: 10
+  type: int
+  low: 5
+  high: 20
+  

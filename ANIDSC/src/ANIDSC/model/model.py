@@ -38,6 +38,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         self.loss_queue = deque(maxlen=queue_len)
 
         self.warmup = warmup
+        self.warmup_split=0.8 # first 80% doesn't add to queue scores
         self.percentile = percentile
         self.t_func = getattr(threshold_func, t_func)
         self.tolerance=2
@@ -70,24 +71,24 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
     def process(self, X: np.ndarray):
         threshold = self.get_threshold()
         score = np.full(X.shape[0], self.tolerance*threshold+1.)
-        
+
         score = self.model.predict_step(X)
         self.batch_evaluated+=1
         
-        
         # Determine training mask and scores to queue
-        if self.batch_trained < self.warmup:
-            train_mask = np.ones(len(X), dtype=bool)
+        if self.batch_trained < self.warmup*self.warmup_split:
+            # during first phase of warmup, we train on all data and don't queue scores 
+            self.model.train_step(X)
+        elif self.batch_trained < self.warmup:
+            # populate queue scores
+            self.model.train_step(X)
+            self.loss_queue.extend(score)
         else:
             train_mask = score < self.tolerance*threshold
-        
-        queue_scores = score[train_mask]
-        
-        # Update loss queue and train
-        self.loss_queue.extend(queue_scores)
-        
-        if score[train_mask].size != 0:
-            self.model.train_step(X[train_mask])
+            # Update loss queue, some models may not have score during initial phase 
+            self.loss_queue.extend(score[train_mask])
+            if X[train_mask].size != 0:
+                self.model.train_step(X[train_mask])
             
         self.batch_trained += 1
         

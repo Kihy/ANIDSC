@@ -4,6 +4,8 @@ import torch
 from torch_geometric.data import Data
 from ...converters.decorator import auto_cast_method
 import numpy as np 
+import torch.nn.utils as nn_utils
+
 
 class BaseTorchModel(torch.nn.Module):
     def __init__(self, input_dims, device="cuda", **kwargs):
@@ -77,6 +79,8 @@ class BaseTorchModel(torch.nn.Module):
         mean_loss = loss.mean()
 
         mean_loss.backward()
+        
+
         self.optimizer.step()
         
         return self.to_numpy(loss)

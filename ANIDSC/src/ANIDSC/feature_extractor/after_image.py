@@ -188,7 +188,7 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
 
         state.last_timestamp = traffic_vector['timestamp']
 
-        feature = np.hstack([src_mac_ip, jitter, channel, socket])
+        feature = np.hstack([traffic_vector['timestamp'], src_mac_ip, jitter, channel, socket])
 
         # clean our records
         if state.num_updated % self.clean_up_round == 0:
@@ -209,7 +209,7 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
         stat_2d = ["magnitude", "radius", "covariance", "pcc"]
         stream_1d = ["Src-MAC-IP", "Jitter"]
         stream_2d = ["Channel", "Socket"]
-        headers = []
+        headers = ["timestamp"]
         for name, stat in product(stream_1d, stat_1d):
             for time in self.decay_factors:
                 headers.append(f"{name}_{time}_{stat}")

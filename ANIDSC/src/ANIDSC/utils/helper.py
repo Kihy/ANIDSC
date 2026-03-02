@@ -1,11 +1,11 @@
 from itertools import product
-import json
 from pathlib import Path
 from typing import Any, Dict, List
 import numpy as np
 from pytdigest import TDigest
 import torch
 from collections import deque
+import yaml
 
 import torch_geometric
 import pandas as pd
@@ -210,27 +210,40 @@ def generate_cartesian_configs(config: Dict[str, Any]) -> List[Dict[str, Any]]:
     return configs
 
 
-def load_json(input_str):
+def load_yaml(input_str):
     """
-    If input_str is valid JSON, return parsed object.
-    Otherwise, treat it as a file path and load JSON from file.
+    If input_str points to a file, load YAML from file.
+    Otherwise, parse input_str as YAML text.
     """
+    
+    if input_str.endswith(".yaml") or input_str.endswith(".yml"):
+        path = Path(input_str)
 
-    # 1️⃣ Try parsing as JSON string
-    try:
-        return json.loads(input_str)
-    except json.JSONDecodeError:
-        pass  # Not a JSON string
-
-    # 2️⃣ Try treating it as a file path
-
-    path = Path(input_str)
-
-    if not path.exists():
-        raise ValueError(f"Input is neither valid JSON nor a valid file path: {input_str}")
-
-    try:
-        with path.open("r", encoding="utf-8") as f:
-            return json.load(f)
-    except json.JSONDecodeError as e:
-        raise ValueError(f"File exists but does not contain valid JSON: {input_str}") from e
+        if path.exists():
+            try:
+                with path.open("r", encoding="utf-8") as f:
+                    return yaml.safe_load(f)
+            except yaml.YAMLError as e:
+                raise ValueError(f"File exists but does not contain valid YAML: {input_str}") from e
+        else:
+            raise FileNotFoundError(f"Input file does not exist: {input_str}")
+    else:
+        try:
+            return yaml.safe_load(input_str)
+        except yaml.YAMLError as e:
+            raise ValueError(f"Input is not valid YAML text: {input_str}") from e 
+        
+            
+    
+def print_dictionary(d, indent=0):
+    """Recursively prints a dictionary with indentation."""
+    if len(d) == 0:
+        print(None)
+        return
+    for key, value in d.items():
+        print("  " * indent + f"{key}: ", end="")
+        if isinstance(value, dict):
+            print()  # Newline for nested dict
+            print_dictionary(value, indent + 1)
+        else:
+            print(f"{value}")

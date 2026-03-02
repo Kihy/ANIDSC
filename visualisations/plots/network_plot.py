@@ -15,27 +15,63 @@ from plots.base import BasePlot
 from utils import horizontal_band_layout
 
 
-class NetworkPlot(BasePlot):
-    label = "Network"
+class MultilayerNetworkPlot(BasePlot):
+    label = "Multilayer Network"
     description = "Multilayer graph snapshot — drag nodes to rearrange"
-    file_type = "graph"
+    file_type = ["input_graph_features.ndjson"]
+
+    def __init__(self, data_mgr, widgets):
+        super().__init__(data_mgr, widgets)
+        
+        # Plot-specific widgets
+        self.max_frames_input = pn.widgets.IntInput(
+            name="Max Frames", value=10_000, step=100, start=1,
+            sizing_mode="stretch_width",
+        )
+        self.range_start = pn.widgets.IntInput(
+            name="Range Start", step=100, value=0, start=0,
+            sizing_mode="stretch_width",
+        )
+        self.range_end = pn.widgets.IntInput(
+            name="Range End", step=100, value=10_000, start=1,
+            sizing_mode="stretch_width",
+        )
+        self.graph_slider = pn.widgets.EditableIntSlider(
+            name="Graph Index", start=self.range_start.value, end=self.range_end.value, sizing_mode="stretch_width",
+        )
+        
+        # Update graph slider bounds when range changes
+        def update_slider_bounds(event=None):
+            self.graph_slider.start = max(0, self.range_start.value)
+            self.graph_slider.end = max(self.graph_slider.start, self.range_end.value)
+            if self.graph_slider.value < self.graph_slider.start:
+                self.graph_slider.value = self.graph_slider.start
+            elif self.graph_slider.value > self.graph_slider.end:
+                self.graph_slider.value = self.graph_slider.end
+        
+        self.range_start.param.watch(update_slider_bounds, "value")
+        self.range_end.param.watch(update_slider_bounds, "value")
 
     # ── Sidebar ──────────────────────────────────────────────────────────────
 
     def sidebar_widgets(self) -> pn.viewable.Viewable:
         return pn.WidgetBox(
             "Parameters",
-            self.w.max_frames_input,
-            self.w.range_start,
-            self.w.range_end,
-            self.w.graph_slider,
+            self.max_frames_input,
+            self.range_start,
+            self.range_end,
+            self.graph_slider,
         )
 
     # ── Render ───────────────────────────────────────────────────────────────
 
     def render(self, selected_path: Path) -> pn.viewable.Viewable:
-        graph_idx = self.w.graph_slider.value
-        graph = self.data_mgr.get_frame(selected_path, graph_idx, self.w)
+        if not any(selected_path.name.startswith(f) for f in self.file_type):
+            return self._warn(f"Expected file starting with {self.file_type[0]}, got {selected_path.name}")
+
+        
+        graph_idx = self.graph_slider.value
+        graph = self.data_mgr.get_frame(selected_path, graph_idx, self)
         if graph is None:
             return self._warn("Graph not found")
 

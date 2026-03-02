@@ -1,0 +1,4 @@
+reader_type: PacketReader
+meta_extractor: ProtocolMetaExtractor
+template_name: metadata-extraction-template
+pipeline_name: protocol-meta-extraction

@@ -3,10 +3,10 @@
 To add a new plot:
 1. Create a new file in plots/ (e.g. plots/my_plot.py).
 2. Subclass BasePlot, implement label, description, file_type, sidebar_widgets, and render.
-3. Set file_type to "graph" for JSON graph files or "csv" for CSV files.
+3. Set file_type to a list of expected filenames (e.g., ["results.csv"], ["summary.json"], ["input_graph_features.ndjson"]).
 4. That's it! The class will be auto-discovered if it ends with 'Plot'.
 
-The dashboard automatically discovers plot classes and loads the correct file type.
+The dashboard automatically discovers plot classes and validates file names against file_type.
 """
 from __future__ import annotations
 
@@ -30,8 +30,8 @@ class BasePlot(ABC):
     #: Optional one-liner shown as a tooltip or sub-heading.
     description: str = ""
 
-    #: File type this plot expects: "graph" (JSON graph files) or "csv" (CSV files)
-    file_type: str = "graph"
+    #: List of expected filenames this plot can process (e.g., ["results.csv"], ["summary.json"])
+    file_type: list = []
 
     def __init__(self, data_mgr: "DataManager", widgets: "WidgetManager"):
         self.data_mgr = data_mgr

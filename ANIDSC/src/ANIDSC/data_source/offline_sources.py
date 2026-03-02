@@ -32,7 +32,7 @@ class PacketReader(PickleSaveMixin,PipelineSource):
         self._iter = PcapReader(self.path)
         
     def get_timestamp(self, data):
-        return data.time
+        return data.time 
     
     @property
     def batch_size(self):
@@ -102,7 +102,9 @@ class CSVReader(PipelineReader):
         return pd.read_csv(file, chunksize=self.batch_size, nrows=self.max_records, header=0)
 
     def get_timestamp(self, data):
-        return data["timestamp"] if "timestamp" in data.columns else None
+        timestamp = data["timestamp"].tolist() 
+        
+        return timestamp
 
 
 class JsonGraphReader(PipelineReader):
