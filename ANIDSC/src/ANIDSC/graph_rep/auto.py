@@ -698,15 +698,6 @@ class CDD(GraphRepresentation):
         self.concept_store = ConceptStore(60, 3600, ks_test_multivariate, standardizer)
 
     def transform(self, X):
-        """updates data with x and output graph representation after update
-
-        Args:
-            x (_type_): input data features
-
-        Returns:
-            Tuple[torch.Tensor,torch.Tensor,torch.Tensor]: tuple of node features, edge indices, edge features
-        """
-
         scaled_graph = self.concept_store.update(X)
 
         # remove unscaled nodes for model

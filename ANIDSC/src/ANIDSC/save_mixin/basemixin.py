@@ -5,7 +5,7 @@ class BaseSaveMixin:
     
     @property
     def save_path(self):
-        path=f"runs/{self.request_attr('dataset_name')}/{self.request_attr('run_identifier')}/{self.request_attr('pipeline_name')}/{self.request_attr('file_name')}/components/{str(self)}.{self.save_type}"
+        path=f"runs/{self.request_attr('dataset_name')}/{self.request_attr('run_identifier')}/{self.request_attr('pipeline_name')}/{self.request_attr('file_name')}/components/{self.name}.{self.save_type}"
         return Path(path)
     
     @property

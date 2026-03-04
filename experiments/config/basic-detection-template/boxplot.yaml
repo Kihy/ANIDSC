@@ -1,0 +1,6 @@
+reader_type: CSVReader
+gen_summary: true
+model_name: trad_model.MedianDetector
+model_params: {}
+template_name: basic-detection-template
+pipeline_name: boxplot

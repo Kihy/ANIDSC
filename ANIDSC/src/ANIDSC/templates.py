@@ -137,38 +137,25 @@ class ComponentFactory:
 # ============================================================================
 # COMPONENT DEFINITIONS
 # ============================================================================
-
-@ComponentRegistry.register("packet_reader", category="data_source")
-def packet_reader(
+  
+@ComponentRegistry.register("reader", category="data_source")
+def reader(
+    reader_type: str,
     dataset_name: str,
     file_name: str,
+    prev_pipeline:str=None,
     **kwargs
 ) -> dict:
     return {
         "type": "data_source",
-        "class": "PacketReader",
-        "attrs": {
-            "dataset_name": dataset_name,
-            "file_name": file_name,
-        },
-    }
-
-@ComponentRegistry.register("graph_reader", category="data_source")
-def graph_reader(
-    dataset_name: str,
-    file_name: str,
-    prev_pipeline: str,
-    **kwargs
-) -> dict:
-    return {
-        "type": "data_source",
-        "class": "JsonGraphReader",
+        "class": reader_type,
         "attrs": {
             "dataset_name": dataset_name,
             "file_name": file_name,
             "prev_pipeline": prev_pipeline
         },
     }
+
 
 @ComponentRegistry.register("protocol_meta_extractor", category="meta_extractor")
 def protocol_meta_extractor(**kwargs) -> dict:
@@ -221,22 +208,6 @@ def numpy_feature_buffer(
     }
 
 
-@ComponentRegistry.register("csv_reader", category="data_source")
-def csv_reader(
-    dataset_name: str,
-    file_name: str,
-    prev_pipeline:str,
-    **kwargs
-) -> dict:
-    return {
-        "type": "data_source",
-        "class": "CSVReader",
-        "attrs": {
-            "dataset_name": dataset_name,
-            "file_name": file_name,
-            "prev_pipeline": prev_pipeline
-        },
-    }
 
 
 @ComponentRegistry.register("feature_extractor", category="feature_extractor")
@@ -251,16 +222,7 @@ def feature_extractor(
         "attrs": fe_attr or {},
     }
 
-@ComponentRegistry.register("multi_feature_extractor", category="feature_extractor")
-def multi_feature_extractor(
-    fe_attr: Optional[dict] = None,
-    **kwargs
-) -> dict:
-    return {
-        "type": "feature_extractor",
-        "class": "MultiLayerGraphExtractor",
-        "attrs": fe_attr or {},
-    }
+
     
 @ComponentRegistry.register("graph_feature_extractor", category="feature_extractor")
 def graph_feature_extractor(
@@ -277,9 +239,9 @@ def graph_feature_extractor(
 
 
 
-@ComponentRegistry.register("lp_scaler", category="scaler")
-def lp_scaler(**kwargs) -> dict:
-    return {"type": "scaler", "class": "LivePercentile"}
+@ComponentRegistry.register("scaler", category="scaler")
+def scaler(scale_idx=0, **kwargs) -> dict:
+    return {"type": "scaler", "class": "LivePercentile", "attrs": {"scale_idx": scale_idx}}
 
 
 
@@ -328,16 +290,30 @@ def time_remover(**kwargs) -> dict:
         "attrs": {},
 
     }
-
+@ComponentRegistry.register("splitter", category="pipeline_component")
+def splitter(
+    protocol_map: dict,
+    **kwargs
+) -> dict:
+    return {
+        "type": "pipeline",
+        "class": "MultilayerSplitter",
+        "attrs": {
+            "name": kwargs["pipeline_name"],
+            "components": kwargs["components"],
+            "run_identifier": kwargs["run_identifier"],
+            "protocol_map": protocol_map,
+        },
+    }
 
 @ComponentRegistry.register("pipeline", category="pipeline")
-def pipeline(name:str, manifest: Any, run_identifier: str, **kwargs) -> dict:
+def pipeline(pipeline_name:str, components: Any, run_identifier: str=None, **kwargs) -> dict:
     return {
         "type": "pipeline",
         "class": "Pipeline",
         "attrs": {
-            "name": name,
-            "manifest": manifest,
+            "name": pipeline_name,
+            "components": components,
             "run_identifier": run_identifier,
         },
     }
@@ -388,9 +364,6 @@ class PipelineRegistry:
             else:
                 required = list(required_kwargs)
 
-            if "run_identifier" not in required:
-                required.append("run_identifier")
-
             cls._templates[name] = {
                 "function": func,
                 "description": description or func.__doc__ or name,
@@ -413,7 +386,7 @@ class PipelineRegistry:
             )
 
         components = info["function"](**kwargs)
-        pipeline_dict = pipeline(kwargs["pipeline_name"], components, kwargs["run_identifier"])
+        pipeline_dict = create_component("pipeline", components=components, **kwargs)
         return yaml.safe_dump(
             pipeline_dict,
             sort_keys=False,
@@ -448,7 +421,7 @@ def create_pipeline(template_name: str, **kwargs) -> str:
 def meta_extraction_template(**kwargs) -> List[dict]:
     """Create meta extraction pipeline components."""
     return [
-        create_component("packet_reader", **kwargs),
+        create_component("reader", **kwargs),
         create_component("protocol_meta_extractor", **kwargs),
         create_component("dict_feature_buffer", buffer_size=1),
     ]
@@ -462,7 +435,7 @@ def meta_extraction_template(**kwargs) -> List[dict]:
 def feature_extraction_template(**kwargs) -> List[dict]:
     """Create feature extraction pipeline components."""
 
-    return [create_component("csv_reader", **kwargs), 
+    return [create_component("reader", **kwargs), 
             create_component("feature_extractor", **kwargs),
             create_component("numpy_feature_buffer", buffer_size=512)]
 
@@ -474,9 +447,12 @@ def feature_extraction_template(**kwargs) -> List[dict]:
 def graph_feature_extraction(**kwargs) -> List[dict]:
     """Create feature extraction pipeline components."""
 
-    return [create_component("csv_reader", **kwargs), 
+    return [create_component("reader", **kwargs), 
             create_component("multi_feature_extractor", **kwargs),
             create_component("json_feature_buffer", buffer_size=1)]
+    
+    
+
 
 @PipelineRegistry.register(
     "basic-detection-template",
@@ -485,7 +461,7 @@ def graph_feature_extraction(**kwargs) -> List[dict]:
 def boxplot_detection_template(**kwargs) -> List[dict]:
     """Create basic detection pipeline components."""
     return [
-        create_component("csv_reader", **kwargs),
+        create_component("reader", **kwargs),
         create_component("od_model", **kwargs),
         create_component("csv_evaluator"),
     ]
@@ -498,9 +474,9 @@ def boxplot_detection_template(**kwargs) -> List[dict]:
 def tabular_detection_template(**kwargs) -> List[dict]:
     """Create basic detection pipeline components."""
     return [
-        create_component("csv_reader", **kwargs),
+        create_component("reader", **kwargs),
         create_component("time_remover", **kwargs),
-        create_component("lp_scaler", **kwargs),
+        create_component("scaler", **kwargs),
         create_component("od_model", **kwargs),
         create_component("csv_evaluator"),
     ]
@@ -513,71 +489,38 @@ def tabular_detection_template(**kwargs) -> List[dict]:
 def basic_graph_detection_template(**kwargs) -> List[dict]:
     """Create basic detection pipeline components."""
     return [
-        create_component("graph_reader", **kwargs),
-        create_component("lp_scaler", **kwargs),
+        create_component("reader", **kwargs),
+        create_component("scaler", **kwargs),
         create_component("od_model", **kwargs),
         create_component("csv_evaluator"),
     ]
 
 
-# @PipelineRegistry.register(
-#     "lager",
-#     "LAGER pipeline with multilayer splitter")
-# def lager_template(**kwargs) -> dict:
-#     """Create LAGER pipeline configuration."""
-#     components = create_component("data_reader", **kwargs)
-    
-#     # Build inner components
-#     inner_components = {}
-#     inner_components.update(create_component("scaler", **kwargs))
-#     inner_components.update(create_component("graph_rep", **kwargs))
-#     inner_components.update(create_component("node_embedder",
-#         embedder=kwargs.get("node_encoder", ""), n_features=15, **kwargs
-#     ))
-#     inner_components.update(create_component("model", **kwargs))
-#     inner_components.update(create_component("evaluator", eval_type="CSVResultWriter", 
-#                                             graph_period=100, **kwargs))
-    
-#     # Wrap in pipeline
-#     inner_pipeline = create_component("pipeline", manifest=inner_components, 
-#                                      run_identifier=kwargs["run_identifier"])
-    
-#     # Create splitter
-#     split_keys = list(ComponentFactory.PROTOCOL_MAP.keys())
-#     name = f"{kwargs['node_encoder']}->{kwargs['model_name']}"
-#     components.update(create_component("splitter", manifest=inner_pipeline, 
-#                                       split_keys=split_keys, name=name, **kwargs))
-    
-#     return components
+@PipelineRegistry.register(
+    "lager-layer-template",
+    "Pipeline for each layer of Lager"
+)
+def lager_layer_template(**kwargs) -> List[dict]:
+    return [
+        create_component("scaler", scale_idx=4, **kwargs), # skip first few columns that are not features
+        create_component("graph_rep", **kwargs),
+        create_component("node_embedder", **kwargs),
+        create_component("od_model", **kwargs),
+        create_component("csv_evaluator", **kwargs)] 
 
-
-# @PipelineRegistry.register(
-#     "homogeneous",
-#     "Homogeneous graph pipeline"
-# )
-# def homogeneous_template(**kwargs) -> List[dict]:
-#     """Create homogeneous pipeline components."""
-#     components = [
-#         create_component("data_reader", **kwargs),
-#         create_component("graph_rep", **kwargs),
-#         create_component("node_embedder", embedder=kwargs["node_embed"], **kwargs),
-#     ]
+@PipelineRegistry.register(
+    "lager-template",
+    "LAGER pipeline with multilayer splitter")
+def lager_template(**kwargs) -> List[dict]:
+    """Create LAGER pipeline configuration."""
+    components=PipelineRegistry.get_template("lager-layer-template", **kwargs)
     
-#     # Add scaler conditionally
-#     needs_scaler = (
-#         kwargs["model_name"] != "MedianDetector" and 
-#         kwargs["graph_rep"] != "CDD"
-#     )
-#     if needs_scaler:
-#         components.append(create_component("scaler", **kwargs))
+    return [create_component("reader", **kwargs),
+            create_component("time_remover", **kwargs),
+            create_component("splitter", components=components, **kwargs),
+            create_component("csv_evaluator", **kwargs)]
+   
     
-#     components.extend([
-#         create_component("model", **kwargs),
-#         create_component("evaluator", eval_type="CSVResultWriter", **kwargs),
-#         create_component("evaluator", eval_type="GraphResultWriter", **kwargs),
-#     ])
-    
-#     return components
 
 
 @PipelineRegistry.register(
@@ -587,7 +530,7 @@ def basic_graph_detection_template(**kwargs) -> List[dict]:
 def multilayer_graph_feature_template(**kwargs) -> List[dict]:
     """Create multilayer pipeline components."""
     return [
-        create_component("graph_reader", **kwargs),
+        create_component("reader", **kwargs),
         create_component("graph_rep", **kwargs),
         create_component("graph_feature_extractor", **kwargs),
         create_component("od_model", **kwargs),
@@ -603,14 +546,10 @@ def multilayer_graph_feature_template(**kwargs) -> List[dict]:
 def multilayer_graph_recon_template(**kwargs) -> List[dict]:
     """Create multilayer pipeline components."""
     return [
-        create_component("graph_reader", **kwargs),
+        create_component("reader", **kwargs),
         create_component("graph_rep", **kwargs),
         create_component("od_model", **kwargs),
         create_component("csv_evaluator", **kwargs),
         create_component("graph_evaluator", **kwargs),
     ]
 
-
-# Convenience function for backward compatibility
-def get_template(template_name: str, **kwargs) -> str:
-    return PipelineRegistry.get_template(template_name, **kwargs)

@@ -130,7 +130,7 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
     @auto_cast_method
     def update(self, traffic_vectors: RecordList)->np.ndarray:
         # RecordList is basically List[Dict]
-        return np.array([self.update_single(i) for i in traffic_vectors])
+        return np.vstack([self.update_single(i) for i in traffic_vectors])
         
 
     def update_single(self, traffic_vector: Dict[str, Any], state=None):
@@ -223,14 +223,7 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
 class AfterImageGraph(AfterImage):
     def __init__(
         self,
-        protocol_map: Dict[str, int] = {
-            "TCP": 0,
-            "UDP": 1,
-            "ICMP": 2,
-            "ARP": 3,
-            "Other": 4,
-        },
-        mac_to_idx_map: Dict[str, int] = {},
+        protocol_map: Dict[str, int],
         **kwargs,
     ):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
@@ -239,10 +232,10 @@ class AfterImageGraph(AfterImage):
             limit (int, optional): maximum number of records. Defaults to 1e6.
             decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
         """
-        super().__init__(skip=4, **kwargs)
+        super().__init__(**kwargs)
 
         self.protocol_map = protocol_map
-        self.mac_to_idx_map = mac_to_idx_map
+        
 
     # def __str__(self):
     #     return f"AfterImageGraph({','.join(self.protocol_map.keys())})"
@@ -261,9 +254,8 @@ class AfterImageGraph(AfterImage):
             2d array: the corresponding features
         """
         raise NotImplementedError
-
-    @auto_cast_method
-    def update(self, traffic_vector: RecordList):
+    
+    def update_single(self, traffic_vector: RecordList):
         """updates the internal state with traffic vector
 
         Args:
@@ -307,12 +299,8 @@ class AfterImageGraph(AfterImage):
 
         self.state.num_updated += 1
 
-        # encode ID and traffic_vector
-        srcID = self.mac_to_idx_map.setdefault(srcMAC, len(self.mac_to_idx_map))
-        dstID = self.mac_to_idx_map.setdefault(dstMAC, len(self.mac_to_idx_map))
-
         feature = np.hstack(
-            [1, srcID, dstID, protocol, src_stat, dst_stat, jitter_stat, link_stat]
+            [traffic_vector['timestamp'], 1, srcMAC, dstMAC, protocol, src_stat, dst_stat, jitter_stat, link_stat]
         )
 
         self.state.last_timestamp = traffic_vector['timestamp']
@@ -323,13 +311,13 @@ class AfterImageGraph(AfterImage):
             all_records = [feature]
             for key in keys:
                 src, dst = key.split("->")
-                srcIP = src.split("/")[0]
-                dstIP, protocol = dst.split("/")
+                srcMAC = src.split("/")[0]
+                dstMAC, protocol = dst.split("/")
                 all_records.append(
-                    [
+                    [ traffic_vector['timestamp'],
                         0,
-                        self.mac_to_idx_map[srcIP],
-                        self.mac_to_idx_map[dstIP],
+                        srcMAC,
+                        dstMAC,
                         int(protocol),
                     ]
                     + [0 for _ in range(65)]
@@ -337,9 +325,10 @@ class AfterImageGraph(AfterImage):
 
             return np.vstack(all_records)
         else:
-            return np.expand_dims(feature, axis=0)
-
-    def get_headers(self) -> List[str]:
+            return feature
+        
+    @property
+    def headers(self) -> List[str]:
         """returns the feature names
 
         Returns:
@@ -350,7 +339,7 @@ class AfterImageGraph(AfterImage):
 
         stat_2d = ["magnitude", "radius", "covariance", "pcc"]
         stream_1d = ["src", "dst", "jitter"]
-        headers = ["type", "srcID", "dstID", "protocol"]
+        headers = ["timestamp","type", "srcID", "dstID", "protocol"]
         for name, stat in product(stream_1d, stat_1d):
             for time in self.decay_factors:
                 headers.append(f"{name}_{time}_{stat}")
@@ -358,6 +347,8 @@ class AfterImageGraph(AfterImage):
             for time in self.decay_factors:
                 headers.append(f"{name}_{time}_{stat}")
         return headers
+
+
 
 
 def magnitude(x: float, y: float):

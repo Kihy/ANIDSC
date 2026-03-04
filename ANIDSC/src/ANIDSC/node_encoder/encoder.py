@@ -49,7 +49,7 @@ class BaseNodeEmbedder(PickleSaveMixin, PipelineComponent):
         return self.model.output_dim
     
     def __str__(self):
-        return f"BaseNodeEmbedder({self.model_name})"
+        return f"{self.model_name}"
     
 class GNNEmbedder(BaseTorchModel):
         

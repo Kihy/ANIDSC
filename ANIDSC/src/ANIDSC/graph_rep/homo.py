@@ -1,15 +1,14 @@
 
 
 from typing import List, Tuple
-from ANIDSC.component.pipeline_component import PipelineComponent
-from ANIDSC.save_mixin.torch import TorchSaveMixin
 import numpy as np
 import torch
 from torch_geometric.data import Data
 from torch_geometric.utils import k_hop_subgraph, to_networkx, remove_isolated_nodes
-from ..utils.helper import uniqueXT
-import networkx as nx
 
+from .base import GraphRepresentation
+import networkx as nx
+from ..converters.decorator import auto_cast_method
 
 def find_edge_indices(edges, srcID, dstID):
     search_edges = torch.vstack([srcID, dstID])
@@ -52,10 +51,9 @@ def complete_directed_graph_edges(n):
     return edges.T
 
 
-class HomoGraphRepresentation(TorchSaveMixin, PipelineComponent, torch.nn.Module):
+class HomoGraphRepresentation(GraphRepresentation):
     def __init__(
         self,
-        device: str = "cuda",
         **kwargs,
     ):
         """Homogeneous graph representation of network
@@ -64,228 +62,187 @@ class HomoGraphRepresentation(TorchSaveMixin, PipelineComponent, torch.nn.Module
             device (str, optional): name of device. Defaults to "cuda".
             preprocessors (List[str], optional): list of preprocessors. Defaults to [].
         """
-        torch.nn.Module.__init__(self)
-        PipelineComponent.__init__(self, component_type="graph_rep",**kwargs)
-        self.device = device
-        self.preprocessors.extend(["to_float_tensor","to_device"])
+
+
         self.n_features = 15
-        self.l_features = 15
+        self.l_features = 35
+        
+        # Pre-compute column offsets
+        self.offset = 4
+        self.src_feat_start = self.offset
+        self.src_feat_end = self.offset + self.n_features
+        self.dst_feat_start = self.src_feat_end
+        self.dst_feat_end = self.dst_feat_start + self.n_features
+        self.edge_feat_start = self.dst_feat_end
+        self.edge_feat_end = self.edge_feat_start + self.l_features
+        
+        # initialize NetworkX directed graph
+        self.G = nx.DiGraph()
+        
+        # Initialize ID mapping (string -> integer)
+        self.id_mapping = {}  # string_id -> int_id
+        self.reverse_id_mapping = {}  # int_id -> string_id
+        self.next_id = 0
 
-        self.custom_params = ["G"]
-
-    def preprocess(self, X):
-        if len(self.preprocessors) > 0:
-            for p in self.preprocessors:
-                X = getattr(self, p)(X)
-        return X
-
-    def to_device(self, X):
-        return X.to(self.device)
-
-    def to_float_tensor(self, X):
-        return torch.from_numpy(X).float()
+    @property
+    def output_dim(self):
+        # number of node features 
+        return self.n_features
 
 
+    def teardown(self):
+        pass
+    
     def setup(self):
         super().setup()
-
         
-        # initialize graph
-        self.G = Data()
 
-        # initialize node features
-        self.G.x = torch.empty((0, self.n_features)).to(self.device)
-        self.G.idx = torch.empty(0).long().to(self.device)
-        self.G.updated = torch.empty(0).to(self.device)
-
-        # initialize edge features
-        self.G.edge_index = torch.empty((2, 0)).long().to(self.device)
-        self.G.edge_attr = torch.empty((0, self.l_features)).to(self.device)
 
     def update_nodes(self, srcID, src_feature, dstID, dst_feature):
         """updates source and destination nodes
 
         Args:
-            srcID (int): id of source
-            src_feature (array): src feature
-            dstID (int): destionation id
-            dst_feature (array): destination features
+            srcID (array): integer source node IDs
+            src_feature (array): source node features
+            dstID (array): integer destination node IDs
+            dst_feature (array): destination node features
         """
-        self.G.updated = torch.zeros_like(self.G.updated).to(self.device)
-
-        unique_nodes = torch.unique(torch.cat([srcID, dstID]))
-
-        # find set difference unique_nodes-self.G.node_idx
-        uniques, counts = torch.cat((unique_nodes, self.G.idx, self.G.idx)).unique(
-            return_counts=True
-        )
-        difference = uniques[counts == 1]
-
-        expand_size = len(difference)
-
-        if expand_size > 0:
-            self.G.x = torch.vstack(
-                [
-                    self.G.x,
-                    torch.zeros((expand_size, src_feature.shape[1])).to(self.device),
-                ]
-            )
-            self.G.idx = torch.hstack([self.G.idx, difference.to(self.device)]).long()
-            self.G.updated = torch.hstack(
-                [self.G.updated, torch.ones(expand_size).to(self.device)]
-            )
-
-        # update
+        # Update source nodes
         for i in range(len(srcID)):
-            self.G.x[self.G.idx == srcID[i]] = src_feature[i]
-            self.G.x[self.G.idx == dstID[i]] = dst_feature[i]
-
-        self.G.updated = torch.isin(self.G.idx, unique_nodes)
-
-    def get_networkx(self):
-        G = to_networkx(
-            self.G, node_attrs=["x", "idx", "updated"], edge_attrs=["edge_attr"]
-        )
+            int_id = srcID[i]
+            features = src_feature[i] if isinstance(src_feature[i], np.ndarray) else np.array(src_feature[i])
+            self.G.add_node(int_id, feature=features, updated=True)
         
-        # get mac_to_idx_map
-        mac_to_idx_map=self.request_attr("data_source","fe_attrs")["mac_to_idx_map"]
-        idx_to_mac_map={v:k for k,v in mac_to_idx_map.items()}
-        
-        return nx.relabel_nodes(G, idx_to_mac_map)
+        # Update destination nodes
+        for i in range(len(dstID)):
+            int_id = dstID[i]
+            features = dst_feature[i] if isinstance(dst_feature[i], np.ndarray) else np.array(dst_feature[i])
+            self.G.add_node(int_id, feature=features, updated=True)
+
+
 
     def update_edges(self, srcID, dstID, edge_feature):
         """updates edges between source and destination
 
         Args:
-            srcID (int): source ID
-            dstID (int): destination ID
-            edge_feature (array): edge feature
+            srcID (array): integer source node IDs
+            dstID (array): integer destination node IDs
+            edge_feature (array): edge features
         """
-        # convert ID to index
-        src_idx = torch.nonzero(self.G.idx == srcID[:, None], as_tuple=False)[:, 1]
-        dst_idx = torch.nonzero(self.G.idx == dstID[:, None], as_tuple=False)[:, 1]
+        for i in range(len(srcID)):
+            src_int_id = srcID[i]
+            dst_int_id = dstID[i]
+            features = edge_feature[i] if isinstance(edge_feature[i], np.ndarray) else np.array(edge_feature[i])
+            
+            # Add or update edge with features
+            self.G.add_edge(src_int_id, dst_int_id, feature=features)
 
-        edge_indices = find_edge_indices(self.G.edge_index, src_idx, dst_idx)
-        existing_edge_idx = edge_indices != -1
-
-        # update found edges if there are any
-        if existing_edge_idx.any():
-            self.G.edge_attr[edge_indices[existing_edge_idx]] = edge_feature[
-                existing_edge_idx
-            ]
-
-        num_new_edges = torch.count_nonzero(~existing_edge_idx)
-        if num_new_edges > 0:
-            new_edges = torch.vstack(
-                [src_idx[~existing_edge_idx], dst_idx[~existing_edge_idx]]
-            )
-            self.G.edge_index = torch.hstack([self.G.edge_index, new_edges]).long()
-            self.G.edge_attr = torch.vstack(
-                [self.G.edge_attr, edge_feature[~existing_edge_idx]]
-            )
+    def get_node_id(self, str_id):
+        """Convert string ID to integer ID with consistent mapping
+        
+        Args:
+            str_id: string representation of node ID
+            
+        Returns:
+            int: integer node ID
+        """
+        str_id = str(str_id)  # Ensure it's a string
+        if str_id not in self.id_mapping:
+            self.id_mapping[str_id] = self.next_id
+            self.reverse_id_mapping[self.next_id] = str_id
+            self.next_id += 1
+        return self.id_mapping[str_id]
 
     def split_data(self, x):
-        """splits input data into different parts
+        """splits input data into different parts and converts string IDs to integers
 
         Args:
             x (_type_): input data
 
         Returns:
-            _type_: graph IDs and features
+            _type_: converted graph IDs and features
         """
+        srcMAC = x[:, 1]
+        dstMAC = x[:, 2]
         
-        srcIDs = x[:, 1].long()
-        dstIDs = x[:, 2].long()
+        # Convert string IDs to integer IDs
+        srcIDs_int = np.array([self.get_node_id(sid) for sid in srcMAC])
+        dstIDs_int = np.array([self.get_node_id(did) for did in dstMAC])
+        
+        # cast to float 32 for PyG compatibility
+        return (srcIDs_int, dstIDs_int, 
+                x[:, self.src_feat_start:self.src_feat_end].astype(np.float32),
+                x[:, self.dst_feat_start:self.dst_feat_end].astype(np.float32),
+                x[:, self.edge_feat_start:self.edge_feat_end].astype(np.float32))
 
 
-        src_features = x[:, 4:19].float()
-        dst_features = x[:, 19:34].float()
-        edge_features = x[:, 34 : 34 + self.l_features].float()
 
-        return srcIDs, dstIDs, src_features, dst_features, edge_features
-
-    def sample_edges(self, p):
-        n = self.G.x.size(0)
-        probabilities = torch.rand(n, n)
-
-        # Get indices where probabilities are less than p and apply the mask
-        indices = torch.argwhere(probabilities < p).T
-
-        return indices, edge_exists(self.edge_idx, indices)
-
-    def process(self, x) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
-        """updates data with x and output graph representation after update
+    @auto_cast_method
+    def transform(self, x: np.ndarray):
+        """updates self.G with x and returns the updated graph
 
         Args:
             x (_type_): input data features
 
         Returns:
-            Tuple[torch.Tensor,torch.Tensor,torch.Tensor]: tuple of node features, edge indices, edge features
+            networkx.DiGraph: Updated NetworkX graph representation
         """
 
-        diff = x[1:, 0] - x[:-1, 0]
-
-        split_indices = torch.nonzero(diff, as_tuple=True)[0] + 1
-        split_indices = split_indices.tolist()
-        split_indices = [0] + split_indices + [x.size(0)]
-        split_indices = np.array(split_indices[1:]) - np.array(split_indices[:-1])
+        # Use numpy operations to find split indices
+        diff = np.diff(x[:, 0])
+        split_indices = np.nonzero(diff)[0] + 1
+        split_indices = np.concatenate([[0], split_indices, [len(x)]])
+        split_sizes = np.diff(split_indices)
+        
         updated = False
 
-        for data in torch.split(x, split_indices.tolist(), dim=0):
-            # update chunk
-            if data[0, 0] == 1:
-                srcIDs, dstIDs, src_features, dst_features, edge_features = (
-                    self.split_data(data)
-                )
+        # Split data by flow (indicated by column 0)
+        current_idx = 0
+        for size in split_sizes:
+            data = x[current_idx:current_idx + size]
+            current_idx += size
 
-                # find index of last update
-                _, indices = uniqueXT(
-                    data[:, 1:3], return_index=True, occur_last=True, dim=0
+            # Add/update links
+            if data[0, 0] == 1:
+                srcIDs, dstIDs, src_features, dst_features, edge_features = self.split_data(data)
+                
+                # Find last occurrence of each unique connection
+                unique_pairs, indices = np.unique(
+                    np.column_stack([srcIDs, dstIDs]),
+                    axis=0,
+                    return_index=True
                 )
-                self.subset = self.update_nodes(
-                    srcIDs[indices],
-                    src_features[indices],
-                    dstIDs[indices],
-                    dst_features[indices],
-                )
-                self.update_edges(
-                    srcIDs[indices], dstIDs[indices], edge_features[indices]
-                )
+                
+                # Sort indices to get last occurrence
+                last_indices = np.argsort(-data[indices, 0])[:len(unique_pairs)]
+                indices = indices[last_indices]
+
+                # Update nodes and edges directly on self.G
+                self.update_nodes(srcIDs[indices], src_features[indices],
+                                 dstIDs[indices], dst_features[indices])
+                self.update_edges(srcIDs[indices], dstIDs[indices], edge_features[indices])
                 updated = True
 
-            # delete links
+            # Delete links
             else:
-                srcIDs, dstIDs, _, _, _ = self.split_data(data)
+                srcIDs = data[:, 1]
+                dstIDs = data[:, 2]
+                
+                # Convert string IDs to integer IDs
+                srcIDs_int = np.array([self.get_node_id(sid) for sid in srcIDs])
+                dstIDs_int = np.array([self.get_node_id(did) for did in dstIDs])
 
-                # convert to idx
-                src_idx = torch.nonzero(self.G.idx == srcIDs[:, None], as_tuple=False)[
-                    :, 1
-                ]
-                dst_idx = torch.nonzero(self.G.idx == dstIDs[:, None], as_tuple=False)[
-                    :, 1
-                ]
+                # Remove edges from self.G
+                for src_int_id, dst_int_id in zip(srcIDs_int, dstIDs_int):
+                    if self.G.has_edge(src_int_id, dst_int_id):
+                        self.G.remove_edge(src_int_id, dst_int_id)
+                
+                # Remove isolated nodes
+                isolated = list(nx.isolates(self.G))
+                self.G.remove_nodes_from(isolated)
 
-                edge_indices = find_edge_indices(self.G.edge_index, src_idx, dst_idx)
-
-                edge_mask = torch.ones(self.G.edge_index.size(1), dtype=torch.bool)
-                edge_mask[edge_indices] = False
-
-                self.G.edge_index = self.G.edge_index[:, edge_mask]
-
-                self.G.edge_attr = self.G.edge_attr[edge_mask]
-
-                # remove isolated nodes
-                edge_index, _, mask = remove_isolated_nodes(
-                    self.G.edge_index, num_nodes=self.G.x.size(0)
-                )
-                # update edge index
-                self.G.edge_index = edge_index
-                self.G.x = self.G.x[mask]
-                self.G.idx = self.G.idx[mask]
-
-
-        # if only deletion, no need to return anything
-        if not updated:
+        # Return None if graph is empty after updates
+        if nx.is_empty(self.G):
             return None
-
-        return self.G.x, self.G.edge_index, self.G.edge_attr
+        
+        return self.G

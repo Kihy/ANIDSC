@@ -49,10 +49,20 @@ class PipelineComponent(ABC):
     
     
     def request_attr(self, attr, default=None):
+        # check parent first
         if self.parent_pipeline is not None:    
-            return self.parent_pipeline.get_attr(self.index, attr, default)
-        if self.component_type=="pipeline":
-            return self.get_attr(0, attr, default)
+            return self.parent_pipeline.search_attr(self.index, attr, default)
+        
+        # then check self
+        if hasattr(self, attr):
+            return getattr(self, attr)
+        
+        # then check components if pipeline 
+        if hasattr(self, "components"):
+            for comp in self.components:
+                if hasattr(comp, attr):
+                    return getattr(comp, attr)
+        
         return default 
     
     @abstractmethod

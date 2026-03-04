@@ -1,3 +1,4 @@
+@baseline
 Feature: Detection with Trivial Boxplot Features
     Background:
         Given The test_data file iterator
@@ -6,6 +7,7 @@ Feature: Detection with Trivial Boxplot Features
     Scenario: Empty folders
         Given folders in test_data with run identifier are empty
 
+    @meta-extraction
     Scenario: Meta extraction
         Given Pipeline variable: reader_type -> PacketReader
         And Pipeline variable: meta_extractor -> ProtocolMetaExtractor
@@ -16,7 +18,7 @@ Feature: Detection with Trivial Boxplot Features
         Then the pipeline should not fail
         And the components are saved
 
-
+    @feature-extraction
     Scenario: Feature extraction
         Given Pipeline variable: reader_type -> CSVReader
         And Pipeline variable: prev_pipeline -> box_plot_test/protocol-meta-extraction
@@ -28,7 +30,7 @@ Feature: Detection with Trivial Boxplot Features
         Then the pipeline should not fail
         And the components are saved
 
-
+    @detection
     Scenario: BoxPlot Detection
         Given Pipeline variable: prev_pipeline -> box_plot_test/frequency
         And Pipeline variable: reader_type -> CSVReader

@@ -5,8 +5,8 @@ from typing import Dict
 import os
 from tqdm import tqdm
 import yaml
+from ..utils.helper import load_yaml
 
-from ..save_mixin.pickle import PickleSaveMixin
 from ..component.pipeline_component import PipelineComponent
 from ..save_mixin.yaml import YamlSaveMixin
 
@@ -16,6 +16,34 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
     @property
     def pipeline_name(self):
         return self._name
+    
+    @pipeline_name.setter
+    def pipeline_name(self, value):
+        self._name = value
+
+    def load_component(self, comp):
+        module = importlib.import_module(f"ANIDSC.{comp['type']}")
+        component_cls = getattr(module, comp["class"])
+        if comp.get("file", False):
+            file_path = comp["file"]
+            comp = component_cls.load(file_path)
+        else:
+            comp = component_cls(**comp.get("attrs", {}))
+        return comp
+
+    def load_components(self, manifest):
+        if isinstance(manifest, str):
+            manifest=load_yaml(manifest)
+        
+        
+        if isinstance(manifest, list):
+            components = []
+            for comp in manifest:
+                
+                components.append(self.load_component(comp))
+        else: 
+            components = self.load_component(manifest)
+        return components
 
     @property
     def components(self):
@@ -24,8 +52,8 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
     def __init__(self, name, components, run_identifier):
         super().__init__()
 
-        self.start_time = None
-        self._components = components
+
+        self._components = self.load_components(components)
         self.run_identifier=run_identifier
         self._name = name
 
@@ -54,6 +82,7 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
 
             if data is None:
                 break
+        return data
 
     def start(self):
         
@@ -77,34 +106,46 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
     @property
     def config_attr(self):
         attribute=super().config_attr
+        # turn components into dicts for yaml serialization
         del attribute["components"]
-        attribute["manifest"]=[v.to_dict() for v in self.components]
+        attribute["components"]=[v.to_dict() for v in self.components]
         return attribute
     
     @property
     def information_dict(self):
         attrs=["dataset_name", "file_name", "pipeline_name", "run_identifier"]
-        return_dict={attr:self.request_attr(attr) for attr in attrs}
-        return_dict["result_path"]= self.request_attr("feature_path")
+        return_dict={attr:self.search_attr(0, attr) for attr in attrs}
+        return_dict["result_path"]= self.search_attr(0, "feature_path")
         
         return return_dict
 
-    def get_attr(self, index, attr, default=None):
-        for i in range(index - 1, -1, -1):  # backward search
-            comp = self.components[i]
-
-            if hasattr(comp, attr):
-                return getattr(comp, attr)
-
-        for i in range(index, len(self.components)):  # forwards search
-            comp = self.components[i]
-
-            if hasattr(comp, attr):
-                return getattr(comp, attr)
-
-        # check self
+    def search_attr(self, index, attr, default=None):
+        """searches for attribute in the following order:
+        - self
+        - backward search in components
+        - parent pipeline
+        - forward search in components
+"""
+        
+        # check self first
         if hasattr(self, attr):
             return getattr(self, attr)
+        
+        # backward search
+        for i in range(index - 1, -1, -1):
+            if hasattr(self.components[i], attr):
+                return getattr(self.components[i], attr)
+
+        # parent pipeline
+        if self.parent_pipeline is not None:
+            result = self.parent_pipeline.search_attr(self.index, attr, default)
+            if result is not None:
+                return result
+
+        # forward search
+        for i in range(index, len(self.components)):
+            if hasattr(self.components[i], attr):
+                return getattr(self.components[i], attr)
 
         return default
 
@@ -124,4 +165,4 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         return self.components == other.components
 
     def __str__(self):
-        return "->".join([str(component) for component in self.components])
+        return "->".join([component.name for component in self.components])

@@ -1,0 +1,11 @@
+reader_type: CSVReader
+feature_extractor: AfterImageGraph
+fe_attr:
+  protocol_map:
+    TCP: 0
+    UDP: 1
+    ICMP: 2
+    ARP: 3
+    Other: 4
+template_name: feature-extraction-template
+pipeline_name: afterimage-graph

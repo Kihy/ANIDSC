@@ -4,8 +4,8 @@ from datetime import datetime
 import gc
 import os
 from pathlib import Path
-from ANIDSC.utils.helper import load_yaml
-
+from ..utils.helper import load_yaml
+from ..templates import PipelineRegistry
 import optuna
 
 import numpy as np
@@ -14,7 +14,7 @@ from sklearn.metrics import average_precision_score
 import torch_geometric as pyg
 from ..pipeline import Pipeline
 import yaml
-from ..templates import get_template 
+
 from .logger import setup_logging
 from .helper import print_dictionary
 
@@ -252,7 +252,7 @@ def run(file_iterator, pipeline_vars, return_pipeline=False):
         print("-"*50)
 
         if state == "new":
-            pipeline = Pipeline.load(get_template(**pipeline_vars))
+            pipeline = Pipeline.load(PipelineRegistry.get_template(**pipeline_vars))
             pipeline.setup()
 
             benign_path = pipeline.save_path
@@ -263,10 +263,10 @@ def run(file_iterator, pipeline_vars, return_pipeline=False):
                 manifest = yaml.safe_load(f)
 
             # datasource is always 0
-            manifest["attrs"]["manifest"][0]["attrs"]["file_name"] = pipeline_vars[
+            manifest["attrs"]["components"][0]["attrs"]["file_name"] = pipeline_vars[
                 "file_name"
             ]
-            manifest["attrs"]["manifest"][0]["file"] = None
+            manifest["attrs"]["components"][0]["file"] = None
             manifest["attrs"]["run_identifier"] = pipeline_vars["run_identifier"]
 
             pipeline = Pipeline.load(manifest)

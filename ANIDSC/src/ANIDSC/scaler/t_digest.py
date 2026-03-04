@@ -21,11 +21,12 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         self.count = 0
         self.ndim=None
         self.abs_limit=1e6
+        self.dims=[]
     
 
     def setup(self):
         if self.ndim is None:
-            self.ndim = self.request_attr("output_dim")
+            self.ndim = self.request_attr("output_dim")-self.scale_idx
             self.dims = [TDigest() for _ in range(self.ndim)]
             
         
@@ -43,7 +44,7 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
         self.count += 1
 
     def transform(self, X:np.ndarray):
-        
+        X=X.astype(np.float32)
         percentiles = self.quantiles()
 
         if percentiles is None:
@@ -68,6 +69,8 @@ class LivePercentile(PickleSaveMixin, BaseOnlineNormalizer):
     def quantiles(self):
         """Returns a list of tuples of the quantile and its location"""
 
+        if self.count==0:
+            return None
         percentiles = np.zeros((len(self.p), self.ndim))
 
         for d in range(self.ndim ):

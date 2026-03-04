@@ -1,43 +1,73 @@
 
 from typing import Any, Dict
 import copy
-
-
+from ..component.pipeline_component import PipelineComponent
+from ..save_mixin import PickleSaveMixin
+from ..templates import PipelineRegistry
 from .pipeline import Pipeline
+import numpy as np
 
-class MultilayerSplitter(Pipeline):
-    def __init__(self, **kwargs):
+class MultilayerSplitter(PickleSaveMixin, Pipeline):
+    def __init__(self, name, components, run_identifier, protocol_map, **kwargs):
         """splits the input into different layers based on protocol. each layer is attached to a new pipeline"""
-        super().__init__(component_type="pipeline", **kwargs)
-        
-        
-    def setup(self):
-        self.components={}
-        # copy pipeline and attach to each protocol layer
-        for proto, pipeline in self.manifest.items():
-            components=Pipeline.load(pipeline)
-            components.parent_pipeline=self
-            components.add_prefix(proto)
-            components.setup()
+        super().__init__(name, components, run_identifier, **kwargs)
 
-            self.components[proto] = components
+        self.protocol_map = protocol_map
+        self.inner_pipelines = {}
+        self.batch_evaluated=0
             
-    def on_load(self):
-        self.components={}
+    @property
+    def name(self):
+        return f"MultilayerSplitter({self.inner_pipelines[next(iter(self.inner_pipelines))].name})"
+    @property
+    def components(self):
+        return self.inner_pipelines
+    
+    
+    def setup(self):
         # copy pipeline and attach to each protocol layer
-        for proto, pipeline in self.manifest.items():
-            components=Pipeline.load(pipeline)
-            components.parent_pipeline=self
-            components.add_prefix(proto)
-            components.on_load()
-            self.components[proto] = components  
-        
+        for proto_name, proto_id in self.protocol_map.items():
+            inner_pipeline=copy.deepcopy(self._components)
+            inner_pipeline.index=0
+            inner_pipeline.parent_pipeline=self
+            inner_pipeline.pipeline_name=f"{self.request_attr('pipeline_name')}/{proto_name}"
+            inner_pipeline.setup()
+
+            self.inner_pipelines[proto_name] = inner_pipeline
+
+    @property
+    def config_attr(self):
+        pipelines={}
+        for proto_name, pipeline in self.inner_pipelines.items():
+            pipelines[proto_name]=pipeline.config_attr
+        return pipelines
+    
     def process(self, data):
+        
+
         split_data = self.split_function(data)
-        
+
+        results={"threshold":1}
+        score=[]
         for key, value in split_data.items():
-            self.components[key].process(value)
-        
+            processed=self.inner_pipelines[key].process(value)
+
+            if processed is None:
+                continue 
+            
+            # skip if threshold is negative (indicating warmup)
+            if processed["threshold"]<0:
+                score.append(-1)
+            else:
+            
+                relative_score=processed["score"]/processed["threshold"]
+                
+                score.append(relative_score)
+        results["score"] = np.array(score)
+        self.batch_evaluated+=1
+        return results
+    
+    
     
     def split_function(self, data) -> Dict[str, Any]:
         """splits the input data
@@ -53,9 +83,11 @@ class MultilayerSplitter(Pipeline):
         for proto_name, proto_id in self.protocol_map.items():
             selected = data[data["protocol"] == proto_id]
             if selected.size > 0:
-                all_results[proto_name] = data[data["protocol"] == proto_id]
+                all_results[proto_name] = selected
 
         return all_results
 
-    def __str__(self):
-        return f"{self.__class__.__name__}({self.name})"
+    
+    def teardown(self):
+        for pipeline in self.inner_pipelines.values():
+            pipeline.teardown()

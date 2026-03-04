@@ -1,0 +1,14 @@
+reader_type: CSVReader
+gen_summary: true
+model_name: torch_model.Kitsune
+model_params: experiments/model_config/Kitsune.yaml
+template_name: lager-template
+embedder: GCNEmbedder
+protocol_map:
+  TCP: 0
+  UDP: 1
+  ICMP: 2
+  ARP: 3
+  Other: 4
+graph_rep: HomoGraphRepresentation
+pipeline_name: Kitsune

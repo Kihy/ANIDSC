@@ -1,3 +1,4 @@
+@baseline 
 Feature: Detection with AfterImage Features
     Background:
         Given The test_data file iterator
@@ -6,6 +7,7 @@ Feature: Detection with AfterImage Features
     Scenario: Empty folders
         Given folders in test_data with run identifier are empty
 
+    @meta-extraction
     Scenario: Meta extraction
         Given Pipeline variable: reader_type -> PacketReader
         And Pipeline variable: meta_extractor -> ProtocolMetaExtractor
@@ -16,7 +18,7 @@ Feature: Detection with AfterImage Features
         Then the pipeline should not fail
         And the components are saved
 
-
+    @feature-extraction
     Scenario: Feature extraction
         Given Pipeline variable: reader_type -> CSVReader
         And Pipeline variable: prev_pipeline -> afterimage_test/protocol-meta-extraction
@@ -29,7 +31,7 @@ Feature: Detection with AfterImage Features
         And the components are saved
 
 
-
+    @detection
     Scenario Outline: Model Detection
         Given Pipeline variable: prev_pipeline -> afterimage_test/afterimage
         And Pipeline variable: reader_type -> CSVReader
@@ -52,6 +54,7 @@ Feature: Detection with AfterImage Features
             | torch_model.SLAD    | SLAD       | experiments/model_config/SLAD.yaml    |
             | torch_model.VAE     | VAE        | experiments/model_config/VAE.yaml     |
 
+    @tuning
     Scenario Outline: Test Model Tuning
         Given Pipeline variable: run_identifier -> afterimage_test_tuning
         And Pipeline variable: prev_pipeline -> afterimage_test/afterimage

@@ -24,9 +24,12 @@ class GraphProcessor(PickleSaveMixin, PipelineComponent):
             self.model_cls = getattr(module, self.rep_name)
             self.graph_rep = self.model_cls()
 
+    def teardown(self):
+        pass
+
     @property
     def output_dim(self):
-        return 2
+        return self.graph_rep.output_dim
 
     @property
     def transformed_graph(self):
@@ -41,7 +44,7 @@ class GraphProcessor(PickleSaveMixin, PipelineComponent):
         return super().teardown()
     
     def __str__(self):
-        return f"GraphProcessor({self.rep_name})"
+        return f"{self.rep_name}"
 
 
 class GraphRepresentation:

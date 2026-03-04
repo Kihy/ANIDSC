@@ -1,103 +1,82 @@
-# Feature: Processing with LAGER
-#     Scenario: Empty folders
-#         Given test_data AfterImageGraph folder is empty
-
-#     Scenario Outline: Feature extraction
-#         Given Dataset: test_data and File: <file>
-#         And Meta Extractor: ProtocolMetaExtractor and Feature Extractor: AfterImageGraph
-#         And a <state> feature_extraction pipeline
-#         When the pipeline starts
-#         Then the pipeline should not fail
-#         And the components are saved
-#         Examples:
-#             | state  | file                        |
-#             | new    | benign_lenovo_bulb          |
-#             | loaded | malicious_ACK_Flooding      |
-#             | loaded | malicious_Service_Detection |
-#             | loaded | malicious_Port_Scanning     |
+@baseline 
+Feature: Detection with AfterImage Features
+    Background:
+        Given The test_data file iterator
+        And Pipeline variable: run_identifier -> lager_test
 
 
-#     Scenario Outline: Process packets from an offline csv reader with LAGER
-#         Given Dataset: test_data and File: <file>
-#         And Feature Extracted by ProtocolMetaExtractor and AfterImageGraph
-#         And Node Encoder: <node_encoder>
-#         And Model: <model>
-#         And a <state> lager pipeline
-#         When the pipeline starts
-#         Then the pipeline should not fail
-#         And the components are saved
-#         Examples:
-#             | node_encoder      | model               | state  | file                        |
-#             | GATNodeEncoder    | torch_model.AE      | new    | benign_lenovo_bulb          |
-#             | GATNodeEncoder    | torch_model.AE      | loaded | malicious_ACK_Flooding      |
-#             | GATNodeEncoder    | torch_model.AE      | loaded | malicious_Port_Scanning     |
-#             | GATNodeEncoder    | torch_model.AE      | loaded | malicious_Service_Detection |
-#             | GATNodeEncoder    | torch_model.GOAD    | new    | benign_lenovo_bulb          |
-#             | GATNodeEncoder    | torch_model.GOAD    | loaded | malicious_ACK_Flooding      |
-#             | GATNodeEncoder    | torch_model.GOAD    | loaded | malicious_Port_Scanning     |
-#             | GATNodeEncoder    | torch_model.GOAD    | loaded | malicious_Service_Detection |
-#             | GATNodeEncoder    | torch_model.ICL     | new    | benign_lenovo_bulb          |
-#             | GATNodeEncoder    | torch_model.ICL     | loaded | malicious_ACK_Flooding      |
-#             | GATNodeEncoder    | torch_model.ICL     | loaded | malicious_Port_Scanning     |
-#             | GATNodeEncoder    | torch_model.ICL     | loaded | malicious_Service_Detection |
-#             | GATNodeEncoder    | torch_model.Kitsune | new    | benign_lenovo_bulb          |
-#             | GATNodeEncoder    | torch_model.Kitsune | loaded | malicious_ACK_Flooding      |
-#             | GATNodeEncoder    | torch_model.Kitsune | loaded | malicious_Port_Scanning     |
-#             | GATNodeEncoder    | torch_model.Kitsune | loaded | malicious_Service_Detection |
-#             | GATNodeEncoder    | torch_model.SLAD    | new    | benign_lenovo_bulb          |
-#             | GATNodeEncoder    | torch_model.SLAD    | loaded | malicious_ACK_Flooding      |
-#             | GATNodeEncoder    | torch_model.SLAD    | loaded | malicious_Port_Scanning     |
-#             | GATNodeEncoder    | torch_model.SLAD    | loaded | malicious_Service_Detection |
-#             | GATNodeEncoder    | torch_model.VAE     | new    | benign_lenovo_bulb          |
-#             | GATNodeEncoder    | torch_model.VAE     | loaded | malicious_ACK_Flooding      |
-#             | GATNodeEncoder    | torch_model.VAE     | loaded | malicious_Port_Scanning     |
-#             | GATNodeEncoder    | torch_model.VAE     | loaded | malicious_Service_Detection |
-#             | GCNNodeEncoder    | torch_model.AE      | new    | benign_lenovo_bulb          |
-#             | GCNNodeEncoder    | torch_model.AE      | loaded | malicious_ACK_Flooding      |
-#             | GCNNodeEncoder    | torch_model.AE      | loaded | malicious_Port_Scanning     |
-#             | GCNNodeEncoder    | torch_model.AE      | loaded | malicious_Service_Detection |
-#             | GCNNodeEncoder    | torch_model.GOAD    | new    | benign_lenovo_bulb          |
-#             | GCNNodeEncoder    | torch_model.GOAD    | loaded | malicious_ACK_Flooding      |
-#             | GCNNodeEncoder    | torch_model.GOAD    | loaded | malicious_Port_Scanning     |
-#             | GCNNodeEncoder    | torch_model.GOAD    | loaded | malicious_Service_Detection |
-#             | GCNNodeEncoder    | torch_model.ICL     | new    | benign_lenovo_bulb          |
-#             | GCNNodeEncoder    | torch_model.ICL     | loaded | malicious_ACK_Flooding      |
-#             | GCNNodeEncoder    | torch_model.ICL     | loaded | malicious_Port_Scanning     |
-#             | GCNNodeEncoder    | torch_model.ICL     | loaded | malicious_Service_Detection |
-#             | GCNNodeEncoder    | torch_model.Kitsune | new    | benign_lenovo_bulb          |
-#             | GCNNodeEncoder    | torch_model.Kitsune | loaded | malicious_ACK_Flooding      |
-#             | GCNNodeEncoder    | torch_model.Kitsune | loaded | malicious_Port_Scanning     |
-#             | GCNNodeEncoder    | torch_model.Kitsune | loaded | malicious_Service_Detection |
-#             | GCNNodeEncoder    | torch_model.SLAD    | new    | benign_lenovo_bulb          |
-#             | GCNNodeEncoder    | torch_model.SLAD    | loaded | malicious_ACK_Flooding      |
-#             | GCNNodeEncoder    | torch_model.SLAD    | loaded | malicious_Port_Scanning     |
-#             | GCNNodeEncoder    | torch_model.SLAD    | loaded | malicious_Service_Detection |
-#             | GCNNodeEncoder    | torch_model.VAE     | new    | benign_lenovo_bulb          |
-#             | GCNNodeEncoder    | torch_model.VAE     | loaded | malicious_ACK_Flooding      |
-#             | GCNNodeEncoder    | torch_model.VAE     | loaded | malicious_Port_Scanning     |
-#             | GCNNodeEncoder    | torch_model.VAE     | loaded | malicious_Service_Detection |
-#             | LinearNodeEncoder | torch_model.AE      | new    | benign_lenovo_bulb          |
-#             | LinearNodeEncoder | torch_model.AE      | loaded | malicious_ACK_Flooding      |
-#             | LinearNodeEncoder | torch_model.AE      | loaded | malicious_Port_Scanning     |
-#             | LinearNodeEncoder | torch_model.AE      | loaded | malicious_Service_Detection |
-#             | LinearNodeEncoder | torch_model.GOAD    | new    | benign_lenovo_bulb          |
-#             | LinearNodeEncoder | torch_model.GOAD    | loaded | malicious_ACK_Flooding      |
-#             | LinearNodeEncoder | torch_model.GOAD    | loaded | malicious_Port_Scanning     |
-#             | LinearNodeEncoder | torch_model.GOAD    | loaded | malicious_Service_Detection |
-#             | LinearNodeEncoder | torch_model.ICL     | new    | benign_lenovo_bulb          |
-#             | LinearNodeEncoder | torch_model.ICL     | loaded | malicious_ACK_Flooding      |
-#             | LinearNodeEncoder | torch_model.ICL     | loaded | malicious_Port_Scanning     |
-#             | LinearNodeEncoder | torch_model.ICL     | loaded | malicious_Service_Detection |
-#             | LinearNodeEncoder | torch_model.Kitsune | new    | benign_lenovo_bulb          |
-#             | LinearNodeEncoder | torch_model.Kitsune | loaded | malicious_ACK_Flooding      |
-#             | LinearNodeEncoder | torch_model.Kitsune | loaded | malicious_Port_Scanning     |
-#             | LinearNodeEncoder | torch_model.Kitsune | loaded | malicious_Service_Detection |
-#             | LinearNodeEncoder | torch_model.SLAD    | new    | benign_lenovo_bulb          |
-#             | LinearNodeEncoder | torch_model.SLAD    | loaded | malicious_ACK_Flooding      |
-#             | LinearNodeEncoder | torch_model.SLAD    | loaded | malicious_Port_Scanning     |
-#             | LinearNodeEncoder | torch_model.SLAD    | loaded | malicious_Service_Detection |
-#             | LinearNodeEncoder | torch_model.VAE     | new    | benign_lenovo_bulb          |
-#             | LinearNodeEncoder | torch_model.VAE     | loaded | malicious_ACK_Flooding      |
-#             | LinearNodeEncoder | torch_model.VAE     | loaded | malicious_Port_Scanning     |
-#             | LinearNodeEncoder | torch_model.VAE     | loaded | malicious_Service_Detection |
+    Scenario: Empty folders
+        Given folders in test_data with run identifier are empty
 
+    @meta-extraction
+    Scenario: Meta extraction
+        Given Pipeline variable: reader_type -> PacketReader
+        And Pipeline variable: meta_extractor -> ProtocolMetaExtractor
+        And Pipeline variable: template_name -> metadata-extraction-template
+        And Pipeline variable: pipeline_name -> protocol-meta-extraction
+        And the pipeline variables are saved to config
+        When the pipeline starts
+        Then the pipeline should not fail
+        And the components are saved
+
+    @feature-extraction
+    Scenario: Feature extraction
+        Given Pipeline variable: reader_type -> CSVReader
+        And Pipeline variable: prev_pipeline -> lager_test/protocol-meta-extraction
+        And Pipeline variable: feature_extractor -> AfterImageGraph
+        And Pipeline variable: fe_attr -> {"protocol_map": {"TCP": 0, "UDP": 1, "ICMP": 2, "ARP": 3, "Other": 4}}
+        And Pipeline variable: template_name -> feature-extraction-template
+        And Pipeline variable: pipeline_name -> afterimage-graph 
+        And the pipeline variables are saved to config
+        When the pipeline starts
+        Then the pipeline should not fail
+        And the components are saved
+
+
+    @detection
+    Scenario Outline: Model Detection
+        Given Pipeline variable: prev_pipeline -> lager_test/afterimage-graph
+        And Pipeline variable: reader_type -> CSVReader
+        And Pipeline variable: gen_summary -> true
+        And Pipeline variable: model_name -> <model>
+        And Pipeline variable: model_params -> <model_params>
+        And Pipeline variable: template_name -> lager-template
+        And Pipeline variable: embedder -> GCNEmbedder
+        And Pipeline variable: protocol_map -> {"TCP": 0, "UDP": 1, "ICMP": 2, "ARP": 3, "Other": 4}
+        And Pipeline variable: graph_rep -> HomoGraphRepresentation
+        And Pipeline variable: pipeline_name -> <model_name>
+        And the pipeline variables are saved to config
+        When the pipeline starts
+        Then the pipeline should not fail
+        And the components are saved
+        And the results are written
+        Examples:
+            | model               | model_name | model_params                          |
+            | torch_model.AE      | AE         | experiments/model_config/AE.yaml      |
+            | torch_model.GOAD    | GOAD       | experiments/model_config/GOAD.yaml    |
+            | torch_model.ICL     | ICL        | experiments/model_config/ICL.yaml     |
+            | torch_model.Kitsune | Kitsune    | experiments/model_config/Kitsune.yaml |
+            | torch_model.SLAD    | SLAD       | experiments/model_config/SLAD.yaml    |
+            | torch_model.VAE     | VAE        | experiments/model_config/VAE.yaml     |
+
+    @tuning
+    Scenario Outline: Test Model Tuning
+        Given Pipeline variable: run_identifier -> afterimage_test_tuning
+        And Pipeline variable: prev_pipeline -> afterimage_test/afterimage
+        And Pipeline variable: reader_type -> CSVReader
+        And Pipeline variable: gen_summary -> true
+        And Pipeline variable: model_name -> <model>
+        And Pipeline variable: model_params -> <model_params>
+        And Pipeline variable: template_name -> scaled-detection-template
+        And Pipeline variable: pipeline_name -> <model_name>
+        When the pipeline starts with optuna tuning enabled with 20 trials
+        Then the pipeline should not fail
+        And the optuna database is created
+        Examples:
+            | model               | model_name | model_params                          |
+            | torch_model.AE      | AE         | experiments/model_config/AE.yaml      |
+            | torch_model.GOAD    | GOAD       | experiments/model_config/GOAD.yaml    |
+            | torch_model.ICL     | ICL        | experiments/model_config/ICL.yaml     |
+            | torch_model.Kitsune | Kitsune    | experiments/model_config/Kitsune.yaml |
+            | torch_model.SLAD    | SLAD       | experiments/model_config/SLAD.yaml    |
+            | torch_model.VAE     | VAE        | experiments/model_config/VAE.yaml     |

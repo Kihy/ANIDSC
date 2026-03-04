@@ -13,6 +13,7 @@ class PipelineSource(PipelineComponent):
         dataset_name: str,
         file_name: str,
         max_records=float("inf"),
+        **kwargs
     ):
         super().__init__()
 

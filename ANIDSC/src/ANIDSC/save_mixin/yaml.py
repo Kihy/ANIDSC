@@ -7,20 +7,8 @@ import os
 
 from ..save_mixin.basemixin import BaseSaveMixin
 
+from ..utils.helper import load_yaml
 
-def load_components(manifest):
-    components = []
-    for comp in manifest:
-        
-        module = importlib.import_module(f"ANIDSC.{comp['type']}")
-        component_cls = getattr(module, comp["class"])
-        if comp.get("file", False):
-            file_path = comp["file"]
-            comp = component_cls.load(file_path)
-        else:
-            comp = component_cls(**comp.get("attrs", {}))
-        components.append( comp)
-    return components
 
 
 class YamlSaveMixin(BaseSaveMixin):
@@ -41,16 +29,6 @@ class YamlSaveMixin(BaseSaveMixin):
 
     @classmethod
     def load(cls, input_data):
-        if isinstance(input_data, str):
-            if os.path.isfile(input_data):
-                with open(input_data) as file:
-                    manifest = yaml.safe_load(file)
-            else:
-                manifest = yaml.safe_load(input_data)
+        spec=load_yaml(input_data)
 
-        elif isinstance(input_data, Dict):
-            manifest = input_data
-        else:
-            raise TypeError("Unknown input_data format")
-
-        return cls(manifest["attrs"]["name"], load_components(manifest["attrs"]["manifest"]), manifest["attrs"]["run_identifier"])
+        return cls(**spec['attrs'])

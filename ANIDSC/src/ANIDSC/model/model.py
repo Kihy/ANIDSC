@@ -107,4 +107,4 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         return threshold
 
     def __str__(self):
-        return f"OnlineOD({self.model_name})"
+        return f"{self.model_name}"

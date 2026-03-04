@@ -1,0 +1,4 @@
+reader_type: CSVReader
+feature_extractor: FrequencyExtractor
+template_name: feature-extraction-template
+pipeline_name: frequency

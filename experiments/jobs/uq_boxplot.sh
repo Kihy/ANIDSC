@@ -16,6 +16,6 @@ check_path_exists $detection_config
 
 run_experiment run $DATASET --config $meta_config --run_identifier meta_extraction
 
-run_experiment run $DATASET --config $fe_config --prev_pipeline protocol-meta-extraction/meta_extraction  --run_identifier feature-extraction 
+run_experiment run $DATASET --config $fe_config --prev_pipeline meta_extraction/protocol-meta-extraction  --run_identifier feature-extraction 
 
-run_experiment run $DATASET --config $detection_config --prev_pipeline frequency/feature-extraction --run_identifier detection 
+run_experiment run $DATASET --config $detection_config --prev_pipeline feature-extraction/frequency --run_identifier detection 
