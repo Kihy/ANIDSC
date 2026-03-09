@@ -229,15 +229,18 @@ def run(file_iterator, pipeline_vars, return_pipeline=False):
     pipeline_name=pipeline_vars.get("pipeline_name", template_name.removesuffix("-template"))
     pipeline_vars["pipeline_name"] = pipeline_name
     
-    if "model_params" in pipeline_vars:
-        model_params = pipeline_vars["model_params"]
+    for name, value in pipeline_vars.items():
+        if name.endswith("_params"):
         
-        # If it's a string, load it with load_yaml
-        if isinstance(model_params, str):
-            model_params = load_yaml(model_params)
-        
-        if isinstance(model_params, dict) and any(isinstance(v, dict) for v in model_params.values()):
-            pipeline_vars["model_params"] = {k: v["default"] for k, v in model_params.items()}
+            # If it's a string, load it with load_yaml
+            if isinstance(value, str):
+                model_params = load_yaml(value)
+            else:
+                model_params = value
+            
+            # If it contains nested dicts with "default", extract those defaults for the pipeline config
+            if isinstance(model_params, dict) and any(isinstance(v, dict) for v in model_params.values()):
+                pipeline_vars[name] = {k: v["default"] for k, v in model_params.items()}
     
     # Print configuration
     print("Running experiment with the following configuration:")
@@ -347,11 +350,14 @@ def make_objective(pipeline_vars, file_iterator):
         # Avoid cross-trial contamination
         trial_vars = copy.deepcopy(pipeline_vars)
 
-        # Sample hyperparameters
-        trial_vars["model_params"] = sample_from_spec(
-            trial, pipeline_vars["model_params"]
-        )
-
+        
+        for name, value in pipeline_vars.items():
+            if name.endswith("_params"):
+                # Sample hyperparameters
+                trial_vars[name] = sample_from_spec(
+                    trial, pipeline_vars[name]
+                )
+              
 
         trial_vars["run_identifier"] = f"{trial_vars['run_identifier']}/trial_{trial.number}"
 

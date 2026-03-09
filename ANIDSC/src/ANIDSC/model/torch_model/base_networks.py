@@ -37,7 +37,7 @@ class ConvNet(torch.nn.Module):
         self.layers = []
 
         in_channels = n_features
-        for i in range(n_layers+1):
+        for i in range(n_layers + 1):
             self.layers += [
                 torch.nn.Conv1d(in_channels, n_hidden,
                                 kernel_size=kernel_size,
@@ -45,7 +45,6 @@ class ConvNet(torch.nn.Module):
             ]
             if i != n_layers:
                 self.layers += [
-                    # torch.nn.LeakyReLU(inplace=True)
                     _instantiate_class(module_name="torch.nn.modules.activation",
                                        class_name=activation)
                 ]
@@ -67,16 +66,15 @@ class MlpAE(torch.nn.Module):
                  ):
         super(MlpAE, self).__init__()
 
-        if type(n_hidden)==int:
+        if isinstance(n_hidden, int):
             n_hidden = [n_hidden]
-        if type(n_hidden)==str:
-            n_hidden = n_hidden.split(',')
-            n_hidden = [int(a) for a in n_hidden]
+        elif isinstance(n_hidden, str):
+            n_hidden = [int(a) for a in n_hidden.split(',')]
         num_layers = len(n_hidden)
 
         self.encoder_layers = []
-        for i in range(num_layers+1):
-            in_channels = n_features if i == 0 else n_hidden[i-1]
+        for i in range(num_layers + 1):
+            in_channels = n_features if i == 0 else n_hidden[i - 1]
             out_channels = n_emb if i == num_layers else n_hidden[i]
             self.encoder_layers += [LinearBlock(in_channels, out_channels,
                                                 bias=bias, batch_norm=batch_norm,
@@ -85,9 +83,9 @@ class MlpAE(torch.nn.Module):
                                                 dropout=dropout if i != num_layers else None)]
 
         self.decoder_layers = []
-        for i in range(num_layers+1):
-            in_channels = n_emb if i == 0 else n_hidden[num_layers-i]
-            out_channels = n_features if i == num_layers else n_hidden[num_layers-1-i]
+        for i in range(num_layers + 1):
+            in_channels = n_emb if i == 0 else n_hidden[num_layers - i]
+            out_channels = n_features if i == num_layers else n_hidden[num_layers - 1 - i]
             self.decoder_layers += [LinearBlock(in_channels, out_channels,
                                                 bias=bias, batch_norm=batch_norm,
                                                 activation=activation if i != num_layers else None,
@@ -112,22 +110,21 @@ class MLPnet(torch.nn.Module):
         self.skip_connection = skip_connection
         self.n_output = n_output
 
-        if type(n_hidden)==int:
+        if isinstance(n_hidden, int):
             n_hidden = [n_hidden]
-        if type(n_hidden)==str:
-            n_hidden = n_hidden.split(',')
-            n_hidden = [int(a) for a in n_hidden]
+        elif isinstance(n_hidden, str):
+            n_hidden = [int(a) for a in n_hidden.split(',')]
         num_layers = len(n_hidden)
 
         # for only use one kind of activation layer
-        if type(activation) == str:
+        if isinstance(activation, str):
             activation = [activation] * num_layers
             activation.append(None)
 
-        assert len(activation) == len(n_hidden)+1, 'activation and n_hidden are not matched'
+        assert len(activation) == len(n_hidden) + 1, 'activation and n_hidden are not matched'
 
         self.layers = []
-        for i in range(num_layers+1):
+        for i in range(num_layers + 1):
             in_channels, out_channels = self.get_in_out_channels(i, num_layers, n_features,
                                                                  n_hidden, n_output, skip_connection)
             self.layers += [
@@ -136,7 +133,7 @@ class MLPnet(torch.nn.Module):
                             bias=bias, batch_norm=batch_norm,
                             activation=activation[i],
                             skip_connection=skip_connection if i != num_layers else 0,
-                            dropout=dropout if i !=num_layers else None)
+                            dropout=dropout if i != num_layers else None)
             ]
         self.network = torch.nn.Sequential(*self.layers)
 
@@ -146,13 +143,13 @@ class MLPnet(torch.nn.Module):
 
     def get_in_out_channels(self, i, num_layers, n_features, n_hidden, n_output, skip_connection):
         if skip_connection is None:
-            in_channels = n_features if i == 0 else n_hidden[i-1]
+            in_channels = n_features if i == 0 else n_hidden[i - 1]
             out_channels = n_output if i == num_layers else n_hidden[i]
         elif skip_connection == 'concat':
-            in_channels = n_features if i == 0 else np.sum(n_hidden[:i])+n_features
+            in_channels = n_features if i == 0 else np.sum(n_hidden[:i]) + n_features
             out_channels = n_output if i == num_layers else n_hidden[i]
         else:
-            raise NotImplementedError('')
+            raise NotImplementedError(f'skip_connection type "{skip_connection}" not supported')
         return in_channels, out_channels
 
 

@@ -10,9 +10,9 @@ from ..component.feature_extractor import BaseFeatureExtractor
 
 class FrequencyState:
     def __init__(self, time_window):
-        self.time_window=time_window 
-        self.sliding_window=deque()
-        self.last_timestamp=None
+        self.time_window = time_window
+        self.sliding_window = deque()
+        self.last_timestamp = None
     
     
     def update(self, traffic_vector):
@@ -47,12 +47,11 @@ class FrequencyExtractor(PickleSaveMixin, BaseFeatureExtractor):
         """simple frequency feature extractor based on time windows
 
         Args:
-            time_window (int, optional): length of time window. Defaults to 10.
+            time_window (int, optional): length of time window. Defaults to 1.
         """                
         super().__init__(**kwargs)
-        self.time_window=time_window
-        
-        self.state=FrequencyState(self.time_window)     # collection of timestamps
+        self.time_window = time_window
+        self.state = FrequencyState(self.time_window)
         
         
     

@@ -5,7 +5,7 @@ run_experiment() {
     shift
 
     docker run --rm \
-        --gpus device=0 \
+        --gpus all \
         -e TQDM_MININTERVAL=60 \
         -e SLURM_JOB_ID="$JOB_ID" \
         -v "$(pwd)/ANIDSC":/workspace/intrusion_detection/ANIDSC \

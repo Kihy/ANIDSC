@@ -1,0 +1,16 @@
+hidden_channels:
+  default: 5
+  type: int
+  low: 1
+  high: 100
+out_channels:
+  default: 10
+  type: int
+  low: 10
+  high: 100 
+num_layers:
+  default: 2
+  type: int
+  low: 1
+  high: 10
+  

@@ -10,6 +10,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
+import yaml
 import panel as pn
 import re
 import seaborn as sns
@@ -111,7 +112,7 @@ class SummaryPlot(BasePlot):
             
             try:
                 with open(summary_path, 'r') as f:
-                    data = json.load(f)
+                    data = yaml.safe_load(f)
                 
                 # Extract run_summary data
                 if 'run_summary' not in data:

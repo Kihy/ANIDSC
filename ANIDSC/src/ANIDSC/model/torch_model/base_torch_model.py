@@ -65,8 +65,9 @@ class BaseTorchModel(torch.nn.Module):
     def train_step(self, X:torch.Tensor)-> np.ndarray:
         X = self.preprocess(X)
         
-        # Kitsune creates optimizer later
+        # Kitsune creates optimizer later, still has to train
         if self.optimizer is None:
+            _, loss = self.forward(X, inference=False)
             return 
         
         self.optimizer.zero_grad()

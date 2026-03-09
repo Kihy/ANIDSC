@@ -10,7 +10,7 @@ from ..component.pipeline_source import PipelineSource
 import pandas as pd
 
 
-class PacketReader(PickleSaveMixin,PipelineSource):
+class PacketReader(PickleSaveMixin, PipelineSource):
     def __init__(self, **kwargs):
         """reads data from pcap file
         """

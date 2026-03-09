@@ -30,7 +30,6 @@ METRICS = [
 ]
 
 class BaseResultWriter(CompressedOutputWriter):
-        
     @property
     def output_file_name(self):
         return "results"

@@ -47,12 +47,12 @@ Feature: Detection with AfterImage Features
         And the results are written
         Examples:
             | model               | model_name | model_params                          |
-            | torch_model.AE      | AE         | experiments/model_config/AE.yaml      |
-            | torch_model.GOAD    | GOAD       | experiments/model_config/GOAD.yaml    |
-            | torch_model.ICL     | ICL        | experiments/model_config/ICL.yaml     |
-            | torch_model.Kitsune | Kitsune    | experiments/model_config/Kitsune.yaml |
-            | torch_model.SLAD    | SLAD       | experiments/model_config/SLAD.yaml    |
-            | torch_model.VAE     | VAE        | experiments/model_config/VAE.yaml     |
+            | torch_model.AE      | AE         | experiments/configs/models/AE.yaml      |
+            | torch_model.GOAD    | GOAD       | experiments/configs/models/GOAD.yaml    |
+            | torch_model.ICL     | ICL        | experiments/configs/models/ICL.yaml     |
+            | torch_model.Kitsune | Kitsune    | experiments/configs/models/Kitsune.yaml |
+            | torch_model.SLAD    | SLAD       | experiments/configs/models/SLAD.yaml    |
+            | torch_model.VAE     | VAE        | experiments/configs/models/VAE.yaml     |
 
     @tuning
     Scenario Outline: Test Model Tuning
@@ -69,9 +69,9 @@ Feature: Detection with AfterImage Features
         And the optuna database is created
         Examples:
             | model               | model_name | model_params                          |
-            | torch_model.AE      | AE         | experiments/model_config/AE.yaml      |
-            | torch_model.GOAD    | GOAD       | experiments/model_config/GOAD.yaml    |
-            | torch_model.ICL     | ICL        | experiments/model_config/ICL.yaml     |
-            | torch_model.Kitsune | Kitsune    | experiments/model_config/Kitsune.yaml |
-            | torch_model.SLAD    | SLAD       | experiments/model_config/SLAD.yaml    |
-            | torch_model.VAE     | VAE        | experiments/model_config/VAE.yaml     |
+            | torch_model.AE      | AE         | experiments/configs/models/AE.yaml      |
+            | torch_model.GOAD    | GOAD       | experiments/configs/models/GOAD.yaml    |
+            | torch_model.ICL     | ICL        | experiments/configs/models/ICL.yaml     |
+            | torch_model.Kitsune | Kitsune    | experiments/configs/models/Kitsune.yaml |
+            | torch_model.SLAD    | SLAD       | experiments/configs/models/SLAD.yaml    |
+            | torch_model.VAE     | VAE        | experiments/configs/models/VAE.yaml     |

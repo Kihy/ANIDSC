@@ -34,6 +34,9 @@ class MultilayerSplitter(PickleSaveMixin, Pipeline):
             inner_pipeline.setup()
 
             self.inner_pipelines[proto_name] = inner_pipeline
+        
+        # set parent pipeline_name to /full 
+        self.parent_pipeline.pipeline_name=f"{self.request_attr('pipeline_name')}/full"
 
     @property
     def config_attr(self):

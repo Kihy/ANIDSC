@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Union
 
 import numpy as np
+from ...converters.decorator import auto_cast_method
 import torch
 import torch.nn as nn
 from scipy.cluster.hierarchy import ClusterNode, linkage, to_tree
@@ -54,7 +55,8 @@ class FeatureMapper:
         self._fitted = False
         self._clusters = []
 
-    def parital_fit(self, x) -> None:
+    @auto_cast_method
+    def parital_fit(self, x: np.ndarray) -> None:
         """Updates the internal statistics based on data batch.
 
         Parameters
@@ -213,12 +215,13 @@ class TinyAutoEncoder(nn.Module):
         in_features: int,
         compression_rate: float = 0.6,
         dropout_rate: float = 0.2,
+        device: str = "cuda",
     ) -> None:
         super().__init__()
         self.in_features = in_features
         self.compression_rate = compression_rate
         self.dropout_rate = dropout_rate
-
+        self.device = device
         hidden_units = int(in_features * (1.0 - self.compression_rate))
 
         # Initialize weight
@@ -232,7 +235,9 @@ class TinyAutoEncoder(nn.Module):
 
         self.dropout = nn.Dropout(p=self.dropout_rate)
 
+    @auto_cast_method
     def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x=x.to(self.device)
         x = self.dropout(x)
         hidden = (x @ self.w + self.hidden_bias).tanh()
         return (hidden @ self.w.t() + self.reconstruct_bias).sigmoid()
@@ -261,7 +266,7 @@ class Kitsune(BaseTorchModel):
         self.compression_rate = compression_rate
         self.max_features_per_cluster = max_features_per_cluster 
         
-        self.grace_period=800
+        self.grace_period=799
         
         self.optimizer=None
         self.head = None
@@ -287,20 +292,19 @@ class Kitsune(BaseTorchModel):
                     in_features=len(c),
                     compression_rate=compression_rate,
                     dropout_rate=dropout_rate,
-                )
+                    device=self.device
+                ).to(self.device)
                 for c in self.fm.clusters_
             ]
         ).to(self.device)
 
-    def forward(self, x: torch.Tensor, inference: bool = True):
-        # transform to numpy array for feature mapper
-        if isinstance(x, torch.Tensor):
-            x=self.to_numpy(x)
-            
+
+    def forward(self, x, inference: bool = True):
+
         if not self.fm._fitted:
             if not inference:
                 self.fm.parital_fit(x)
-                
+            
             return None, None
         else:
             if self.head is None:
@@ -309,6 +313,7 @@ class Kitsune(BaseTorchModel):
                     in_features=self.fm.n_clusters_,
                     compression_rate=self.compression_rate,
                     dropout_rate=self.dropout_rate,
+                    device=self.device
                 ).to(self.device)
                 self.optimizer=torch.optim.Adam(params=self.parameters())
 
@@ -317,11 +322,13 @@ class Kitsune(BaseTorchModel):
         
         tails_losses = torch.empty(x.shape[0], len(self.tails), device=self.device)
         for i, (feat, tail) in enumerate(zip(split_feat, self.tails)):
-            feat = self.to_device(self.to_tensor(feat))
+            
         
             reconstructed_feat = tail(feat)
             tails_losses[:, i] = self.mse(reconstructed_feat, feat).mean(-1)
 
         reconstructed_loss_dist = self.head(tails_losses)
         head_loss = self.mse(reconstructed_loss_dist, tails_losses)
+        
+        
         return reconstructed_loss_dist, head_loss.mean(dim=1)

@@ -42,11 +42,9 @@ class KitNET(BaseOnlineODModel):
     def init_model(self, context):
         if self.v is None:
             pass
-            # print("Feature-Mapper: train-mode, Anomaly-Detector: off-mode")
         else:
             self.__createAD__()
-            # print("Feature-Mapper: execute-mode, Anomaly-Detector: train-mode")
-        # incremental feature cluatering for the feature mapping process
+        # incremental feature clustering for the feature mapping process
         self.FM = corClust(context["output_features"])
     
     def forward(self, X, inference=False):
@@ -55,24 +53,21 @@ class KitNET(BaseOnlineODModel):
     
     def train_step(self, X, preprocess=False):
         if preprocess:
-            X=self.preprocess(X)
-        loss=[self.train_single(i) for i in X]
-        self.num_trained+=1
-        
-        # update scaler
-        
+            X = self.preprocess(X)
+        loss = [self.train_single(i) for i in X]
+        self.num_trained += 1
         
         return np.array(loss) 
     
-    def predict_step(self, X,preprocess=False):
+    def predict_step(self, X, preprocess=False):
         if self.v is None:
             return None, None
         
         if preprocess:
-            X=self.preprocess(X)
+            X = self.preprocess(X)
         
-        loss=[self.execute_single(i) for i in X]
-        self.num_evaluated+=1
+        loss = [self.execute_single(i) for i in X]
+        self.num_evaluated += 1
         return np.array(loss), self.get_threshold()
 
     # force train KitNET on x
@@ -87,8 +82,6 @@ class KitNET(BaseOnlineODModel):
             ):  # If the feature mapping should be instantiated
                 self.v = self.FM.cluster(self.m)
                 self.__createAD__()
-                # print("The Feature-Mapper found a mapping: "+str(self.n)+" features to "+str(len(self.v))+" autoencoders.")
-                # print("Feature-Mapper: execute-mode, Anomaly-Detector: train-mode")
             return 0.
         else:  # train
             # Ensemble Layer

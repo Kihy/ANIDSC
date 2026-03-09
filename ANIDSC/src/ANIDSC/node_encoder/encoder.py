@@ -14,30 +14,32 @@ from torch_geometric.nn.models import GAT, GAE, MLP, GCN
 from ..converters import auto_cast_method
 
 class BaseNodeEmbedder(PickleSaveMixin, PipelineComponent):
-    def __init__(self, model_name, **kwargs):
+    def __init__(self, embedder_name, embedder_params=None, **kwargs):
         super().__init__(**kwargs)
-        self.model_name=model_name 
-        self.model=None 
+        self.embedder_name=embedder_name 
+        self.embedder_params=embedder_params or {}
+        self.embedder=None 
+        
     
     def setup(self):
-        if self.model is None:
+        if self.embedder is None:
             
-            self.model_cls=getattr(sys.modules[__name__], self.model_name)
+            self.embedder_cls=getattr(sys.modules[__name__], self.embedder_name)
                     
             ndim=self.request_attr("output_dim")
 
-            self.model=self.model_cls(ndim)
+            self.embedder=self.embedder_cls(input_dims=ndim, **self.embedder_params)
 
     @auto_cast_method
     def process(self, data: Data):
-        node_embeddings, _ = self.model.predict_step(
+        node_embeddings, _ = self.embedder.predict_step(
             x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr
         )
         
         # assign inf to all node embeddings 
         # node_embeddings[data.malicious]=torch.inf
         
-        self.model.train_step(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr)
+        self.embedder.train_step(x=data.x, edge_index=data.edge_index, edge_attr=data.edge_attr)
         
         return node_embeddings
 
@@ -46,20 +48,27 @@ class BaseNodeEmbedder(PickleSaveMixin, PipelineComponent):
     
     @property
     def output_dim(self):
-        return self.model.output_dim
+        return self.embedder.output_dim
     
     def __str__(self):
-        return f"{self.model_name}"
+        return f"{self.embedder_name}"
     
 class GNNEmbedder(BaseTorchModel):
+    
+    def __init__(self, hidden_channels, out_channels, num_layers, *args, **kwargs):
+        
+        self.hidden_channels=hidden_channels
+        self.out_channels=out_channels
+        self.num_layers=num_layers
+        super().__init__(*args, **kwargs)
         
     @abstractmethod
     def create_node_embed(self):
         pass 
     
     def init_model(self):
-        self.hidden_channels=5
-        self.out_channels=10
+
+        
         self.linear = torch.nn.Linear(self.out_channels, self.out_channels).to(
             self.device
         )
@@ -104,7 +113,7 @@ class GCNEmbedder(GNNEmbedder):
                     in_channels=self.input_dims,
                     hidden_channels=self.hidden_channels,
                     out_channels=self.out_channels,
-                    num_layers=2,
+                    num_layers=self.num_layers,
                     norm=None,
                 ).to("cuda")
         
@@ -114,7 +123,7 @@ class GATEmbedder(GNNEmbedder):
                     in_channels=self.input_dims,
                     hidden_channels=self.hidden_channels,
                     out_channels=self.out_channels,
-                    num_layers=2,
+                    num_layers=self.num_layers,
                     norm=None,
                 ).to("cuda")
         
@@ -124,7 +133,7 @@ class MLPEmbedder(GNNEmbedder):
                     in_channels=self.input_dims,
                     hidden_channels=self.hidden_channels,
                     out_channels=self.out_channels,
-                    num_layers=2,
+                    num_layers=self.num_layers,
                     norm=None,
                 ).to("cuda")
         

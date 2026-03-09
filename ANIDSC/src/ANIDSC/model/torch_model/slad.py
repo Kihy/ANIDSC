@@ -11,24 +11,16 @@ class SLAD(BaseTorchModel):
     Fascinating Supervisory Signals and Where to Find Them:
     Deep Anomaly Detection with Scale Learning (ICML'23)
     """
-    def __init__(self,hidden_dim, distribution_size, n_slad_ensemble, n_unified_features, subspace_pool_size, *args, **kwargs):
-        
-        
-        # self.hidden_dims = 8
-        # self.distribution_size = 10
-        # self.n_slad_ensemble = 4
-        
-        self.hidden_dim=hidden_dim
-        self.distribution_size=distribution_size
-        self.n_slad_ensemble=n_slad_ensemble
+    def __init__(self, hidden_dim, distribution_size, n_slad_ensemble, n_unified_features, subspace_pool_size, *args, **kwargs):
+        self.hidden_dim = hidden_dim
+        self.distribution_size = distribution_size
+        self.n_slad_ensemble = n_slad_ensemble
 
-        self.max_subspace_len = None # maximum length of subspace
-        self.sampling_size = None # number of objects per ensemble member
-        # self.subspace_pool_size = 32
-        self.subspace_pool_size=subspace_pool_size 
+        self.max_subspace_len = None  # maximum length of subspace
+        self.sampling_size = None  # number of objects per ensemble member
+        self.subspace_pool_size = subspace_pool_size
         
-        # self.n_unified_features = 16
-        self.n_unified_features=n_unified_features
+        self.n_unified_features = n_unified_features
         self.magnify_factor = 200
 
         self.affine_network_lst = {}

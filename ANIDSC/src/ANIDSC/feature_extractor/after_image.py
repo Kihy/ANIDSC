@@ -128,7 +128,7 @@ class AfterImage(PickleSaveMixin, BaseFeatureExtractor):
         return np.vstack(vectors)
 
     @auto_cast_method
-    def update(self, traffic_vectors: RecordList)->np.ndarray:
+    def update(self, traffic_vectors: RecordList) -> np.ndarray:
         # RecordList is basically List[Dict]
         return np.vstack([self.update_single(i) for i in traffic_vectors])
         
@@ -229,16 +229,10 @@ class AfterImageGraph(AfterImage):
         """initializes afterimage, a packet-based feature extractor used in Kitsune
 
         Args:
-            limit (int, optional): maximum number of records. Defaults to 1e6.
-            decay_factors (list, optional): the time windows. Defaults to [5,3,1,.1,.01].
+            protocol_map: mapping of protocol names to integer IDs
         """
         super().__init__(**kwargs)
-
         self.protocol_map = protocol_map
-        
-
-    # def __str__(self):
-    #     return f"AfterImageGraph({','.join(self.protocol_map.keys())})"
 
     def setup(self):
         super().setup()

@@ -33,15 +33,13 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
 
     def load_components(self, manifest):
         if isinstance(manifest, str):
-            manifest=load_yaml(manifest)
-        
+            manifest = load_yaml(manifest)
         
         if isinstance(manifest, list):
             components = []
             for comp in manifest:
-                
                 components.append(self.load_component(comp))
-        else: 
+        else:
             components = self.load_component(manifest)
         return components
 
@@ -51,10 +49,8 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
 
     def __init__(self, name, components, run_identifier):
         super().__init__()
-
-
         self._components = self.load_components(components)
-        self.run_identifier=run_identifier
+        self.run_identifier = run_identifier
         self._name = name
 
     def setup(self):
@@ -105,17 +101,17 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
 
     @property
     def config_attr(self):
-        attribute=super().config_attr
+        attribute = super().config_attr
         # turn components into dicts for yaml serialization
         del attribute["components"]
-        attribute["components"]=[v.to_dict() for v in self.components]
+        attribute["components"] = [v.to_dict() for v in self.components]
         return attribute
     
     @property
     def information_dict(self):
-        attrs=["dataset_name", "file_name", "pipeline_name", "run_identifier"]
-        return_dict={attr:self.search_attr(0, attr) for attr in attrs}
-        return_dict["result_path"]= self.search_attr(0, "feature_path")
+        attrs = ["dataset_name", "file_name", "pipeline_name", "run_identifier"]
+        return_dict = {attr: self.search_attr(0, attr) for attr in attrs}
+        return_dict["result_path"] = self.search_attr(0, "feature_path")
         
         return return_dict
 
@@ -125,7 +121,7 @@ class Pipeline(YamlSaveMixin, PipelineComponent):
         - backward search in components
         - parent pipeline
         - forward search in components
-"""
+        """
         
         # check self first
         if hasattr(self, attr):

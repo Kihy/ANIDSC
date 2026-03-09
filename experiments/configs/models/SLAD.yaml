@@ -1,25 +1,25 @@
 hidden_dim:
   default: 8 
   type: int
-  low: 1
+  low: 5
   high: 100
 distribution_size:
   default: 10
   type: int
-  low: 1
+  low: 2
   high: 20
 n_slad_ensemble:
   default: 4
   type: int
-  low: 1
+  low: 2
   high: 10
 n_unified_features:
   default: 16
   type: int
-  low: 1
+  low: 2
   high: 50
 subspace_pool_size:
   default: 32
   type: int
-  low: 1
+  low: 2
   high: 50

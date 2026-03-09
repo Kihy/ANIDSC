@@ -120,7 +120,7 @@ def step_then_pipeline_vars_saved_to_config(context):
     if not pipeline_name:
         raise AssertionError("Missing required pipeline variable: pipeline_name")
 
-    config_dir = Path("experiments") / "config" / template_name
+    config_dir = Path("experiments") / "configs" / "templates" / template_name
     config_dir.mkdir(parents=True, exist_ok=True)
     
     # Create a copy for saving, excluding variables that are not part of the pipeline config

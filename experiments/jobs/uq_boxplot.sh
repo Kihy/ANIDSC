@@ -5,9 +5,9 @@ source "$(dirname "$0")/common.sh"
 
 DATASET="uq_dataset"
 
-meta_config="experiments/config/metadata-extraction-template/protocol-meta-extraction.yaml"
-fe_config="experiments/config/feature-extraction-template/frequency.yaml"
-detection_config="experiments/config/basic-detection-template/boxplot.yaml"
+meta_config="experiments/configs/templates/metadata-extraction-template/protocol-meta-extraction.yaml"
+fe_config="experiments/configs/templates/feature-extraction-template/frequency.yaml"
+detection_config="experiments/configs/templates/basic-detection-template/boxplot.yaml"
 
 check_path_exists $meta_config
 check_path_exists $fe_config

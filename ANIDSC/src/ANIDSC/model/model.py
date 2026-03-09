@@ -82,6 +82,7 @@ class BaseOnlineODModel(PickleSaveMixin, PipelineComponent):
         elif self.batch_trained < self.warmup:
             # populate queue scores
             self.model.train_step(X)
+            
             self.loss_queue.extend(score)
         else:
             train_mask = score < self.tolerance*threshold

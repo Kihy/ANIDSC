@@ -1,16 +1,16 @@
 latent_dim:
   default: 4 
   type: int
-  low: 1
+  low: 5
   high: 100
 hidden_dim:
   default: 16
   type: int
-  low: 1
+  low: 10
   high: 100
 rep_dim:
   default: 32
   type: int
-  low: 1
+  low: 5
   high: 64 
 

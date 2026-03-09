@@ -266,11 +266,11 @@ def graph_evaluator(**kwargs) -> dict:
 
 
 @ComponentRegistry.register("node_embedder", category="node_encoder")
-def node_embedder(embedder: str, **kwargs) -> dict:
+def node_embedder(embedder_name: str, embedder_params: Optional[dict] = None, **kwargs) -> dict:
     return {
         "type": "node_encoder",
         "class": "BaseNodeEmbedder",
-        "attrs": {"model_name": embedder},
+        "attrs": {"embedder_name": embedder_name, "embedder_params": embedder_params or {}},
     }
 
 
