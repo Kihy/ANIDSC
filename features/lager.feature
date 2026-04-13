@@ -67,7 +67,7 @@ Feature: Detection with AfterImage Features
             | torch_model.VAE     | VAE        | experiments/configs/models/VAE.yaml     | GATEmbedder | experiments/configs/embedders/GNN.yaml |
 
     @tuning
-    Scenario Outline: Test Model Tuning. Tunable components have parameters ending with _params
+    Scenario Outline: Test Model Tuning. 
         Given Pipeline variable: prev_pipeline -> lager_test/afterimage-graph
         And Pipeline variable: run_identifier -> lager_test_tuning
         And Pipeline variable: reader_type -> CSVReader

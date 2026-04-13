@@ -146,6 +146,7 @@ def compute_column_summary(combined):
 def generate_summary(results):
     
     df=_load_dataframes(results)
+
     
     col_summary=compute_column_summary(df) 
     

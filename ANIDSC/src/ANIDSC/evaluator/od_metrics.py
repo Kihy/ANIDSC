@@ -3,12 +3,14 @@ import numpy as np
 def detection_rate(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
         return 0
-    return np.mean(result_dict["score"]> result_dict["threshold"])
+    result_dict["score"][result_dict["score"]==-1]=np.nan
+    return np.nanmean(result_dict["score"]> result_dict["threshold"])
 
 def pos_count(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
         return 0
-    return np.sum(result_dict["score"]> result_dict["threshold"])
+    result_dict["score"][result_dict["score"]==-1]=np.nan
+    return np.nansum(result_dict["score"]> result_dict["threshold"])
 
 def pos_idx(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
@@ -23,26 +25,31 @@ def batch_size(result_dict):
 def median_score(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
         return 0
+    result_dict["score"][result_dict["score"]==-1]=np.nan
     return np.nanmedian(result_dict["score"])
 
 def lower_quartile_score(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
         return 0
+    result_dict["score"][result_dict["score"]==-1]=np.nan
     return np.nanpercentile(result_dict["score"],25)
 
 def upper_quartile_score(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
         return 0
+    result_dict["score"][result_dict["score"]==-1]=np.nan
     return np.nanpercentile(result_dict["score"],75)
 
 def soft_min_score(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
         return 0
+    result_dict["score"][result_dict["score"]==-1]=np.nan
     return np.nanpercentile(result_dict["score"],1)
 
 def soft_max_score(result_dict):
     if result_dict["score"] is None or np.isnan(result_dict["score"]).all():
         return 0
+    result_dict["score"][result_dict["score"]==-1]=np.nan
     return np.nanpercentile(result_dict["score"],99)
 
 def median_threshold(result_dict):

@@ -3,7 +3,7 @@ gen_summary: true
 model_name: torch_model.Kitsune
 model_params: experiments/configs/models/Kitsune.yaml
 template_name: lager-template
-embedder_name: GATEmbedder
+embedder_name: GCNEmbedder
 embedder_params: experiments/configs/embedders/GNN.yaml
 protocol_map:
   TCP: 0

@@ -12,11 +12,12 @@ RUN apt-get update && apt-get install -y \
     texlive \
     dvipng \       
     texlive-latex-extra \            
-    texlive-fonts-recommended \      
+    texlive-fonts-recommended \    
+    sqlite3 \  
     cm-super \                       
     && ln -fs /usr/share/zoneinfo/$TZ /etc/localtime \
     && dpkg-reconfigure -f noninteractive tzdata \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* 
 
 
 # Install Python dependencies

@@ -17,6 +17,6 @@ check_path_exists $fe_config
 # run_experiment run $DATASET --config $fe_config --prev_pipeline meta_extraction/protocol-meta-extraction  --run_identifier feature-extraction 
 
 for file in experiments/configs/templates/scaled-detection-template/*; do
-    [[ "$file" == *"AE"* || "$file" == *"GOAD.yaml"* || "$file" == *"ICL.yaml"* ]] && continue
-    run_experiment tune $DATASET --config $file --prev_pipeline feature-extraction/afterimage --run_identifier detection --n_trials 20
+    [[ "$file" != *"VAE.yaml"* ]] && continue
+    run_experiment tune $DATASET --config $file --prev_pipeline feature-extraction/afterimage --run_identifier detection-afterimage --n_trials 20
 done

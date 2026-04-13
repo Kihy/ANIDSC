@@ -50,24 +50,33 @@ class MultilayerSplitter(PickleSaveMixin, Pipeline):
 
         split_data = self.split_function(data)
 
-        results={"threshold":1}
+        # aggregate results from each layer
         score=[]
         for key, value in split_data.items():
-            processed=self.inner_pipelines[key].process(value)
+            
+            if value.size>0:
+                processed=self.inner_pipelines[key].process(value)
 
-            if processed is None:
-                continue 
-            
-            # skip if threshold is negative (indicating warmup)
-            if processed["threshold"]<0:
-                score.append(-1)
-            else:
-            
-                relative_score=processed["score"]/processed["threshold"]
+                if processed is None:
+                    continue 
                 
-                score.append(relative_score)
-        results["score"] = np.array(score)
-        self.batch_evaluated+=1
+                # skip if threshold is negative (indicating warmup)
+                if processed["threshold"]<0:
+                    score.append(-1.)
+                else:
+                    
+                    relative_score=processed["score"]/processed["threshold"]
+                    
+                    # take the max relative score as the score for this layer
+                    score.append(np.max(relative_score))
+            else:
+                # skip if no data 
+                score.append(-1.)
+        
+        score=np.array(score)
+        threshold=1 if (score!=-1.).any() else -1.
+        results={"threshold": threshold, "score": score}
+        self.batch_evaluated += 1
         return results
     
     
@@ -85,9 +94,9 @@ class MultilayerSplitter(PickleSaveMixin, Pipeline):
         
         for proto_name, proto_id in self.protocol_map.items():
             selected = data[data["protocol"] == proto_id]
-            if selected.size > 0:
-                all_results[proto_name] = selected
-
+            
+            all_results[proto_name] = selected
+            
         return all_results
 
     
