@@ -26,16 +26,26 @@ class MultilayerSplitter(PickleSaveMixin, Pipeline):
     
     def setup(self):
         # copy pipeline and attach to each protocol layer
-        for proto_name, proto_id in self.protocol_map.items():
-            inner_pipeline=copy.deepcopy(self._components)
-            inner_pipeline.index=0
-            inner_pipeline.parent_pipeline=self
-            inner_pipeline.pipeline_name=f"{self.request_attr('pipeline_name')}/{proto_name}"
-            inner_pipeline.setup()
+        if not self.inner_pipelines:
+            # fresh run: build inner pipelines from the template
+            for proto_name, proto_id in self.protocol_map.items():
+                inner_pipeline=copy.deepcopy(self._components)
+                inner_pipeline.index=0
+                inner_pipeline.parent_pipeline=self
+                inner_pipeline.pipeline_name=f"{self.request_attr('pipeline_name')}/{proto_name}"
+                inner_pipeline.setup()
 
-            self.inner_pipelines[proto_name] = inner_pipeline
-        
-        # set parent pipeline_name to /full 
+                self.inner_pipelines[proto_name] = inner_pipeline
+        else:
+            # loaded run: inner pipelines restored from pickle -- re-wire and
+            # re-initialise WITHOUT rebuilding, to preserve trained state
+            for proto_name, inner_pipeline in self.inner_pipelines.items():
+                inner_pipeline.index=0
+                inner_pipeline.parent_pipeline=self
+                inner_pipeline.pipeline_name=f"{self.request_attr('pipeline_name')}/{proto_name}"
+                inner_pipeline.setup()
+
+        # set parent pipeline_name to /full
         self.parent_pipeline.pipeline_name=f"{self.request_attr('pipeline_name')}/full"
 
     @property
